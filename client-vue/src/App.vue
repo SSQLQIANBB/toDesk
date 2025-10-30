@@ -16,13 +16,18 @@ function handleDisconnect() {
   socket?.disconnect();
 }
 
+let sse: EventSource | null
 // sse
 function connectSSE() {
-  const sse = new EventSource('localhost:3000/sse/connect')
+  sse = new EventSource('/api/sse/connect')
 
   sse.onmessage = e => {
     console.log('sse-message', e);
   }
+}
+
+function closeSSE() {
+  sse?.close();
 }
 </script>
 
@@ -31,4 +36,5 @@ function connectSSE() {
   <n-button type="primary" @click="handleDisconnect">disconnect</n-button>
 
   <n-button type="info" @click="connectSSE">Connect-SSE</n-button>
+  <n-button type="info" @click="closeSSE">Close-SSE</n-button>
 </template>

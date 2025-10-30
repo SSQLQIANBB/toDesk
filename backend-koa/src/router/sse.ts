@@ -3,35 +3,40 @@ import Router from 'koa-router';
 
 const router = new Router();
 
-router.get("/sse/connect", (ctx) => {
+router.get("/connect", (ctx) => {
+  // 必须先设置状态码
+  ctx.status = 200;
+  
+  // 设置 SSE 响应头
   ctx.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
-    Connection: "keep-alive",
+    "Connection": "keep-alive",
   });
 
-  ctx.body = 'test--sse'
-  // ctx.set({
-  //   "Content-Type": "text/event-stream",
-  //   "Cache-Control": "no-cache",
-  //   Connection: "keep-alive",
-  // });
-  // const stream = new PassThrough();
-  // ctx.status = 200;
+  const stream = new PassThrough();
 
-  // for (let i = 0; i < 5; i++) {
-  //   setTimeout(() => {
-  //     stream.write(`id: ${i}\n`);
-  //     stream.write(
-  //       `data: ${JSON.stringify({
-  //         message: "Update from server",
-  //       })}\n`
-  //     );
-  //     stream.write("retry: 1000\n");
-  //     stream.write("\n\n");
-  //   }, i * 1000);
-  // }
-  // ctx.body = stream;
+  // 发送初始消息
+  stream.write(': connected\n\n');
+
+  // 定时发送消息
+  for(let i = 0; i < 5; i++) {
+    setTimeout(() => {
+      stream.write(`id: ${i}\n`);
+      stream.write(`data: ${JSON.stringify({
+        message: "Update from server",
+        count: i
+      })}\n`);
+      stream.write('\n');
+    }, 1000 * i)
+  }
+
+  // 5秒后结束连接
+  setTimeout(() => {
+    stream.end();
+  }, 6000);
+
+  ctx.body = stream;
 });
 
 export default router
