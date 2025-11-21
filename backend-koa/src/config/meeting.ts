@@ -53,6 +53,72 @@ const initialMeeting = (server: Server) => {
         })
       }
     })
+
+    // WebRTC信令转发 - offer
+    socket.on('webrtc_offer', (data) => {
+      console.log('webrtc_offer:', socket.id, '->', data.to?.socketId)
+      if (data.to?.socketId) {
+        socket.to(data.to.socketId).emit('webrtc_offer', {
+          from: socket.id,
+          offer: data.offer,
+          deviceType: data.deviceType
+        })
+      }
+    })
+
+    // WebRTC信令转发 - answer
+    socket.on('webrtc_answer', (data) => {
+      console.log('webrtc_answer:', socket.id, '->', data.to?.socketId)
+      if (data.to?.socketId) {
+        socket.to(data.to.socketId).emit('webrtc_answer', {
+          from: socket.id,
+          answer: data.answer
+        })
+      }
+    })
+
+    // WebRTC信令转发 - ice candidate
+    socket.on('webrtc_ice', (data) => {
+      console.log('webrtc_ice:', socket.id, '->', data.to?.socketId)
+      if (data.to?.socketId) {
+        socket.to(data.to.socketId).emit('webrtc_ice', {
+          from: socket.id,
+          candidate: data.candidate
+        })
+      }
+    })
+
+    // WebRTC呼叫请求
+    socket.on('webrtc_call_request', (data) => {
+      console.log('webrtc_call_request:', socket.id, '->', data.to?.socketId)
+      if (data.to?.socketId) {
+        socket.to(data.to.socketId).emit('webrtc_call_request', {
+          from: socket.id,
+          deviceType: data.deviceType
+        })
+      }
+    })
+
+    // WebRTC呼叫响应
+    socket.on('webrtc_call_response', (data) => {
+      console.log('webrtc_call_response:', socket.id, '->', data.to?.socketId)
+      if (data.to?.socketId) {
+        socket.to(data.to.socketId).emit('webrtc_call_response', {
+          from: socket.id,
+          accepted: data.accepted
+        })
+      }
+    })
+
+    // WebRTC挂断
+    socket.on('webrtc_hangup', (data) => {
+      console.log('webrtc_hangup:', socket.id, '->', data.to?.socketId)
+      if (data.to?.socketId) {
+        socket.to(data.to.socketId).emit('webrtc_hangup', {
+          from: socket.id
+        })
+      }
+    })
   })
 }
 
