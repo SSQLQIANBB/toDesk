@@ -1,3 +1,4 @@
 packages:
-- 'client-vue'
-- 'backend-koa'
+  - 'client-vue'
+  - 'backend-koa'
+

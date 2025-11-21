@@ -1,13 +1,18 @@
 {
-  "name": "toDesk",
+  "name": "to-desk",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "server": "cd backend-koa && pnpm run dev",
+    "client": "cd client-vue && pnpm run dev"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.14.0"
+  "packageManager": "pnpm@10.14.0",
+  "dependencies": {
+    "uuid": "^13.0.0"
+  }
 }

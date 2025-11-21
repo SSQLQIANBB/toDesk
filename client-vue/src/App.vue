@@ -1,40 +1,26 @@
 <script setup lang="ts">
-import { type Socket, io } from 'socket.io-client';
-
-let socket: Socket | null;
-function handleConnect() {
-  socket = io('localhost:3000', {
-    path: '/connect'
-  })
-
-  socket.on('connect', () => {
-    console.log('socket connecting....')
-  })
-}
-
-function handleDisconnect() {
-  socket?.disconnect();
-}
-
-let sse: EventSource | null
-// sse
-function connectSSE() {
-  sse = new EventSource('/api/sse/connect')
-
-  sse.onmessage = e => {
-    console.log('sse-message', e);
-  }
-}
-
-function closeSSE() {
-  sse?.close();
-}
 </script>
 
 <template>
-  <n-button type="primary" @click="handleConnect">connect</n-button>
-  <n-button type="primary" @click="handleDisconnect">disconnect</n-button>
-
-  <n-button type="info" @click="connectSSE">Connect-SSE</n-button>
-  <n-button type="info" @click="closeSSE">Close-SSE</n-button>
+  <n-config-provider style="height: 100%; overflow: auto;">
+    <n-message-provider>
+      <n-dialog-provider>
+        <RouterView />
+      </n-dialog-provider>
+    </n-message-provider>
+  </n-config-provider>
 </template>
+
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+</style>

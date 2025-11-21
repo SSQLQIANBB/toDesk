@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import http from 'http';
 import setupRouter from './router';
 import initializeSocket from './config/initializeSocket';
+import initialMeeting from './config/meeting';
 import cors from '@/middleware/cors'
 
 const app = new Koa();
@@ -14,6 +15,7 @@ app.use(cors)
 
 // 初始化socket
 initializeSocket(httpServer)
+initialMeeting(httpServer)
 
 console.log(chalk.green('---start-app---'))
 

@@ -3,6 +3,8 @@ import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite';
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import Components from 'unplugin-vue-components/vite'
+import { resolve } from 'path'
+import tailwindcss from 'tailwindcss'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -25,6 +27,20 @@ export default defineConfig({
       resolvers: [NaiveUiResolver()]
     })
   ],
+  worker: {
+    format: 'es'
+  },
+  css: {
+    postcss: {
+      plugins: [tailwindcss],
+    }
+  },
+
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src')
+    }
+  },
 
   server: {
     proxy: {
