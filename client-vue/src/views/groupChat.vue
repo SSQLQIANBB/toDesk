@@ -223,6 +223,7 @@ import { ArrowBackFilled, VideocamFilled, ScreenShareFilled, InfoFilled } from '
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
 import { io, Socket } from 'socket.io-client';
+import notificationService from '@/services/notificationService';
 
 const route = useRoute();
 const router = useRouter();
@@ -328,6 +329,19 @@ function initSocket() {
         isMine: false,
       });
       scrollToBottom();
+      
+      // 如果窗口未聚焦，显示桌面通知
+      if (document.hidden && data.user?.id !== currentUser.value?.id) {
+        notificationService.showGroupMessage(
+          groupInfo.value?.name || '群组',
+          data.user?.nickname || data.user?.username || '群成员',
+          data.message,
+          data.user?.avatar,
+          () => {
+            window.focus();
+          }
+        );
+      }
     }
   });
 
@@ -393,6 +407,9 @@ function goBack() {
 }
 
 onMounted(async () => {
+  // 请求通知权限
+  await notificationService.requestPermission();
+  
   await loadGroupDetail();
   initSocket();
 });

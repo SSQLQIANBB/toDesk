@@ -134,17 +134,17 @@ export async function login(ctx: Context) {
 export async function getCurrentUser(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
-    
+
     // 先尝试从Redis获取
     let userData = await redisService.getUserInfo(userId);
     
     if (!userData) {
       // Redis中没有，从数据库获取
-      const user = await User.findByPk(userId);
-      if (!user) {
-        ctx.status = 404;
-        ctx.body = { error: '用户不存在' };
-        return;
+    const user = await User.findByPk(userId);
+    if (!user) {
+      ctx.status = 404;
+      ctx.body = { error: '用户不存在' };
+      return;
       }
 
       userData = user.get({ plain: true });

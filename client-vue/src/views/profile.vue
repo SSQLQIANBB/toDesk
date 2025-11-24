@@ -154,6 +154,106 @@
               </div>
             </div>
           </n-tab-pane>
+
+          <!-- 通知设置 -->
+          <n-tab-pane name="notification" tab="通知设置">
+            <div class="space-y-6">
+              <!-- 桌面通知 -->
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold text-gray-800">桌面通知</h3>
+                    <p class="text-sm text-gray-500 mt-1">
+                      <span v-if="notificationPermission === 'granted'" class="text-green-600">✓ 已启用</span>
+                      <span v-else-if="notificationPermission === 'denied'" class="text-red-600">✗ 已拒绝</span>
+                      <span v-else class="text-yellow-600">⚠ 未请求</span>
+                      - 接收新消息、通话等桌面通知
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <n-switch 
+                      v-model:value="notificationEnabled" 
+                      @update:value="handleNotificationToggle"
+                      :disabled="notificationPermission !== 'granted'"
+                    />
+                    <n-button 
+                      v-if="notificationPermission !== 'granted'" 
+                      size="small" 
+                      type="primary"
+                      @click="requestNotificationPermission"
+                    >
+                      请求权限
+                    </n-button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 声音提醒 -->
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold text-gray-800">声音提醒</h3>
+                    <p class="text-sm text-gray-500 mt-1">收到新消息时播放提示音</p>
+                  </div>
+                  <n-switch 
+                    v-model:value="soundEnabled" 
+                    @update:value="handleSoundToggle"
+                  />
+                </div>
+              </div>
+
+              <!-- 消息预览 -->
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold text-gray-800">消息预览</h3>
+                    <p class="text-sm text-gray-500 mt-1">在通知中显示消息内容</p>
+                  </div>
+                  <n-switch v-model:value="messagePreview" />
+                </div>
+              </div>
+
+              <!-- 通知类型设置 -->
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <h3 class="font-semibold text-gray-800 mb-3">通知类型</h3>
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm">私聊消息</span>
+                    <n-switch v-model:value="notifyPrivateMessage" />
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm">群组消息</span>
+                    <n-switch v-model:value="notifyGroupMessage" />
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm">来电通知</span>
+                    <n-switch v-model:value="notifyCall" />
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm">群组邀请</span>
+                    <n-switch v-model:value="notifyInvitation" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- 测试通知 -->
+              <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold text-blue-800">测试通知</h3>
+                    <p class="text-sm text-blue-600 mt-1">发送一条测试通知，检查设置是否生效</p>
+                  </div>
+                  <n-button 
+                    type="info" 
+                    @click="sendTestNotification"
+                    :disabled="!notificationEnabled || notificationPermission !== 'granted'"
+                  >
+                    发送测试
+                  </n-button>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
         </n-tabs>
       </n-card>
 
@@ -202,6 +302,7 @@ import { useMessage, type FormInst, type FormRules, type UploadCustomRequestOpti
 import { ArrowBackFilled } from '@vicons/material';
 import { getCurrentUser, updateUser } from '@/api/auth';
 import { useAuth } from '@/stores/auth';
+import notificationService from '@/services/notificationService';
 
 const router = useRouter();
 const message = useMessage();
@@ -293,6 +394,93 @@ const lastLoginTime = computed(() => {
   // 这里可以从用户数据中获取
   return new Date().toLocaleString();
 });
+
+// 通知设置
+const notificationPermission = ref<NotificationPermission>('default');
+const notificationEnabled = ref(false);
+const soundEnabled = ref(true);
+const messagePreview = ref(true);
+const notifyPrivateMessage = ref(true);
+const notifyGroupMessage = ref(true);
+const notifyCall = ref(true);
+const notifyInvitation = ref(true);
+
+// 初始化通知设置
+function initNotificationSettings() {
+  notificationPermission.value = notificationService.getPermission();
+  notificationEnabled.value = notificationService.isEnabled();
+  soundEnabled.value = notificationService.isSoundEnabled();
+  
+  // 从 localStorage 加载通知类型设置
+  const savedNotifySettings = localStorage.getItem('notify_settings');
+  if (savedNotifySettings) {
+    try {
+      const settings = JSON.parse(savedNotifySettings);
+      messagePreview.value = settings.messagePreview ?? true;
+      notifyPrivateMessage.value = settings.notifyPrivateMessage ?? true;
+      notifyGroupMessage.value = settings.notifyGroupMessage ?? true;
+      notifyCall.value = settings.notifyCall ?? true;
+      notifyInvitation.value = settings.notifyInvitation ?? true;
+    } catch (error) {
+      console.error('加载通知设置失败:', error);
+    }
+  }
+}
+
+// 保存通知类型设置
+function saveNotifySettings() {
+  const settings = {
+    messagePreview: messagePreview.value,
+    notifyPrivateMessage: notifyPrivateMessage.value,
+    notifyGroupMessage: notifyGroupMessage.value,
+    notifyCall: notifyCall.value,
+    notifyInvitation: notifyInvitation.value,
+  };
+  localStorage.setItem('notify_settings', JSON.stringify(settings));
+}
+
+// 请求通知权限
+async function requestNotificationPermission() {
+  const granted = await notificationService.requestPermission();
+  if (granted) {
+    notificationPermission.value = 'granted';
+    notificationEnabled.value = true;
+    message.success('通知权限已授予');
+  } else {
+    message.error('通知权限被拒绝');
+  }
+}
+
+// 切换通知开关
+function handleNotificationToggle(value: boolean) {
+  if (value) {
+    notificationService.enable();
+    message.success('桌面通知已开启');
+  } else {
+    notificationService.disable();
+    message.success('桌面通知已关闭');
+  }
+}
+
+// 切换声音开关
+function handleSoundToggle(value: boolean) {
+  if (value) {
+    notificationService.enableSound();
+    message.success('声音提醒已开启');
+  } else {
+    notificationService.disableSound();
+    message.success('声音提醒已关闭');
+  }
+}
+
+// 发送测试通知
+async function sendTestNotification() {
+  await notificationService.showSystem(
+    '测试通知',
+    '这是一条测试通知，您的通知设置已生效！'
+  );
+  message.success('测试通知已发送');
+}
 
 // 加载用户信息
 async function loadUserInfo() {
@@ -419,6 +607,7 @@ function goBack() {
 
 onMounted(() => {
   loadUserInfo();
+  initNotificationSettings();
 });
 </script>
 

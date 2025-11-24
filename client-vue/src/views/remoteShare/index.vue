@@ -202,6 +202,7 @@ import { getOfflineMessages, markMessagesAsRead, type OfflineMessage } from '@/a
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
+import notificationService from '@/services/notificationService';
 
 const router = useRouter();
 const { currentUser: authUser, clearAuth } = useAuth();
@@ -340,6 +341,24 @@ function initialSocket() {
       currentMessageList.value = privateMessageMap.get(data.from) || []
       scrollToBottom();
     }
+
+    // 如果窗口未聚焦或不是当前联系人，显示桌面通知
+    if (document.hidden || data.from !== contactUser.value?.socketId) {
+      const sender = userList.value.find(u => u.socketId === data.from);
+      const senderName = sender?.nickname || sender?.username || '未知用户';
+      notificationService.showMessage(
+        senderName,
+        data.message,
+        sender?.avatar,
+        () => {
+          // 点击通知时聚焦窗口并选择该联系人
+          window.focus();
+          if (sender) {
+            selectContact(sender);
+          }
+        }
+      );
+    }
   })
 
   // WebRTC信令监听
@@ -361,6 +380,12 @@ function initialSocket() {
   socket.on('webrtc_call_request', (data) => {
     console.log('收到呼叫请求:', data);
     toolBarRef.value?.handleIncomingCall(data);
+    
+    // 显示来电通知
+    const caller = userList.value.find(u => u.socketId === data.from);
+    const callerName = caller?.nickname || caller?.username || '未知用户';
+    const callType = data.deviceType === 'camera' ? 'video' : data.deviceType === 'screen' ? 'screen' : 'audio';
+    notificationService.showCall(callerName, callType, caller?.avatar);
   })
 
   socket.on('webrtc_call_response', (data) => {
@@ -442,7 +467,17 @@ async function loadOfflineMessages() {
     offlineMessages.value = res.messages || [];
     
     if (offlineMessages.value.length > 0) {
-      // 显示离线消息通知
+      // 显示桌面通知
+      notificationService.showSystem(
+        '离线消息',
+        `您有 ${offlineMessages.value.length} 条新消息`,
+        () => {
+          window.focus();
+          showOfflineMessagesDialog();
+        }
+      );
+      
+      // 显示离线消息对话框
       showOfflineMessagesDialog();
     }
   } catch (error: any) {
@@ -457,7 +492,20 @@ async function loadPendingInvitations() {
     pendingInvitations.value = res.invitations || [];
     
     if (pendingInvitations.value.length > 0) {
-      // 显示邀请通知
+      // 显示桌面通知
+      pendingInvitations.value.forEach(inv => {
+        notificationService.showInvitation(
+          inv.group.name,
+          inv.inviter.nickname || inv.inviter.username,
+          inv.inviter.avatar,
+          () => {
+            window.focus();
+            showInvitationsDialog();
+          }
+        );
+      });
+      
+      // 显示邀请对话框
       showInvitationsDialog();
     }
   } catch (error: any) {
@@ -559,8 +607,12 @@ const handleVisible = () => {
     }
   }
 }
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisible);
+  
+  // 请求通知权限
+  await notificationService.requestPermission();
+  
   // 自动连接Socket
   if (authUser.value) {
     initialSocket();
