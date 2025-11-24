@@ -53,8 +53,9 @@
               <n-badge 
                 :offset="[-8, 8]" 
                 class="w-full" 
-                :value="unReadMessageCount?.[user.socketId]" 
-                :max="99" 
+                :value="unReadMessageCount[user.socketId] || 0" 
+                :max="99"
+                :show="!!unReadMessageCount[user.socketId]"
                 v-for="user in userList" 
                 :key="user.socketId"
               >
@@ -205,7 +206,7 @@ import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
 
 const router = useRouter();
-const { currentUser: authUser, clearAuth } = useAuth();
+const { currentUser: authUser, token, clearAuth } = useAuth();
 
 type User = {
   id: number;
@@ -237,11 +238,8 @@ const myGroups = ref<Group[]>([]);
 const offlineMessages = ref<OfflineMessage[]>([]);
 const pendingInvitations = ref<GroupInvitation[]>([]);
 
-// 计算用户状态
+// 计算用户状态（基于Socket连接状态）
 const userStatus = computed(() => {
-  if (online.value && authUser.value?.status) {
-    return authUser.value.status;
-  }
   return online.value ? 'online' : 'offline';
 });
 
@@ -271,7 +269,7 @@ const privateMessageMap = new Map<
   MessageInfo[]
 >();
 
-const unReadMessageCount = ref<Record<string, number> | null>(null);
+const unReadMessageCount = ref<Record<string, number>>({});
 const currentMessageList = ref<MessageInfo[]>([]);
 
 // refs
@@ -291,21 +289,14 @@ function initialSocket() {
     path: '/meeting'
   });
   loading.value = true;
-  // 连接时
+  
+  // 连接建立后立即认证
   socket.on('connect', () => {
-    console.log('connect:', socket)
-  })
-
-  socket.on('connected', (data) => {
-    console.log('connected:', data)
-    currentUser.value = data
-    message.success('连接成功！')
-    online.value = true;
-    loading.value = false;
+    console.log('Socket已连接:', socket?.id);
     
-    // 连接成功后，认证用户
+    // 立即进行认证
     socket?.emit('authenticate', { 
-      token: authUser.value?.token,
+      token: token.value,
       nickname: authUser.value?.nickname,
       avatar: authUser.value?.avatar
     });
@@ -315,6 +306,17 @@ function initialSocket() {
   socket.on('authenticated', (data) => {
     console.log('认证成功:', data);
     currentUser.value = data;
+    online.value = true;
+    loading.value = false;
+    message.success('连接成功！');
+  })
+  
+  // 认证失败
+  socket.on('auth_error', (data) => {
+    console.error('认证失败:', data);
+    message.error('认证失败: ' + data.message);
+    loading.value = false;
+    online.value = false;
   })
 
   // 用户列表
@@ -331,11 +333,8 @@ function initialSocket() {
 
     setMessage(data.from, data)
 
-    const count = unReadMessageCount.value?.[data.from] || 0
-    unReadMessageCount.value = {
-      ...unReadMessageCount.value,
-      [data.from]: count + 1,
-    }
+    const count = unReadMessageCount.value[data.from] || 0
+    unReadMessageCount.value[data.from] = count + 1
 
     if (data.from === contactUser.value?.socketId) {
       currentMessageList.value = privateMessageMap.get(data.from) || []
@@ -406,18 +405,22 @@ function setMessage(id: string, data: MessageInfo) {
 }
 
 function disconnect() {
-  socket?.disconnect()
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
   online.value = false;
-  userList.value = []
-  contactUser.value = null
-  currentMessageList.value = []
+  userList.value = [];
+  contactUser.value = null;
+  currentMessageList.value = [];
+  currentUser.value = null;
 }
 
 
 function selectContact(user: User) {
   contactUser.value = user;
 
-  if (unReadMessageCount.value?.[user.socketId]) {
+  if (unReadMessageCount.value[user.socketId]) {
     unReadMessageCount.value[user.socketId] = 0
   }
 
@@ -541,14 +544,16 @@ function showInvitationsDialog() {
   if (pendingInvitations.value.length === 0) return;
   
   const invitation = pendingInvitations.value[0];
+  if (!invitation) return;
   
   dialog.warning({
     title: '群组邀请',
-    content: `${invitation.inviter.nickname || invitation.inviter.username} 邀请您加入群组 "${invitation.group.name}"`,
+    content: `${invitation.inviter?.nickname || invitation.inviter?.username || '某用户'} 邀请您加入群组 "${invitation.group?.name || '未知群组'}"`,
     positiveText: '接受',
     negativeText: '拒绝',
     onPositiveClick: async () => {
       try {
+        if (!invitation?.id) return;
         await acceptInvitation(invitation.id);
         message.success('已加入群组');
         pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
@@ -564,6 +569,7 @@ function showInvitationsDialog() {
     },
     onNegativeClick: async () => {
       try {
+        if (!invitation?.id) return;
         await rejectInvitation(invitation.id);
         message.info('已拒绝邀请');
         pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
@@ -602,7 +608,7 @@ watch(() => currentMessageList.value.length, () => {
 const handleVisible = () => {
   console.log('--', document.visibilityState)
   if (document.visibilityState === 'visible') {
-    if (unReadMessageCount.value && contactUser.value && unReadMessageCount.value[contactUser.value.socketId] !== undefined) {
+    if (contactUser.value && unReadMessageCount.value[contactUser.value.socketId]) {
       unReadMessageCount.value[contactUser.value.socketId] = 0
     }
   }
@@ -614,7 +620,7 @@ onMounted(async () => {
   await notificationService.requestPermission();
   
   // 自动连接Socket
-  if (authUser.value) {
+  if (authUser.value && token.value) {
     initialSocket();
     // 加载数据
     loadMyGroups();

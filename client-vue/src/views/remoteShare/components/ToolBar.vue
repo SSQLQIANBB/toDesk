@@ -167,8 +167,11 @@ enum RTC_TYPE {
 }
 
 type User = {
-  id: string;
+  id: number;
   socketId: string;
+  username?: string;
+  nickname?: string;
+  avatar?: string;
 }
 
 const props = defineProps<{
