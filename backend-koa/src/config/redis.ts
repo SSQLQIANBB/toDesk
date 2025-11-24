@@ -42,6 +42,7 @@ export const REDIS_KEYS = {
   GROUP_MEMBERS: 'group:members:',   // 群组成员列表 group:members:{groupId}
   ONLINE_USERS: 'online:users',      // 在线用户集合
   SESSION: 'session:',               // 会话信息 session:{token}
+  REFRESH_TOKEN: 'refresh:token:',   // refresh token refresh:token:{userId}
 };
 
 // Redis缓存过期时间（秒）
@@ -51,6 +52,7 @@ export const REDIS_TTL = {
   GROUP_INFO: 3600,          // 群组信息 1小时
   GROUP_MEMBERS: 1800,       // 群组成员 30分钟
   SESSION: 86400,            // 会话 24小时
+  REFRESH_TOKEN: 86400,      // refresh token 24小时
 };
 
 export default redis;

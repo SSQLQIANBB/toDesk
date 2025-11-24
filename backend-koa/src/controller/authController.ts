@@ -1,7 +1,7 @@
 import { Context } from 'koa';
 import { User } from '../models';
 import { hashPassword, verifyPassword } from '../utils/crypto';
-import { generateToken } from '../utils/jwt';
+import { generateTokenPair, verifyRefreshToken } from '../utils/jwt';
 import redisService from '../services/redisService';
 
 /**
@@ -36,15 +36,19 @@ export async function register(ctx: Context) {
       phone,
     });
 
-    // 生成token
-    const token = generateToken({
+    // 生成 token 对
+    const tokens = generateTokenPair({
       userId: user.id!,
       username,
     });
 
+    // 保存 refresh token 到 Redis
+    await redisService.setRefreshToken(user.id!, tokens.refreshToken);
+
     ctx.body = {
       message: '注册成功',
-      token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       user: {
         id: user.id,
         username: username,
@@ -94,15 +98,19 @@ export async function login(ctx: Context) {
     // 更新最后登录时间和在线状态
     await user.update({ lastLoginAt: new Date(), status: 'online' });
 
-    // 生成token
-    const token = generateToken({
+    // 生成 token 对
+    const tokens = generateTokenPair({
       userId: userData.id!,
       username: userData.username,
     });
 
+    // 保存 refresh token 到 Redis
+    await redisService.setRefreshToken(userData.id!, tokens.refreshToken);
+
     ctx.body = {
       message: '登录成功',
-      token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       user: {
         id: userData.id,
         username: userData.username,
@@ -266,6 +274,9 @@ export async function logout(ctx: Context) {
     // 删除用户Socket映射
     await redisService.delUserSocket(userId);
 
+    // 删除 refresh token
+    await redisService.delRefreshToken(userId);
+
     ctx.body = {
       message: '登出成功',
     };
@@ -273,6 +284,58 @@ export async function logout(ctx: Context) {
     console.error('登出失败:', error);
     ctx.status = 500;
     ctx.body = { error: '登出失败: ' + error.message };
+  }
+}
+
+/**
+ * 刷新 access token
+ */
+export async function refreshToken(ctx: Context) {
+  try {
+    const { refreshToken: clientRefreshToken } = ctx.request.body as any;
+
+    if (!clientRefreshToken) {
+      ctx.status = 400;
+      ctx.body = { error: 'refresh token 不能为空' };
+      return;
+    }
+
+    // 验证 refresh token
+    let payload;
+    try {
+      payload = verifyRefreshToken(clientRefreshToken);
+    } catch (error) {
+      ctx.status = 401;
+      ctx.body = { error: 'refresh token 无效或已过期' };
+      return;
+    }
+
+    // 验证 refresh token 是否在 Redis 中存在且匹配
+    const isValid = await redisService.verifyRefreshToken(payload.userId, clientRefreshToken);
+    if (!isValid) {
+      ctx.status = 401;
+      ctx.body = { error: 'refresh token 已失效' };
+      return;
+    }
+
+    // 生成新的 token 对
+    const tokens = generateTokenPair({
+      userId: payload.userId,
+      username: payload.username,
+    });
+
+    // 更新 Redis 中的 refresh token
+    await redisService.setRefreshToken(payload.userId, tokens.refreshToken);
+
+    ctx.body = {
+      message: 'token 刷新成功',
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  } catch (error: any) {
+    console.error('刷新 token 失败:', error);
+    ctx.status = 500;
+    ctx.body = { error: '刷新 token 失败: ' + error.message };
   }
 }
 

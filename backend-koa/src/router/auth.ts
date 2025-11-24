@@ -7,6 +7,7 @@ const router = new Router({ prefix: '/api/auth' });
 // 公开路由
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/refresh-token', authController.refreshToken); // 刷新 token
 
 // 需要认证的路由
 router.get('/me', authMiddleware, authController.getCurrentUser);

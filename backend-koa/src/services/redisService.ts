@@ -167,6 +167,38 @@ class RedisService {
     if (keys.length === 0) return 0;
     return await redis.del(...keys);
   }
+
+  /**
+   * 保存 refresh token
+   */
+  async setRefreshToken(userId: number, refreshToken: string): Promise<void> {
+    const key = REDIS_KEYS.REFRESH_TOKEN + userId;
+    await redis.setex(key, REDIS_TTL.REFRESH_TOKEN, refreshToken);
+  }
+
+  /**
+   * 获取 refresh token
+   */
+  async getRefreshToken(userId: number): Promise<string | null> {
+    const key = REDIS_KEYS.REFRESH_TOKEN + userId;
+    return await redis.get(key);
+  }
+
+  /**
+   * 删除 refresh token（用于登出）
+   */
+  async delRefreshToken(userId: number): Promise<void> {
+    const key = REDIS_KEYS.REFRESH_TOKEN + userId;
+    await redis.del(key);
+  }
+
+  /**
+   * 验证 refresh token 是否匹配
+   */
+  async verifyRefreshToken(userId: number, refreshToken: string): Promise<boolean> {
+    const storedToken = await this.getRefreshToken(userId);
+    return storedToken === refreshToken;
+  }
 }
 
 export default new RedisService();

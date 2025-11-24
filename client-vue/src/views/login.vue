@@ -189,7 +189,7 @@ async function handleLogin() {
       password: loginForm.value.password,
     });
 
-    setAuth(res.user, res.token);
+    setAuth(res.user, res.accessToken, res.refreshToken);
     message.success('登录成功');
     router.push('/remote');
   } catch (error: any) {
@@ -211,7 +211,7 @@ async function handleRegister() {
       nickname: registerForm.value.nickname || undefined,
     });
 
-    setAuth(res.user, res.token);
+    setAuth(res.user, res.accessToken, res.refreshToken);
     message.success('注册成功');
     router.push('/remote');
   } catch (error: any) {

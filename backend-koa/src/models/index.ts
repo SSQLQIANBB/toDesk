@@ -3,6 +3,7 @@ import Group from './Group';
 import GroupMember from './GroupMember';
 import Message from './Message';
 import GroupInvitation from './GroupInvitation';
+import RefreshToken from './RefreshToken';
 
 // 定义模型关联关系
 
@@ -36,5 +37,9 @@ Group.hasMany(GroupInvitation, { foreignKey: 'groupId', as: 'invitations' });
 User.hasMany(GroupInvitation, { foreignKey: 'inviterId', as: 'sentInvitations' });
 User.hasMany(GroupInvitation, { foreignKey: 'inviteeId', as: 'receivedInvitations' });
 
-export { User, Group, GroupMember, Message, GroupInvitation };
+// RefreshToken 和 User 的关系
+RefreshToken.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasMany(RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
+
+export { User, Group, GroupMember, Message, GroupInvitation, RefreshToken };
 

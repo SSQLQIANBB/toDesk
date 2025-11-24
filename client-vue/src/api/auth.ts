@@ -28,14 +28,21 @@ export interface RegisterParams {
  * 用户登录
  */
 export function login(params: LoginParams) {
-  return http.post<{ token: string; user: User; message: string }>('/api/auth/login', params);
+  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>('/api/auth/login', params);
 }
 
 /**
  * 用户注册
  */
 export function register(params: RegisterParams) {
-  return http.post<{ token: string; user: User; message: string }>('/api/auth/register', params);
+  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>('/api/auth/register', params);
+}
+
+/**
+ * 刷新 access token
+ */
+export function refreshAccessToken(refreshToken: string) {
+  return http.post<{ accessToken: string; refreshToken: string; message: string }>('/api/auth/refresh-token', { refreshToken });
 }
 
 /**
