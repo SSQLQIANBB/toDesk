@@ -7,74 +7,136 @@
     >
       <!-- 用户信息卡片 -->
       <div class="p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-        <div class="flex items-center gap-3">
-          <div class="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center font-bold text-lg">
-            {{ currentUser?.socketId?.slice(0, 2) || '?' }}
-          </div>
+        <div class="flex items-center gap-3 mb-3">
+          <n-avatar 
+            :size="48" 
+            :src="authUser?.avatar || undefined"
+            class="cursor-pointer ring-2 ring-white ring-opacity-50"
+            @click="goToProfile"
+          >
+            {{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}
+          </n-avatar>
           <div class="flex-1">
-            <div class="font-bold text-sm">匿名用户 {{ currentUser?.socketId?.slice(0, 4) }}</div>
+            <div class="font-bold text-sm">{{ authUser?.nickname || authUser?.username || '未登录' }}</div>
             <div class="flex items-center gap-2 mt-1">
-              <span class="w-2 h-2 rounded-full animate-pulse" :class="online ? 'bg-green-300' : 'bg-gray-300'"></span>
-              <span class="text-xs opacity-90">{{ online ? '在线' : '离线' }}</span>
+              <span class="w-2 h-2 rounded-full animate-pulse" :class="getStatusColor(userStatus)"></span>
+              <span class="text-xs opacity-90">{{ getStatusText(userStatus) }}</span>
             </div>
           </div>
           <n-button 
-            :type="online ? 'error' : 'success'" 
-            :loading="loading" 
+            type="error" 
             size="small" 
             strong
             secondary
-            @click="changeOnline"
+            @click="handleLogout"
           >
-            {{ online ? '退出' : '登录' }}
+            退出登录
+          </n-button>
+        </div>
+        <!-- 快捷操作 -->
+        <div class="flex gap-2">
+          <n-button size="small" secondary block @click="goToProfile">
+            个人中心
           </n-button>
         </div>
       </div>
 
-      <!-- 在线用户列表 -->
-      <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50">
-        在线用户 ({{ userList.length }})
-      </div>
-      <ul class="flex-1 p-3 overflow-y-auto space-y-2">
-        <n-badge 
-          :offset="[-8, 8]" 
-          class="w-full" 
-          :value="unReadMessageCount?.[user.socketId]" 
-          :max="99" 
-          v-for="user in userList" 
-          :key="user.socketId"
-        >
-          <li 
-            class="w-full flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-blue-50 hover:shadow-md border"
-            :class="contactUser?.socketId === user.socketId ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
-            @click="selectContact(user)"
-          >
-            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-bold">
-              {{ user?.socketId?.slice(0, 2) }}
-            </div>
-            <div class="flex-1">
-              <div class="font-semibold text-sm">用户-{{ user?.socketId?.slice(0, 4) }}</div>
-              <div class="text-xs text-gray-500">ID: {{ user?.socketId?.slice(0, 8) }}...</div>
-            </div>
-            <div class="w-2 h-2 rounded-full bg-green-400"></div>
-          </li>
-        </n-badge>
+      <!-- Tab 切换 -->
+      <n-tabs type="line" animated justify-content="space-evenly" class="flex-1 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
+        <!-- 在线用户 -->
+        <n-tab-pane name="users" tab="在线用户" display-directive="show:lazy" class="flex flex-col h-full">
+          <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50">
+            在线用户 ({{ userList.length }})
+          </div>
+          <n-scrollbar style="flex: 1; max-height: calc(100vh - 280px);">
+            <ul class="p-3 space-y-2">
+              <n-badge 
+                :offset="[-8, 8]" 
+                class="w-full" 
+                :value="unReadMessageCount?.[user.socketId]" 
+                :max="99" 
+                v-for="user in userList" 
+                :key="user.socketId"
+              >
+                <li 
+                  class="w-full flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-blue-50 hover:shadow-md border"
+                  :class="contactUser?.socketId === user.socketId ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
+                  @click="selectContact(user)"
+                >
+                  <n-avatar :size="40" :src="user.avatar || undefined">
+                    {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
+                  </n-avatar>
+                  <div class="flex-1">
+                    <div class="font-semibold text-sm">{{ user.nickname || user.username || `用户-${user.socketId?.slice(0, 4)}` }}</div>
+                    <div class="text-xs text-gray-500">ID: {{ user?.socketId?.slice(0, 8) }}...</div>
+                  </div>
+                  <div class="w-2 h-2 rounded-full bg-green-400"></div>
+                </li>
+              </n-badge>
 
-        <n-empty 
-          v-if="!userList.length" 
-          class="h-full flex items-center justify-center" 
-          description="暂无在线用户" 
-          size="small"
-        >
-          <template #icon>
-            <n-icon size="48" color="#d0d0d0">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-              </svg>
-            </n-icon>
-          </template>
-        </n-empty>
-      </ul>
+              <n-empty 
+                v-if="!userList.length" 
+                class="h-full flex items-center justify-center py-12" 
+                description="暂无在线用户" 
+                size="small"
+              >
+                <template #icon>
+                  <n-icon size="48" color="#d0d0d0">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                  </n-icon>
+                </template>
+              </n-empty>
+            </ul>
+          </n-scrollbar>
+        </n-tab-pane>
+
+        <!-- 我的群组 -->
+        <n-tab-pane name="groups" tab="我的群组" display-directive="show:lazy" class="flex flex-col h-full">
+          <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between">
+            <span>我的群组 ({{ myGroups.length }})</span>
+            <n-button size="tiny" @click="goToGroups">管理</n-button>
+          </div>
+          <n-scrollbar style="flex: 1; max-height: calc(100vh - 280px);">
+            <div class="p-3">
+              <n-button block secondary @click="goToGroups" class="mb-3">
+                + 创建/管理群组
+              </n-button>
+              
+              <div v-if="myGroups.length > 0" class="space-y-2 mt-3">
+                <div 
+                  v-for="group in myGroups" 
+                  :key="group.id"
+                  class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-blue-50 hover:shadow-md border bg-white border-gray-200"
+                  @click="goToGroupChat(group.id)"
+                >
+                  <n-avatar :size="40" :src="group.avatar || undefined">
+                    {{ group.name?.charAt(0) || 'G' }}
+                  </n-avatar>
+                  <div class="flex-1">
+                    <div class="font-semibold text-sm">{{ group.name }}</div>
+                    <div class="text-xs text-gray-500">成员: {{ group.memberCount || 0 }}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <n-empty 
+                v-else 
+                description="暂无群组" 
+                size="small"
+                class="py-8"
+              >
+                <template #extra>
+                  <n-button size="small" @click="goToGroups">
+                    创建群组
+                  </n-button>
+                </template>
+              </n-empty>
+            </div>
+          </n-scrollbar>
+        </n-tab-pane>
+      </n-tabs>
     </n-layout-sider>
 
     <n-layout-content content-class="w-full flex flex-col">
@@ -130,15 +192,27 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref, nextTick, watch } from 'vue';
+import { onMounted, onUnmounted, ref, nextTick, watch, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { io, type Socket } from 'socket.io-client';
-import { useMessage } from 'naive-ui';
+import { useMessage, useDialog } from 'naive-ui';
+import { useAuth } from '@/stores/auth';
+import { getMyGroups, type Group } from '@/api/group';
+import { getOfflineMessages, markMessagesAsRead, type OfflineMessage } from '@/api/message';
+import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
 
+const router = useRouter();
+const { currentUser: authUser, clearAuth } = useAuth();
+
 type User = {
-  id: string;
+  id: number;
   socketId: string;
+  username?: string;
+  nickname?: string;
+  avatar?: string;
+  status?: 'online' | 'offline' | 'busy';
 }
 
 type MessageInfo = {
@@ -152,11 +226,43 @@ const online = ref(false);
 const loading = ref(false);
 
 const message = useMessage();
+const dialog = useDialog();
 
 const currentUser = ref<User | null>(null);
 const contactUser = ref<User | null>(null);
 
 const userList = ref<User[]>([]);
+const myGroups = ref<Group[]>([]);
+const offlineMessages = ref<OfflineMessage[]>([]);
+const pendingInvitations = ref<GroupInvitation[]>([]);
+
+// 计算用户状态
+const userStatus = computed(() => {
+  if (online.value && authUser.value?.status) {
+    return authUser.value.status;
+  }
+  return online.value ? 'online' : 'offline';
+});
+
+// 获取状态颜色
+function getStatusColor(status: string) {
+  const colors: Record<string, string> = {
+    online: 'bg-green-300',
+    busy: 'bg-yellow-300',
+    offline: 'bg-gray-300',
+  };
+  return colors[status] || 'bg-gray-300';
+}
+
+// 获取状态文本
+function getStatusText(status: string) {
+  const texts: Record<string, string> = {
+    online: '在线',
+    busy: '忙碌',
+    offline: '离线',
+  };
+  return texts[status] || '离线';
+}
 
 // 私信本地存储
 const privateMessageMap = new Map<
@@ -171,14 +277,14 @@ const currentMessageList = ref<MessageInfo[]>([]);
 const scrollbarRef = ref();
 const toolBarRef = ref();
 
-function changeOnline() {
-  if (!online.value) {
-    loading.value = true;
-    initialSocket();
-  } else {
-    disconnect()
-  }
+// 退出登录
+async function handleLogout() {
+  disconnect();
+  clearAuth();
+  await router.push('/login');
+  window.location.reload(); // 确保完全重置状态
 }
+
 function initialSocket() {
   socket = io('http://localhost:3000', {
     path: '/meeting'
@@ -195,13 +301,27 @@ function initialSocket() {
     message.success('连接成功！')
     online.value = true;
     loading.value = false;
+    
+    // 连接成功后，认证用户
+    socket?.emit('authenticate', { 
+      token: authUser.value?.token,
+      nickname: authUser.value?.nickname,
+      avatar: authUser.value?.avatar
+    });
+  })
+
+  // 认证成功
+  socket.on('authenticated', (data) => {
+    console.log('认证成功:', data);
+    currentUser.value = data;
   })
 
   // 用户列表
   socket.on('user_list', (list: User[]) => {
-    console.log(list);
-
-    userList.value = list.filter(u => u.id !== currentUser.value?.id)
+    console.log('收到用户列表:', list);
+    // 过滤掉当前用户
+    userList.value = list.filter(u => u.id !== authUser.value?.id && u.socketId !== socket?.id)
+    console.log('过滤后的用户列表:', userList.value);
   })
 
   // 私信
@@ -305,6 +425,127 @@ function scrollToBottom() {
   });
 }
 
+// 加载群组列表
+async function loadMyGroups() {
+  try {
+    const res = await getMyGroups();
+    myGroups.value = res.groups || [];
+  } catch (error: any) {
+    console.error('加载群组列表失败:', error);
+  }
+}
+
+// 加载离线消息
+async function loadOfflineMessages() {
+  try {
+    const res = await getOfflineMessages();
+    offlineMessages.value = res.messages || [];
+    
+    if (offlineMessages.value.length > 0) {
+      // 显示离线消息通知
+      showOfflineMessagesDialog();
+    }
+  } catch (error: any) {
+    console.error('加载离线消息失败:', error);
+  }
+}
+
+// 加载群组邀请
+async function loadPendingInvitations() {
+  try {
+    const res = await getPendingInvitations();
+    pendingInvitations.value = res.invitations || [];
+    
+    if (pendingInvitations.value.length > 0) {
+      // 显示邀请通知
+      showInvitationsDialog();
+    }
+  } catch (error: any) {
+    console.error('加载群组邀请失败:', error);
+  }
+}
+
+// 显示离线消息对话框
+function showOfflineMessagesDialog() {
+  const messageList = offlineMessages.value.map(msg => 
+    `${msg.sender.nickname || msg.sender.username}: ${msg.message}`
+  ).join('\n\n');
+  
+  dialog.info({
+    title: `您有 ${offlineMessages.value.length} 条离线消息`,
+    content: messageList,
+    positiveText: '已读',
+    onPositiveClick: async () => {
+      const messageIds = offlineMessages.value.map(msg => msg.id);
+      try {
+        await markMessagesAsRead(messageIds);
+        offlineMessages.value = [];
+        message.success('消息已标记为已读');
+      } catch (error: any) {
+        message.error('标记失败: ' + error.message);
+      }
+    }
+  });
+}
+
+// 显示群组邀请对话框
+function showInvitationsDialog() {
+  if (pendingInvitations.value.length === 0) return;
+  
+  const invitation = pendingInvitations.value[0];
+  
+  dialog.warning({
+    title: '群组邀请',
+    content: `${invitation.inviter.nickname || invitation.inviter.username} 邀请您加入群组 "${invitation.group.name}"`,
+    positiveText: '接受',
+    negativeText: '拒绝',
+    onPositiveClick: async () => {
+      try {
+        await acceptInvitation(invitation.id);
+        message.success('已加入群组');
+        pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
+        loadMyGroups(); // 重新加载群组列表
+        
+        // 如果还有其他邀请，继续显示
+        if (pendingInvitations.value.length > 0) {
+          setTimeout(() => showInvitationsDialog(), 500);
+        }
+      } catch (error: any) {
+        message.error('接受邀请失败: ' + error.message);
+      }
+    },
+    onNegativeClick: async () => {
+      try {
+        await rejectInvitation(invitation.id);
+        message.info('已拒绝邀请');
+        pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
+        
+        // 如果还有其他邀请，继续显示
+        if (pendingInvitations.value.length > 0) {
+          setTimeout(() => showInvitationsDialog(), 500);
+        }
+      } catch (error: any) {
+        message.error('拒绝邀请失败: ' + error.message);
+      }
+    }
+  });
+}
+
+// 跳转到个人中心
+const goToProfile = () => {
+  router.push('/profile');
+};
+
+// 跳转到群组管理
+const goToGroups = () => {
+  router.push('/groups');
+};
+
+// 跳转到群组聊天
+const goToGroupChat = (groupId: number) => {
+  router.push(`/group-chat/${groupId}`);
+};
+
 // 监听消息列表变化，自动滚动到底部
 watch(() => currentMessageList.value.length, () => {
   scrollToBottom();
@@ -319,10 +560,19 @@ const handleVisible = () => {
   }
 }
 onMounted(() => {
-  document.addEventListener('visibilitychange', handleVisible)
-})
+  document.addEventListener('visibilitychange', handleVisible);
+  // 自动连接Socket
+  if (authUser.value) {
+    initialSocket();
+    // 加载数据
+    loadMyGroups();
+    loadOfflineMessages();
+    loadPendingInvitations();
+  }
+});
 
 onUnmounted(() => {
-  document.removeEventListener('visibilitychange', handleVisible)
-})
+  disconnect();
+  document.removeEventListener('visibilitychange', handleVisible);
+});
 </script>

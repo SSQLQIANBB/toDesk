@@ -1,5 +1,9 @@
 import sseRouter from './sse';
 import chatRouter from './chat';
+import authRouter from './auth';
+import groupRouter from './group';
+import messageRouter from './message';
+import invitationRouter from './invitation';
 import Router from 'koa-router';
 
 export const apiRouter = new Router({
@@ -12,6 +16,10 @@ apiRouter.use('/chat', chatRouter.routes(), chatRouter.allowedMethods());
 
 function setupRouter(app) {
   // 注册路由
+  app.use(authRouter.routes()).use(authRouter.allowedMethods())
+  app.use(groupRouter.routes()).use(groupRouter.allowedMethods())
+  app.use(messageRouter.routes()).use(messageRouter.allowedMethods())
+  app.use(invitationRouter.routes()).use(invitationRouter.allowedMethods())
   app.use(apiRouter.routes()).use(apiRouter.allowedMethods())
 }
 
