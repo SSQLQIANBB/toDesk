@@ -32,6 +32,34 @@
           {{ isMicMuted ? '打开麦克风' : '关闭麦克风' }}
         </n-tooltip>
 
+        <!-- 标注工具 -->
+        <n-tooltip v-if="isSharing || sharer">
+          <template #trigger>
+            <n-button
+              circle
+              :type="showAnnotation ? 'primary' : 'default'"
+              @click="showAnnotation = !showAnnotation"
+            >
+              <template #icon>
+                <n-icon>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                  </svg>
+                </n-icon>
+              </template>
+            </n-button>
+          </template>
+          {{ showAnnotation ? '关闭标注' : '开启标注' }}
+        </n-tooltip>
+
+        <!-- 录制功能 -->
+        <MediaRecorder
+          v-if="isSharing || sharer"
+          :stream="screenStream"
+          @recording-start="handleRecordingStart"
+          @recording-stop="handleRecordingStop"
+        />
+
         <!-- 视频质量设置 -->
         <n-dropdown :options="qualityOptions" @select="handleQualityChange">
           <n-button circle>
@@ -198,6 +226,8 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
+import ScreenAnnotation from '@/components/ScreenAnnotation.vue';
+import MediaRecorder from '@/components/MediaRecorder.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -216,10 +246,12 @@ const isSharing = ref(false); // 当前用户是否正在共享
 const sharer = ref<any>(null); // 当前共享者信息
 const isMicMuted = ref(false);
 const showMemberControl = ref(false);
+const showAnnotation = ref(false); // 是否显示标注
 
 const localStream = ref<MediaStream | null>(null);
 const peerConnection = ref<RTCPeerConnection | null>(null);
 const currentQuality = ref('high'); // 当前视频质量
+const screenStream = computed(() => localStream.value); // 用于录制
 
 // 视频质量配置
 const qualityPresets = {
@@ -570,6 +602,16 @@ function handleExit() {
   socket.value?.disconnect();
   
   router.back();
+}
+
+// 录制功能回调
+function handleRecordingStart() {
+  message.success('开始录制屏幕共享');
+}
+
+function handleRecordingStop(blob: Blob) {
+  message.success(`录制完成，文件大小: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+  // 可以在这里上传到服务器
 }
 
 onMounted(async () => {

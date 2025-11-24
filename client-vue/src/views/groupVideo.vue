@@ -46,6 +46,19 @@
           {{ isCameraOff ? '打开摄像头' : '关闭摄像头' }}
         </n-tooltip>
 
+        <!-- 虚拟背景 -->
+        <VirtualBackground
+          :stream="originalLocalStream"
+          @stream-updated="handleVirtualBGUpdate"
+        />
+
+        <!-- 录制功能 -->
+        <MediaRecorder
+          :stream="localStream"
+          @recording-start="handleRecordingStart"
+          @recording-stop="handleRecordingStop"
+        />
+
         <!-- 设置 -->
         <n-dropdown v-if="isOwner" :options="settingsOptions" @select="handleSettingSelect">
           <n-button circle>
@@ -175,6 +188,8 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
+import VirtualBackground from '@/components/VirtualBackground.vue';
+import MediaRecorder from '@/components/MediaRecorder.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -196,6 +211,7 @@ const isCameraOff = ref(false);
 const showMemberControl = ref(false);
 
 const localStream = ref<MediaStream | null>(null);
+const originalLocalStream = ref<MediaStream | null>(null); // 原始流（用于虚拟背景）
 const peerConnections = reactive<Map<string, RTCPeerConnection>>(new Map());
 
 // 是否是群主
@@ -251,10 +267,13 @@ async function loadGroupDetail() {
 // 初始化本地媒体流
 async function initLocalStream() {
   try {
-    localStream.value = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: 1280, height: 720 },
       audio: true,
     });
+    
+    originalLocalStream.value = stream; // 保存原始流
+    localStream.value = stream; // 当前流（可能被虚拟背景处理）
 
     if (localVideoRef.value) {
       localVideoRef.value.srcObject = localStream.value;
@@ -262,6 +281,26 @@ async function initLocalStream() {
   } catch (error: any) {
     message.error('获取媒体设备失败: ' + error.message);
   }
+}
+
+// 虚拟背景流更新
+function handleVirtualBGUpdate(processedStream: MediaStream) {
+  localStream.value = processedStream;
+  if (localVideoRef.value) {
+    localVideoRef.value.srcObject = processedStream;
+  }
+  message.success('虚拟背景已应用');
+  // 可以在这里更新发送给其他对等端的流
+}
+
+// 录制功能回调
+function handleRecordingStart() {
+  message.success('开始录制视频通话');
+}
+
+function handleRecordingStop(blob: Blob) {
+  message.success(`录制完成，文件大小: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+  // 可以在这里上传到服务器
 }
 
 // 初始化Socket连接
