@@ -2,8 +2,10 @@ import User from './User';
 import Group from './Group';
 import GroupMember from './GroupMember';
 import Message from './Message';
+import GroupMessage from './GroupMessage';
 import GroupInvitation from './GroupInvitation';
 import RefreshToken from './RefreshToken';
+import File from './File';
 
 // 定义模型关联关系
 
@@ -41,5 +43,17 @@ User.hasMany(GroupInvitation, { foreignKey: 'inviteeId', as: 'receivedInvitation
 RefreshToken.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
 
-export { User, Group, GroupMember, Message, GroupInvitation, RefreshToken };
+// GroupMessage 和 User、Group 的关系
+GroupMessage.belongsTo(User, { foreignKey: 'userId', as: 'sender' });
+GroupMessage.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+User.hasMany(GroupMessage, { foreignKey: 'userId', as: 'groupMessages' });
+Group.hasMany(GroupMessage, { foreignKey: 'groupId', as: 'messages' });
+
+// File 和 User、Group 的关系
+File.belongsTo(User, { foreignKey: 'userId', as: 'uploader' });
+File.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+User.hasMany(File, { foreignKey: 'userId', as: 'files' });
+Group.hasMany(File, { foreignKey: 'groupId', as: 'files' });
+
+export { User, Group, GroupMember, Message, GroupMessage, GroupInvitation, RefreshToken, File };
 

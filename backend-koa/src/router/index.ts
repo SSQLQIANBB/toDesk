@@ -4,6 +4,7 @@ import authRouter from './auth';
 import groupRouter from './group';
 import messageRouter from './message';
 import invitationRouter from './invitation';
+import fileRouter from './file';
 import Router from 'koa-router';
 
 export const apiRouter = new Router({
@@ -20,6 +21,7 @@ function setupRouter(app) {
   app.use(groupRouter.routes()).use(groupRouter.allowedMethods())
   app.use(messageRouter.routes()).use(messageRouter.allowedMethods())
   app.use(invitationRouter.routes()).use(invitationRouter.allowedMethods())
+  app.use(fileRouter.routes()).use(fileRouter.allowedMethods())
   app.use(apiRouter.routes()).use(apiRouter.allowedMethods())
 }
 
