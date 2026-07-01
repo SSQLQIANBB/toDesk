@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend-koa/Dockerfile
+    container_name: todesk-backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    expose:
+      - "3000"
+    volumes:
+      - todesk-uploads:/app/backend-koa/uploads
+    networks:
+      - todesk-internal
+      - bill-network
+
+  web:
+    build:
+      context: .
+      dockerfile: client-vue/Dockerfile
+    container_name: todesk-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    networks:
+      - todesk-internal
+
+volumes:
+  todesk-uploads:
+
+networks:
+  todesk-internal:
+    driver: bridge
+
+  bill-network:
+    external: true
+    name: ${BILL_DOCKER_NETWORK}
