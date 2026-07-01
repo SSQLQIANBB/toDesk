@@ -438,6 +438,7 @@ function saveNotifySettings() {
   };
   localStorage.setItem('notify_settings', JSON.stringify(settings));
 }
+void saveNotifySettings;
 
 // 请求通知权限
 async function requestNotificationPermission() {

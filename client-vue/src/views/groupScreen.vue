@@ -226,7 +226,6 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
-import ScreenAnnotation from '@/components/ScreenAnnotation.vue';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 
 const route = useRoute();
@@ -306,7 +305,7 @@ async function loadGroupDetail() {
 
 // 初始化Socket连接
 function initSocket() {
-  socket.value = io('http://localhost:3000', {
+  socket.value = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
     path: '/meeting',
     auth: {
       token: token.value,

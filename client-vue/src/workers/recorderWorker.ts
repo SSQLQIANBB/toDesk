@@ -7,7 +7,7 @@ self.onmessage = async (e: MessageEvent) => {
   const { type, data } = e.data
 
   if (type === 'init') {
-    const { canvas, screenStream, cameraStream, width, height } = data
+    const { canvas, screenStream, cameraStream } = data
     ctx = canvas.getContext('2d')
 
     // 通过 OffscreenCanvas 绘制需要创建 video 元素

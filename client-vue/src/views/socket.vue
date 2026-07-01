@@ -43,7 +43,7 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const username  = ref(null);
 const roomId = ref(null)
 
-const { socket, status, disconnect, connect, send } = useSocket();
+const { socket, status, disconnect, connect } = useSocket();
 
 const userList = ref<any>([]);
 function handleConnect() {

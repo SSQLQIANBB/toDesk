@@ -1,0 +1,11 @@
+.git
+.codegraph/codegraph.db*
+node_modules
+backend-koa/node_modules
+client-vue/node_modules
+client-vue/dist
+*.log
+.env
+.env.*
+!.env.example
+!.env.production.example

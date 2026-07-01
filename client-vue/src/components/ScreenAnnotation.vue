@@ -303,11 +303,17 @@ function stopDrawing() {
 function drawPath(points: Point[]) {
   if (!ctx || points.length < 2) return;
 
+  const firstPoint = points[0];
+  if (!firstPoint) return;
+
   ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
+  ctx.moveTo(firstPoint.x, firstPoint.y);
   
   for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(points[i].x, points[i].y);
+    const point = points[i];
+    if (point) {
+      ctx.lineTo(point.x, point.y);
+    }
   }
   
   ctx.stroke();
@@ -398,17 +404,28 @@ function redraw() {
         break;
       case 'arrow':
         if (action.points.length >= 2) {
-          drawArrow(action.points[0], action.points[action.points.length - 1]);
+          const start = action.points[0];
+          const end = action.points[action.points.length - 1];
+          if (start && end) {
+            drawArrow(start, end);
+          }
         }
         break;
       case 'rect':
         if (action.points.length >= 2) {
-          drawRect(action.points[0], action.points[action.points.length - 1]);
+          const start = action.points[0];
+          const end = action.points[action.points.length - 1];
+          if (start && end) {
+            drawRect(start, end);
+          }
         }
         break;
       case 'text':
         if (action.text && action.points.length > 0) {
-          drawText(action.points[0], action.text, action.color);
+          const point = action.points[0];
+          if (point) {
+            drawText(point, action.text, action.color);
+          }
         }
         break;
       case 'eraser':

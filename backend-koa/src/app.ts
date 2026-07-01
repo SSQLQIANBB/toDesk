@@ -10,6 +10,7 @@ import cors from '@/middleware/cors'
 
 const app = new Koa();
 const httpServer = http.createServer(app.callback())
+const PORT = Number(process.env.PORT || 3000);
 
 // 配置cors
 app.use(cors)
@@ -56,11 +57,11 @@ async function startServer() {
     });
 
     // 5. 启动HTTP服务器
-    httpServer.listen(3000, () => {
+    httpServer.listen(PORT, () => {
       console.log(chalk.cyan.bold('========================================'));
       console.log(chalk.green.bold('✓ ToDesk 服务端启动成功！'));
       console.log(chalk.cyan.bold('========================================'));
-      console.log(chalk.blue('  服务地址: ') + chalk.green.bold('http://localhost:3000'));
+      console.log(chalk.blue('  服务地址: ') + chalk.green.bold(`http://localhost:${PORT}`));
       console.log(chalk.blue('  环境: ') + chalk.yellow(process.env.NODE_ENV || 'development'));
       console.log(chalk.cyan.bold('========================================\n'));
     });

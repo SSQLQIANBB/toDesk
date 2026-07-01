@@ -1,10 +1,6 @@
-/**
- * API 配置
- * 开发环境使用 Vite 代理，生产环境使用绝对路径
- */
-export const API_BASE_URL = import.meta.env.PROD
-  ? 'http://localhost:3000/api' 
-  : '/api';
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+export const API_BASE_URL = `${rawApiBaseUrl}/api`;
 
 /**
  * 聊天相关 API
@@ -25,7 +21,7 @@ export const chatApi = {
     });
 
     if (!response.ok) {
-      throw new Error(`请求失败: ${response.statusText}`);
+      throw new Error(`Request failed: ${response.statusText}`);
     }
 
     return response;
@@ -37,7 +33,7 @@ export const chatApi = {
    * @returns EventSource 对象
    */
   streamTest(message: string): EventSource {
-    const url = new URL(`${API_BASE_URL}/chat/stream`);
+    const url = new URL(`${API_BASE_URL}/chat/stream`, window.location.origin);
     url.searchParams.append('message', message);
     return new EventSource(url.toString());
   }
@@ -60,7 +56,7 @@ export const sseUtils = {
   ): Promise<void> {
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error('无法读取响应流');
+      throw new Error('Unable to read response stream');
     }
 
     const decoder = new TextDecoder();
@@ -69,13 +65,13 @@ export const sseUtils = {
     try {
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) {
           break;
         }
 
         buffer += decoder.decode(value, { stream: true });
-        
+
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
@@ -84,8 +80,8 @@ export const sseUtils = {
             try {
               const data = JSON.parse(line.slice(5).trim());
               onMessage(data);
-            } catch (err) {
-              console.warn('解析 SSE 数据失败:', line);
+            } catch {
+              console.warn('Failed to parse SSE data:', line);
             }
           }
         }
@@ -99,4 +95,3 @@ export const sseUtils = {
     }
   }
 };
-

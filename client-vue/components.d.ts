@@ -11,21 +11,14 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    Chat: typeof import('./src/components/chat.vue')['default']
-    ChatPage: typeof import('./src/components/ChatPage.vue')['default']
-    HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
     MediaRecorder: typeof import('./src/components/MediaRecorder.vue')['default']
     NAlert: typeof import('naive-ui')['NAlert']
-    NAlter: typeof import('naive-ui')['NAlter']
     NAvatar: typeof import('naive-ui')['NAvatar']
     NBadge: typeof import('naive-ui')['NBadge']
     NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
     NColorPicker: typeof import('naive-ui')['NColorPicker']
     NConfigProvider: typeof import('naive-ui')['NConfigProvider']
-    NConfigureProvider: typeof import('naive-ui')['NConfigureProvider']
-    NDialo: typeof import('naive-ui')['NDialo']
-    NDialog: typeof import('naive-ui')['NDialog']
     NDialogProvider: typeof import('naive-ui')['NDialogProvider']
     NDivider: typeof import('naive-ui')['NDivider']
     NDrawer: typeof import('naive-ui')['NDrawer']
@@ -38,8 +31,6 @@ declare module 'vue' {
     NInput: typeof import('naive-ui')['NInput']
     NLayout: typeof import('naive-ui')['NLayout']
     NLayoutContent: typeof import('naive-ui')['NLayoutContent']
-    NLayoutFooter: typeof import('naive-ui')['NLayoutFooter']
-    NLayoutHeader: typeof import('naive-ui')['NLayoutHeader']
     NLayoutSider: typeof import('naive-ui')['NLayoutSider']
     NMessageProvider: typeof import('naive-ui')['NMessageProvider']
     NModal: typeof import('naive-ui')['NModal']
@@ -61,7 +52,6 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     ScreenAnnotation: typeof import('./src/components/ScreenAnnotation.vue')['default']
     ScreenCameraRecorder: typeof import('./src/components/ScreenCameraRecorder.vue')['default']
-    Test: typeof import('./src/components/Test.vue')['default']
     TextMsg: typeof import('./src/components/TextMsg.vue')['default']
     VirtualBackground: typeof import('./src/components/VirtualBackground.vue')['default']
   }

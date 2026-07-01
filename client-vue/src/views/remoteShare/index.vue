@@ -285,7 +285,7 @@ async function handleLogout() {
 }
 
 function initialSocket() {
-  socket = io('http://localhost:3000', {
+  socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
     path: '/meeting'
   });
   loading.value = true;

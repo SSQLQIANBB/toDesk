@@ -68,7 +68,7 @@
                   v-if="group.role === 'owner' || group.role === 'admin'"
                   trigger="click"
                   :options="getGroupOptions(group)"
-                  @select="(key) => handleGroupAction(key, group)"
+                  @select="(key: string | number) => handleGroupAction(String(key), group)"
                 >
                   <n-button size="small" secondary @click.stop>
                     <n-icon :component="MoreVertFilled" />
@@ -179,7 +179,7 @@
                   <div v-if="groupDetail?.myRole === 'owner' && member.role !== 'owner'" class="flex gap-2">
                     <n-switch
                       :value="member.canSpeak"
-                      @update:value="(val) => handleToggleSpeak(member.id, val)"
+                      @update:value="(val: boolean) => handleToggleSpeak(member.id, val)"
                       size="small"
                     >
                       <template #checked>可发言</template>

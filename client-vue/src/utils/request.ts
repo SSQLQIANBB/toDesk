@@ -1,14 +1,13 @@
 import { useAuth } from '@/stores/auth';
 import router from '@/router';
 
-// HTTP请求工具类
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>;
   body?: any;
-  _retry?: boolean; // 内部标志，防止无限重试
+  _retry?: boolean;
 }
 
 // 刷新token的Promise，用于防止并发刷新
@@ -19,7 +18,7 @@ let refreshTokenPromise: Promise<boolean> | null = null;
  */
 async function refreshAccessToken(): Promise<boolean> {
   const { refreshToken, updateToken, clearAuth } = useAuth();
-  
+
   if (!refreshToken.value) {
     return false;
   }
@@ -43,7 +42,7 @@ async function refreshAccessToken(): Promise<boolean> {
     updateToken(data.accessToken, data.refreshToken);
     return true;
   } catch (error) {
-    console.error('刷新 token 失败:', error);
+    console.error('Refresh token failed:', error);
     await clearAuth();
     return false;
   }
@@ -61,7 +60,7 @@ export async function request<T = any>(
   // 获取token
   const token = localStorage.getItem('token');
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   headers['Content-Type'] = 'application/json';
@@ -100,19 +99,18 @@ export async function request<T = any>(
         if (refreshSuccess) {
           // 刷新成功，重试原始请求
           return request<T>(url, { ...options, _retry: true });
-        } else {
-          // 刷新失败，跳转到登录页
-          router.push('/login');
-          throw new Error('登录已过期，请重新登录');
         }
+
+        router.push('/login');
+        throw new Error('Login expired, please sign in again');
       }
 
-      throw new Error(data.error || '请求失败');
+      throw new Error(data.error || 'Request failed');
     }
 
     return data;
   } catch (error: any) {
-    console.error('请求错误:', error);
+    console.error('Request error:', error);
     throw error;
   }
 }
@@ -124,4 +122,3 @@ export const http = {
   put: <T = any>(url: string, body?: any) => request<T>(url, { method: 'PUT', body }),
   delete: <T = any>(url: string) => request<T>(url, { method: 'DELETE' }),
 };
-

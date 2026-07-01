@@ -271,8 +271,8 @@ function updateBackgroundColor() {
 
 // 处理图片上传
 function handleImageUpload(options: { fileList: UploadFileInfo[] }) {
-  const file = options.fileList[0];
-  if (!file.file) return;
+  const file = options.fileList[0]?.file;
+  if (!file) return;
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -286,7 +286,7 @@ function handleImageUpload(options: { fileList: UploadFileInfo[] }) {
     };
     img.src = e.target?.result as string;
   };
-  reader.readAsDataURL(file.file);
+  reader.readAsDataURL(file);
 }
 
 // 监听流变化

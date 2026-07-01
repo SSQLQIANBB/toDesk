@@ -305,7 +305,7 @@ function handleRecordingStop(blob: Blob) {
 
 // 初始化Socket连接
 function initSocket() {
-  socket.value = io('http://localhost:3000', {
+  socket.value = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
     path: '/meeting',
     auth: {
       token: token.value,
