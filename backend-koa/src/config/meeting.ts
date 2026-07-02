@@ -1,250 +1,254 @@
-import { type Server } from "http";
-import { Server as Socket } from "socket.io";
-import { v4 as uuidv4 } from 'uuid';
+import { type Server } from 'http';
+import { Server as Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
-import { Message } from '../models';
+import { GroupMessage, Message, User as UserModel } from '../models';
 
-type User = {
-  id: number; // 数据库用户ID
+type PresenceStatus = 'online' | 'offline' | 'busy';
+
+type MeetingUser = {
+  id: number;
   socketId: string;
   username: string;
   nickname?: string;
   avatar?: string;
+  status: PresenceStatus;
+};
+
+const userMap = new Map<string, MeetingUser>();
+const socketToUserMap = new Map<string, number>();
+const groupRooms = new Map<number, Set<string>>();
+
+function getPublicUsers() {
+  const users = new Map<number, MeetingUser>();
+
+  for (const user of userMap.values()) {
+    if (user.status !== 'offline') {
+      users.set(user.id, user);
+    }
+  }
+
+  return [...users.values()];
 }
 
-const userMap = new Map<User['socketId'], User>();
-const socketToUserMap = new Map<string, number>(); // socketId -> userId映射
+function getUserSockets(userId: number) {
+  return [...socketToUserMap.entries()]
+    .filter(([, mappedUserId]) => mappedUserId === userId)
+    .map(([socketId]) => socketId);
+}
 
-// 群组通话房间
-const groupRooms = new Map<number, Set<string>>(); // groupId -> Set<socketId>
 const initialMeeting = (server: Server) => {
   const io = new Socket(server, {
     path: '/meeting',
     cors: {
-      origin: '*'
-    }
-  })
+      origin: '*',
+    },
+  });
+
+  function emitUserList() {
+    io.emit('user_list', getPublicUsers());
+  }
 
   io.on('connection', (socket) => {
-    console.log('meeting-connection:', socket.id)
-
     const socketId = socket.id;
-    let currentUser: User | null = null;
+    let currentUser: MeetingUser | null = null;
 
-    // 认证连接
-    socket.on('authenticate', (data: { token: string; nickname?: string; avatar?: string }) => {
+    socket.on('authenticate', async (data: { token: string; nickname?: string; avatar?: string }) => {
       try {
         const payload = verifyToken(data.token);
-        
+        const dbUser = await UserModel.findByPk(payload.userId);
+        const status = (dbUser?.status || 'online') as PresenceStatus;
+
         currentUser = {
           id: payload.userId,
           socketId,
           username: payload.username,
-          nickname: data.nickname || payload.username,
-          avatar: data.avatar,
+          nickname: data.nickname || dbUser?.nickname || payload.username,
+          avatar: data.avatar || dbUser?.avatar,
+          status,
         };
 
         userMap.set(socketId, currentUser);
         socketToUserMap.set(socketId, payload.userId);
 
-        // 当前登录用户信息
         socket.emit('authenticated', currentUser);
-
-        // 通知当前所有登录用户
-        io.emit('user_list', [...userMap.values()]);
-
-        console.log('用户已认证:', currentUser.username);
+        emitUserList();
       } catch (error) {
-        socket.emit('auth_error', { message: '认证失败' });
-        console.error('认证失败:', error);
+        socket.emit('auth_error', { message: 'Authentication failed' });
+        console.error('meeting authentication failed:', error);
       }
     });
 
-    // disconnect
+    socket.on('status_update', async (data: { status: PresenceStatus }) => {
+      if (!currentUser || !['online', 'offline', 'busy'].includes(data.status)) return;
+
+      currentUser.status = data.status;
+      userMap.set(socketId, currentUser);
+      await UserModel.update({ status: data.status }, { where: { id: currentUser.id } });
+      emitUserList();
+    });
+
     socket.on('disconnect', () => {
       userMap.delete(socketId);
       socketToUserMap.delete(socketId);
-      
-      // 从所有群组房间中移除
+
       groupRooms.forEach((members, groupId) => {
-        if (members.has(socketId)) {
-          members.delete(socketId);
-          // 通知群组其他成员
-          socket.to(`group_${groupId}`).emit('group_member_left', { socketId });
+        if (members.delete(socketId)) {
+          socket.to(`group_${groupId}`).emit('group_member_left', { socketId, userId: currentUser?.id });
         }
       });
 
-      const userList = [...userMap.values()];
-      console.log('online-user:', userList);
-      io.emit('user_list', userList);
-    })
+      emitUserList();
+    });
 
-    // private message
-    socket.on('private_message', async (data) => {
-      console.log('private_message', data)
-      
-      const fromUser = currentUser;
-      const toSocketId = data.to?.socketId;
-      const toUserId = socketToUserMap.get(toSocketId);
-      
-      if (toSocketId && userMap.has(toSocketId)) {
-        // 接收者在线，直接发送
-        socket.to(toSocketId).emit('private_message', {
-          from: socket.id,
+    socket.on('private_message', async (data: { to?: MeetingUser; message?: string }) => {
+      if (!currentUser || !data.to?.id || !data.message?.trim()) return;
+
+      try {
+        const receiverSockets = getUserSockets(data.to.id);
+        const savedMessage = await Message.create({
+          fromUserId: currentUser.id,
+          toUserId: data.to.id,
           message: data.message,
-          time: new Date().toLocaleString()
-        })
-      } else if (fromUser && toUserId) {
-        // 接收者离线，保存到数据库
-        try {
-          await Message.create({
-            fromUserId: fromUser.id,
-            toUserId: toUserId,
-            message: data.message,
-            isRead: false,
-          });
-          console.log('离线消息已保存');
-        } catch (error) {
-          console.error('保存离线消息失败:', error);
-        }
-      }
-    })
+          isRead: receiverSockets.length > 0,
+        });
 
-    // WebRTC信令转发 - offer
+        const payload = {
+          id: savedMessage.id,
+          from: socketId,
+          fromUserId: currentUser.id,
+          toUserId: data.to.id,
+          message: data.message,
+          time: savedMessage.createdAt?.toLocaleString() || new Date().toLocaleString(),
+          createdAt: savedMessage.createdAt,
+          sender: currentUser,
+        };
+
+        receiverSockets.forEach((targetSocketId) => {
+          socket.to(targetSocketId).emit('private_message', payload);
+        });
+      } catch (error) {
+        console.error('save private message failed:', error);
+      }
+    });
+
     socket.on('webrtc_offer', (data) => {
-      console.log('webrtc_offer:', socket.id, '->', data.to?.socketId)
       if (data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_offer', {
-          from: socket.id,
+          from: socketId,
           offer: data.offer,
-          deviceType: data.deviceType
-        })
+          deviceType: data.deviceType,
+        });
       }
-    })
+    });
 
-    // WebRTC信令转发 - answer
     socket.on('webrtc_answer', (data) => {
-      console.log('webrtc_answer:', socket.id, '->', data.to?.socketId)
       if (data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_answer', {
-          from: socket.id,
-          answer: data.answer
-        })
+          from: socketId,
+          answer: data.answer,
+        });
       }
-    })
+    });
 
-    // WebRTC信令转发 - ice candidate
     socket.on('webrtc_ice', (data) => {
-      console.log('webrtc_ice:', socket.id, '->', data.to?.socketId)
       if (data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_ice', {
-          from: socket.id,
-          candidate: data.candidate
-        })
+          from: socketId,
+          candidate: data.candidate,
+        });
       }
-    })
+    });
 
-    // WebRTC呼叫请求
     socket.on('webrtc_call_request', (data) => {
-      console.log('webrtc_call_request:', socket.id, '->', data.to?.socketId)
       if (data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_call_request', {
-          from: socket.id,
-          deviceType: data.deviceType
-        })
+          from: socketId,
+          deviceType: data.deviceType,
+        });
       }
-    })
+    });
 
-    // WebRTC呼叫响应
     socket.on('webrtc_call_response', (data) => {
-      console.log('webrtc_call_response:', socket.id, '->', data.to?.socketId)
       if (data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_call_response', {
-          from: socket.id,
-          accepted: data.accepted
-        })
+          from: socketId,
+          accepted: data.accepted,
+        });
       }
-    })
+    });
 
-    // WebRTC挂断
     socket.on('webrtc_hangup', (data) => {
-      console.log('webrtc_hangup:', socket.id, '->', data.to?.socketId)
       if (data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_hangup', {
-          from: socket.id
-        })
+          from: socketId,
+        });
       }
-    })
+    });
 
-    // ========== 群组功能 ==========
-
-    // 加入群组房间
     socket.on('join_group', (data: { groupId: number }) => {
-      const { groupId } = data;
-      const roomName = `group_${groupId}`;
-      
-      socket.join(roomName);
-      
-      if (!groupRooms.has(groupId)) {
-        groupRooms.set(groupId, new Set());
-      }
-      groupRooms.get(groupId)!.add(socketId);
-
-      // 获取房间内的其他成员
-      const members = Array.from(groupRooms.get(groupId)!).map(sid => userMap.get(sid)).filter(Boolean);
-      
-      // 通知当前用户房间内的所有成员
-      socket.emit('group_members', { groupId, members });
-      
-      // 通知其他成员有新成员加入
-      socket.to(roomName).emit('group_member_joined', { 
-        groupId, 
-        member: currentUser 
-      });
-
-      console.log(`用户 ${socketId} 加入群组 ${groupId}`);
-    });
-
-    // 离开群组房间
-    socket.on('leave_group', (data: { groupId: number }) => {
-      const { groupId } = data;
-      const roomName = `group_${groupId}`;
-      
-      socket.leave(roomName);
-      
-      const room = groupRooms.get(groupId);
-      if (room) {
-        room.delete(socketId);
-        if (room.size === 0) {
-          groupRooms.delete(groupId);
-        }
-      }
-
-      // 通知其他成员
-      socket.to(roomName).emit('group_member_left', { socketId });
-
-      console.log(`用户 ${socketId} 离开群组 ${groupId}`);
-    });
-
-    // 群组消息
-    socket.on('group_message', (data) => {
-      console.log('group_message', data);
       const roomName = `group_${data.groupId}`;
-      
-      socket.to(roomName).emit('group_message', {
-        from: socketId,
+
+      socket.join(roomName);
+
+      if (!groupRooms.has(data.groupId)) {
+        groupRooms.set(data.groupId, new Set());
+      }
+      groupRooms.get(data.groupId)!.add(socketId);
+
+      const members = Array.from(groupRooms.get(data.groupId)!)
+        .map((sid) => userMap.get(sid))
+        .filter(Boolean);
+
+      socket.emit('group_members', { groupId: data.groupId, members });
+      socket.to(roomName).emit('group_member_joined', {
         groupId: data.groupId,
-        message: data.message,
-        time: new Date().toLocaleString(),
-        user: currentUser,
+        member: currentUser,
       });
     });
 
-    // ========== 群组WebRTC ==========
+    socket.on('leave_group', (data: { groupId: number }) => {
+      const roomName = `group_${data.groupId}`;
+      const room = groupRooms.get(data.groupId);
 
-    // 群组视频/屏幕共享 - offer
+      socket.leave(roomName);
+      room?.delete(socketId);
+
+      if (room?.size === 0) {
+        groupRooms.delete(data.groupId);
+      }
+
+      socket.to(roomName).emit('group_member_left', { socketId, userId: currentUser?.id });
+    });
+
+    socket.on('group_message', async (data: { groupId: number; message?: string }) => {
+      if (!currentUser || !data.groupId || !data.message?.trim()) return;
+
+      try {
+        const groupMessage = await GroupMessage.create({
+          groupId: data.groupId,
+          userId: currentUser.id,
+          message: data.message,
+        });
+
+        const payload = {
+          id: groupMessage.id,
+          from: socketId,
+          groupId: data.groupId,
+          userId: currentUser.id,
+          message: data.message,
+          time: groupMessage.createdAt?.toLocaleString() || new Date().toLocaleString(),
+          createdAt: groupMessage.createdAt,
+          user: currentUser,
+          sender: currentUser,
+        };
+
+        socket.to(`group_${data.groupId}`).emit('group_message', payload);
+      } catch (error) {
+        console.error('save group message failed:', error);
+      }
+    });
+
     socket.on('group_webrtc_offer', (data) => {
-      console.log('group_webrtc_offer:', socketId, '->', data.to);
       if (data.to) {
         socket.to(data.to).emit('group_webrtc_offer', {
           from: socketId,
@@ -255,9 +259,7 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    // 群组视频/屏幕共享 - answer
     socket.on('group_webrtc_answer', (data) => {
-      console.log('group_webrtc_answer:', socketId, '->', data.to);
       if (data.to) {
         socket.to(data.to).emit('group_webrtc_answer', {
           from: socketId,
@@ -266,7 +268,6 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    // 群组视频/屏幕共享 - ice candidate
     socket.on('group_webrtc_ice', (data) => {
       if (data.to) {
         socket.to(data.to).emit('group_webrtc_ice', {
@@ -276,46 +277,36 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    // 群组视频/屏幕共享开始通知
     socket.on('group_call_start', (data: { groupId: number; deviceType: number }) => {
-      const roomName = `group_${data.groupId}`;
-      socket.to(roomName).emit('group_call_started', {
+      socket.to(`group_${data.groupId}`).emit('group_call_started', {
         from: socketId,
         groupId: data.groupId,
         deviceType: data.deviceType,
         user: currentUser,
       });
-      console.log(`群组${data.groupId}通话开始，发起人: ${socketId}`);
     });
 
-    // 群组通话结束
     socket.on('group_call_end', (data: { groupId: number }) => {
-      const roomName = `group_${data.groupId}`;
-      socket.to(roomName).emit('group_call_ended', {
+      socket.to(`group_${data.groupId}`).emit('group_call_ended', {
         from: socketId,
         groupId: data.groupId,
       });
-      console.log(`群组${data.groupId}通话结束，发起人: ${socketId}`);
     });
 
-    // 控制成员麦克风权限
     socket.on('control_member_mic', (data: { groupId: number; targetSocketId: string; canSpeak: boolean }) => {
       socket.to(data.targetSocketId).emit('mic_permission_changed', {
         groupId: data.groupId,
         canSpeak: data.canSpeak,
       });
-      console.log(`群组${data.groupId}麦克风权限控制: ${data.targetSocketId} -> ${data.canSpeak}`);
     });
 
-    // 切换麦克风状态
     socket.on('toggle_mic', (data: { groupId: number; muted: boolean }) => {
-      const roomName = `group_${data.groupId}`;
-      socket.to(roomName).emit('member_mic_changed', {
+      socket.to(`group_${data.groupId}`).emit('member_mic_changed', {
         socketId,
         muted: data.muted,
       });
     });
-  })
-}
+  });
+};
 
 export default initialMeeting;

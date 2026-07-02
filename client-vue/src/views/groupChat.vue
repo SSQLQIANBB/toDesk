@@ -222,13 +222,15 @@ import { useMessage, type ScrollbarInst } from 'naive-ui';
 import { ArrowBackFilled, VideocamFilled, ScreenShareFilled, InfoFilled } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import notificationService from '@/services/notificationService';
+import { getGroupMessages } from '@/api/message';
+import { connectMeetingSocket } from '@/services/meetingSocket';
 
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
-const { currentUser, token } = useAuth();
+const { currentUser } = useAuth();
 
 const groupId = ref(parseInt(route.params.id as string));
 const socket = ref<Socket | null>(null);
@@ -269,25 +271,40 @@ async function loadGroupDetail() {
 }
 
 // 初始化Socket连接
+async function loadGroupHistory() {
+  try {
+    const res = await getGroupMessages(groupId.value);
+    messages.value = res.messages.map((msg) => ({
+      message: msg.message,
+      time: new Date(msg.createdAt).toLocaleString(),
+      user: msg.sender,
+      isMine: msg.userId === currentUser.value?.id,
+    }));
+    scrollToBottom();
+  } catch (error: any) {
+    message.error('加载群聊记录失败: ' + error.message);
+  }
+}
+
 function initSocket() {
-  socket.value = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
-    path: '/meeting',
-    auth: {
-      token: token.value,
-    },
-  });
+  socket.value = connectMeetingSocket();
 
   // 认证
-  socket.value.emit('authenticate', {
-    token: token.value,
-    nickname: currentUser.value?.nickname,
-    avatar: currentUser.value?.avatar,
-  });
+  socket.value.off('authenticated');
+  socket.value.off('group_members');
+  socket.value.off('group_member_joined');
+  socket.value.off('group_member_left');
+  socket.value.off('group_message');
+  socket.value.off('group_call_started');
 
   // 认证成功后加入群组
   socket.value.on('authenticated', () => {
     socket.value?.emit('join_group', { groupId: groupId.value });
   });
+
+  if (socket.value.connected) {
+    socket.value.emit('join_group', { groupId: groupId.value });
+  }
 
   // 接收群组成员列表
   socket.value.on('group_members', (data: { groupId: number; members: any[] }) => {
@@ -409,15 +426,15 @@ function goBack() {
 onMounted(async () => {
   // 请求通知权限
   await notificationService.requestPermission();
-  
+
   await loadGroupDetail();
+  await loadGroupHistory();
   initSocket();
 });
 
 onUnmounted(() => {
   if (socket.value) {
     socket.value.emit('leave_group', { groupId: groupId.value });
-    socket.value.disconnect();
   }
 });
 </script>

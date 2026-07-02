@@ -53,23 +53,23 @@
               <n-badge 
                 :offset="[-8, 8]" 
                 class="w-full" 
-                :value="unReadMessageCount[user.socketId] || 0" 
+                :value="unReadMessageCount[user.id] || 0"
                 :max="99"
-                :show="!!unReadMessageCount[user.socketId]"
+                :show="!!unReadMessageCount[user.id]"
                 v-for="user in userList" 
-                :key="user.socketId"
+                :key="user.id"
               >
                 <li 
                   class="w-full flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-blue-50 hover:shadow-md border"
-                  :class="contactUser?.socketId === user.socketId ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
+                  :class="contactUser?.id === user.id ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
                   @click="selectContact(user)"
                 >
                   <n-avatar :size="40" :src="user.avatar || undefined">
                     {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
                   </n-avatar>
                   <div class="flex-1">
-                    <div class="font-semibold text-sm">{{ user.nickname || user.username || `用户-${user.socketId?.slice(0, 4)}` }}</div>
-                    <div class="text-xs text-gray-500">ID: {{ user?.socketId?.slice(0, 8) }}...</div>
+                    <div class="font-semibold text-sm">{{ user.nickname || user.username || `用户-${user.id}` }}</div>
+                    <div class="text-xs text-gray-500">ID: {{ user.id }}</div>
                   </div>
                   <div class="w-2 h-2 rounded-full bg-green-400"></div>
                 </li>
@@ -146,20 +146,20 @@
         <header class="h-16 shadow-sm flex items-center px-6 bg-gradient-to-r from-white to-gray-50 border-b">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-500 flex items-center justify-center text-white font-bold">
-              {{ contactUser.socketId.slice(0, 2) }}
+              {{ (contactUser.nickname || contactUser.username || String(contactUser.id)).slice(0, 2) }}
             </div>
             <div>
-              <div class="font-bold text-base">用户-{{ contactUser.socketId.slice(0, 4) }}</div>
-              <div class="text-xs text-gray-500">{{ contactUser.socketId }}</div>
+              <div class="font-bold text-base">{{ contactUser.nickname || contactUser.username || `用户-${contactUser.id}` }}</div>
+              <div class="text-xs text-gray-500">ID: {{ contactUser.id }}</div>
             </div>
           </div>
         </header>
         <n-scrollbar class="grow p-4" ref="scrollbarRef">
           <ul class="space-y-3">
-            <li class="flex flex-col w-full" :class="msg.from === currentUser?.socketId ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="index">
+            <li class="flex flex-col w-full" :class="msg.fromUserId === currentUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="index">
               <span class="text-xs text-gray-400 mb-1">{{msg.time}}</span>
               <div class="p-3 rounded-lg max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md" 
-                   :class="msg.from === currentUser?.socketId ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
+                   :class="msg.fromUserId === currentUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
                 {{ msg.message }}
               </div>
             </li>
@@ -195,15 +195,16 @@
 <script lang="ts" setup>
 import { onMounted, onUnmounted, ref, nextTick, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { io, type Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { useMessage, useDialog } from 'naive-ui';
 import { useAuth } from '@/stores/auth';
 import { getMyGroups, type Group } from '@/api/group';
-import { getOfflineMessages, markMessagesAsRead, type OfflineMessage } from '@/api/message';
+import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type OfflineMessage } from '@/api/message';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
+import { connectMeetingSocket, disconnectMeetingSocket } from '@/services/meetingSocket';
 
 const router = useRouter();
 const { currentUser: authUser, token, clearAuth } = useAuth();
@@ -219,7 +220,9 @@ type User = {
 
 type MessageInfo = {
   time: string;
-  from: string;
+  from?: string;
+  fromUserId: number;
+  toUserId?: number;
   message: string;
 }
 
@@ -240,7 +243,7 @@ const pendingInvitations = ref<GroupInvitation[]>([]);
 
 // 计算用户状态（基于Socket连接状态）
 const userStatus = computed(() => {
-  return online.value ? 'online' : 'offline';
+  return currentUser.value?.status || authUser.value?.status || (online.value ? 'online' : 'offline');
 });
 
 // 获取状态颜色
@@ -265,11 +268,11 @@ function getStatusText(status: string) {
 
 // 私信本地存储
 const privateMessageMap = new Map<
-  User['socketId'],
+  User['id'],
   MessageInfo[]
 >();
 
-const unReadMessageCount = ref<Record<string, number>>({});
+const unReadMessageCount = ref<Record<number, number>>({});
 const currentMessageList = ref<MessageInfo[]>([]);
 
 // refs
@@ -278,28 +281,32 @@ const toolBarRef = ref();
 
 // 退出登录
 async function handleLogout() {
-  disconnect();
+  disconnect(true);
   clearAuth();
   await router.push('/login');
   window.location.reload(); // 确保完全重置状态
 }
 
 function initialSocket() {
-  socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
-    path: '/meeting'
-  });
+  socket = connectMeetingSocket();
   loading.value = true;
+
+  socket.off('authenticated');
+  socket.off('auth_error');
+  socket.off('user_list');
+  socket.off('private_message');
+  socket.off('webrtc_offer');
+  socket.off('webrtc_answer');
+  socket.off('webrtc_ice');
+  socket.off('webrtc_call_request');
+  socket.off('webrtc_call_response');
+  socket.off('webrtc_hangup');
   
   // 连接建立后立即认证
   socket.on('connect', () => {
     console.log('Socket已连接:', socket?.id);
     
     // 立即进行认证
-    socket?.emit('authenticate', { 
-      token: token.value,
-      nickname: authUser.value?.nickname,
-      avatar: authUser.value?.avatar
-    });
   })
 
   // 认证成功
@@ -331,19 +338,26 @@ function initialSocket() {
   socket.on('private_message', (data) => {
     console.log('receive-message:', data);
 
-    setMessage(data.from, data)
+    const senderId = Number(data.fromUserId);
+    setMessage(senderId, {
+      from: data.from,
+      fromUserId: senderId,
+      toUserId: data.toUserId,
+      message: data.message,
+      time: data.time || new Date().toLocaleString(),
+    })
 
-    const count = unReadMessageCount.value[data.from] || 0
-    unReadMessageCount.value[data.from] = count + 1
+    const count = unReadMessageCount.value[senderId] || 0
+    unReadMessageCount.value[senderId] = count + 1
 
-    if (data.from === contactUser.value?.socketId) {
-      currentMessageList.value = privateMessageMap.get(data.from) || []
+    if (senderId === contactUser.value?.id) {
+      currentMessageList.value = privateMessageMap.get(senderId) || []
       scrollToBottom();
     }
 
     // 如果窗口未聚焦或不是当前联系人，显示桌面通知
-    if (document.hidden || data.from !== contactUser.value?.socketId) {
-      const sender = userList.value.find(u => u.socketId === data.from);
+    if (document.hidden || senderId !== contactUser.value?.id) {
+      const sender = userList.value.find(u => u.id === senderId) || data.sender;
       const senderName = sender?.nickname || sender?.username || '未知用户';
       notificationService.showMessage(
         senderName,
@@ -396,19 +410,39 @@ function initialSocket() {
     console.log('对方挂断');
     toolBarRef.value?.handleHangup();
   })
+  if (socket.connected) {
+    socket.emit('authenticate', {
+      token: token.value,
+      nickname: authUser.value?.nickname,
+      avatar: authUser.value?.avatar,
+    });
+  }
 }
 
-function setMessage(id: string, data: MessageInfo) {
+function setMessage(id: number, data: MessageInfo) {
   const list = privateMessageMap.get(id) || [];
 
   privateMessageMap.set(id, [...list, data])
 }
 
-function disconnect() {
+function disconnect(closeSocket = false) {
   if (socket) {
-    socket.disconnect();
-    socket = null;
+    socket.off('authenticated');
+    socket.off('auth_error');
+    socket.off('user_list');
+    socket.off('private_message');
+    socket.off('webrtc_offer');
+    socket.off('webrtc_answer');
+    socket.off('webrtc_ice');
+    socket.off('webrtc_call_request');
+    socket.off('webrtc_call_response');
+    socket.off('webrtc_hangup');
+
+    if (closeSocket) {
+      disconnectMeetingSocket();
+    }
   }
+  socket = null;
   online.value = false;
   userList.value = [];
   contactUser.value = null;
@@ -417,18 +451,31 @@ function disconnect() {
 }
 
 
-function selectContact(user: User) {
+async function selectContact(user: User) {
   contactUser.value = user;
 
-  if (unReadMessageCount.value[user.socketId]) {
-    unReadMessageCount.value[user.socketId] = 0
+  if (unReadMessageCount.value[user.id]) {
+    unReadMessageCount.value[user.id] = 0
   }
 
-  currentMessageList.value = privateMessageMap.get(user.socketId) || []
+  try {
+    const res = await getPrivateMessages(user.id);
+    const history = res.messages.map((msg) => ({
+      fromUserId: msg.fromUserId,
+      toUserId: msg.toUserId,
+      message: msg.message,
+      time: new Date(msg.createdAt).toLocaleString(),
+    }));
+    privateMessageMap.set(user.id, history);
+    currentMessageList.value = history;
+  } catch (error: any) {
+    message.error('加载聊天记录失败: ' + error.message);
+    currentMessageList.value = privateMessageMap.get(user.id) || []
+  }
 }
-
 function sendMsg(v: string) {
   console.log(v)
+  if (!contactUser.value || !authUser.value) return;
 
   // 私信
   socket?.emit('private_message', {
@@ -436,13 +483,15 @@ function sendMsg(v: string) {
     message: v,
   })
   
-  setMessage(contactUser.value!.socketId, {
+  setMessage(contactUser.value.id, {
     from: socket?.id!,
+    fromUserId: authUser.value.id,
+    toUserId: contactUser.value.id,
     message: v,
     time: new Date().toLocaleString()
   })
 
-  currentMessageList.value = privateMessageMap.get(contactUser.value!.socketId) || []
+  currentMessageList.value = privateMessageMap.get(contactUser.value.id) || []
   scrollToBottom();
 }
 
@@ -608,8 +657,8 @@ watch(() => currentMessageList.value.length, () => {
 const handleVisible = () => {
   console.log('--', document.visibilityState)
   if (document.visibilityState === 'visible') {
-    if (contactUser.value && unReadMessageCount.value[contactUser.value.socketId]) {
-      unReadMessageCount.value[contactUser.value.socketId] = 0
+    if (contactUser.value && unReadMessageCount.value[contactUser.value.id]) {
+      unReadMessageCount.value[contactUser.value.id] = 0
     }
   }
 }

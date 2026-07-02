@@ -1,16 +1,23 @@
 import { Context } from 'koa';
-import { Message, GroupMessage, User } from '../models';
 import { Op } from 'sequelize';
+import { GroupMessage, Message, User } from '../models';
 
-/**
- * 获取离线消息
- */
+const MESSAGE_CACHE_DAYS = 30;
+
+function getMessageCacheStartDate() {
+  return new Date(Date.now() - MESSAGE_CACHE_DAYS * 24 * 60 * 60 * 1000);
+}
+
 export async function getOfflineMessages(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
 
     const messages = await Message.findAll({
-      where: { toUserId: userId, isRead: false },
+      where: {
+        toUserId: userId,
+        isRead: false,
+        createdAt: { [Op.gte]: getMessageCacheStartDate() },
+      },
       include: [
         {
           model: User,
@@ -23,23 +30,20 @@ export async function getOfflineMessages(ctx: Context) {
 
     ctx.body = { messages };
   } catch (error: any) {
-    console.error('获取离线消息失败:', error);
+    console.error('get offline messages failed:', error);
     ctx.status = 500;
-    ctx.body = { error: '获取离线消息失败: ' + error.message };
+    ctx.body = { error: `Get offline messages failed: ${error.message}` };
   }
 }
 
-/**
- * 标记消息为已读
- */
 export async function markMessagesAsRead(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
     const { messageIds } = ctx.request.body as any;
 
-    if (!messageIds || !Array.isArray(messageIds)) {
+    if (!Array.isArray(messageIds)) {
       ctx.status = 400;
-      ctx.body = { error: 'messageIds必须是数组' };
+      ctx.body = { error: 'messageIds must be an array' };
       return;
     }
 
@@ -53,52 +57,52 @@ export async function markMessagesAsRead(ctx: Context) {
       }
     );
 
-    ctx.body = { message: '消息已标记为已读' };
+    ctx.body = { message: 'Messages marked as read' };
   } catch (error: any) {
-    console.error('标记消息已读失败:', error);
+    console.error('mark messages as read failed:', error);
     ctx.status = 500;
-    ctx.body = { error: '标记消息已读失败: ' + error.message };
+    ctx.body = { error: `Mark messages as read failed: ${error.message}` };
   }
 }
 
-/**
- * 获取未读消息数量
- */
 export async function getUnreadCount(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
 
     const count = await Message.count({
-      where: { toUserId: userId, isRead: false },
+      where: {
+        toUserId: userId,
+        isRead: false,
+        createdAt: { [Op.gte]: getMessageCacheStartDate() },
+      },
     });
 
     ctx.body = { count };
   } catch (error: any) {
-    console.error('获取未读消息数量失败:', error);
+    console.error('get unread count failed:', error);
     ctx.status = 500;
-    ctx.body = { error: '获取未读消息数量失败: ' + error.message };
+    ctx.body = { error: `Get unread count failed: ${error.message}` };
   }
 }
 
-/**
- * 获取私聊历史消息
- */
 export async function getPrivateMessages(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
     const { contactUserId, limit = 50, offset = 0 } = ctx.query;
+    const contactId = Number(contactUserId);
 
-    if (!contactUserId) {
+    if (!contactId) {
       ctx.status = 400;
-      ctx.body = { error: '缺少contactUserId参数' };
+      ctx.body = { error: 'contactUserId is required' };
       return;
     }
 
     const messages = await Message.findAll({
       where: {
+        createdAt: { [Op.gte]: getMessageCacheStartDate() },
         [Op.or]: [
-          { fromUserId: userId, toUserId: parseInt(contactUserId as string) },
-          { fromUserId: parseInt(contactUserId as string), toUserId: userId },
+          { fromUserId: userId, toUserId: contactId },
+          { fromUserId: contactId, toUserId: userId },
         ],
       },
       include: [
@@ -107,34 +111,38 @@ export async function getPrivateMessages(ctx: Context) {
           as: 'sender',
           attributes: ['id', 'username', 'nickname', 'avatar'],
         },
+        {
+          model: User,
+          as: 'receiver',
+          attributes: ['id', 'username', 'nickname', 'avatar'],
+        },
       ],
       order: [['createdAt', 'DESC']],
-      limit: parseInt(limit as string),
-      offset: parseInt(offset as string),
+      limit: Number(limit),
+      offset: Number(offset),
     });
 
     ctx.body = {
-      messages: messages.reverse(), // 反转顺序，从旧到新
-      hasMore: messages.length === parseInt(limit as string),
+      messages: messages.reverse(),
+      hasMore: messages.length === Number(limit),
     };
   } catch (error: any) {
-    console.error('获取私聊历史消息失败:', error);
+    console.error('get private messages failed:', error);
     ctx.status = 500;
-    ctx.body = { error: '获取私聊历史消息失败: ' + error.message };
+    ctx.body = { error: `Get private messages failed: ${error.message}` };
   }
 }
 
-/**
- * 获取群组历史消息
- */
 export async function getGroupMessages(ctx: Context) {
   try {
     const { groupId } = ctx.params;
     const { limit = 50, offset = 0, search } = ctx.query;
 
-    const whereClause: any = { groupId: parseInt(groupId) };
-    
-    // 搜索功能
+    const whereClause: any = {
+      groupId: Number(groupId),
+      createdAt: { [Op.gte]: getMessageCacheStartDate() },
+    };
+
     if (search) {
       whereClause.message = {
         [Op.like]: `%${search}%`,
@@ -151,24 +159,21 @@ export async function getGroupMessages(ctx: Context) {
         },
       ],
       order: [['createdAt', 'DESC']],
-      limit: parseInt(limit as string),
-      offset: parseInt(offset as string),
+      limit: Number(limit),
+      offset: Number(offset),
     });
 
     ctx.body = {
-      messages: messages.reverse(), // 反转顺序，从旧到新
-      hasMore: messages.length === parseInt(limit as string),
+      messages: messages.reverse(),
+      hasMore: messages.length === Number(limit),
     };
   } catch (error: any) {
-    console.error('获取群组历史消息失败:', error);
+    console.error('get group messages failed:', error);
     ctx.status = 500;
-    ctx.body = { error: '获取群组历史消息失败: ' + error.message };
+    ctx.body = { error: `Get group messages failed: ${error.message}` };
   }
 }
 
-/**
- * 保存群组消息
- */
 export async function saveGroupMessage(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
@@ -176,7 +181,7 @@ export async function saveGroupMessage(ctx: Context) {
 
     if (!groupId || !message) {
       ctx.status = 400;
-      ctx.body = { error: '缺少必要参数' };
+      ctx.body = { error: 'groupId and message are required' };
       return;
     }
 
@@ -201,19 +206,16 @@ export async function saveGroupMessage(ctx: Context) {
     });
 
     ctx.body = {
-      message: '消息保存成功',
+      message: 'Message saved',
       data: savedMessage,
     };
   } catch (error: any) {
-    console.error('保存群组消息失败:', error);
+    console.error('save group message failed:', error);
     ctx.status = 500;
-    ctx.body = { error: '保存群组消息失败: ' + error.message };
+    ctx.body = { error: `Save group message failed: ${error.message}` };
   }
 }
 
-/**
- * 搜索消息
- */
 export async function searchMessages(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
@@ -221,7 +223,7 @@ export async function searchMessages(ctx: Context) {
 
     if (!keyword) {
       ctx.status = 400;
-      ctx.body = { error: '缺少搜索关键词' };
+      ctx.body = { error: 'keyword is required' };
       return;
     }
 
@@ -230,14 +232,11 @@ export async function searchMessages(ctx: Context) {
       groupMessages: [],
     };
 
-    // 搜索私聊消息
     if (type === 'all' || type === 'private') {
-      const privateMessages = await Message.findAll({
+      results.privateMessages = await Message.findAll({
         where: {
-          [Op.or]: [
-            { fromUserId: userId },
-            { toUserId: userId },
-          ],
+          createdAt: { [Op.gte]: getMessageCacheStartDate() },
+          [Op.or]: [{ fromUserId: userId }, { toUserId: userId }],
           message: {
             [Op.like]: `%${keyword}%`,
           },
@@ -255,15 +254,14 @@ export async function searchMessages(ctx: Context) {
           },
         ],
         order: [['createdAt', 'DESC']],
-        limit: parseInt(limit as string),
+        limit: Number(limit),
       });
-      results.privateMessages = privateMessages;
     }
 
-    // 搜索群组消息
     if (type === 'all' || type === 'group') {
-      const groupMessages = await GroupMessage.findAll({
+      results.groupMessages = await GroupMessage.findAll({
         where: {
+          createdAt: { [Op.gte]: getMessageCacheStartDate() },
           message: {
             [Op.like]: `%${keyword}%`,
           },
@@ -276,16 +274,14 @@ export async function searchMessages(ctx: Context) {
           },
         ],
         order: [['createdAt', 'DESC']],
-        limit: parseInt(limit as string),
+        limit: Number(limit),
       });
-      results.groupMessages = groupMessages;
     }
 
     ctx.body = results;
   } catch (error: any) {
-    console.error('搜索消息失败:', error);
+    console.error('search messages failed:', error);
     ctx.status = 500;
-    ctx.body = { error: '搜索消息失败: ' + error.message };
+    ctx.body = { error: `Search messages failed: ${error.message}` };
   }
 }
-

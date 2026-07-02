@@ -55,6 +55,14 @@ Message.init(
     sequelize,
     tableName: 'messages',
     timestamps: true,
+    indexes: [
+      {
+        fields: ['fromUserId', 'toUserId', 'createdAt'],
+      },
+      {
+        fields: ['toUserId', 'isRead', 'createdAt'],
+      },
+    ],
   }
 );
 

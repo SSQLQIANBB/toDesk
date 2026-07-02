@@ -296,13 +296,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules, type UploadCustomRequestOptions } from 'naive-ui';
 import { ArrowBackFilled } from '@vicons/material';
 import { getCurrentUser, updateUser } from '@/api/auth';
 import { useAuth } from '@/stores/auth';
 import notificationService from '@/services/notificationService';
+import { updateMeetingStatus } from '@/services/meetingSocket';
 
 const router = useRouter();
 const message = useMessage();
@@ -438,7 +439,11 @@ function saveNotifySettings() {
   };
   localStorage.setItem('notify_settings', JSON.stringify(settings));
 }
-void saveNotifySettings;
+
+watch(
+  [messagePreview, notifyPrivateMessage, notifyGroupMessage, notifyCall, notifyInvitation],
+  saveNotifySettings
+);
 
 // 请求通知权限
 async function requestNotificationPermission() {
@@ -592,8 +597,7 @@ async function handleStatusChange() {
     const result = await updateUser({ status: formData.status });
     console.log('状态更新结果:', result);
     updateUserInfo({ status: formData.status });
-    
-    // 同时更新Redis缓存中的状态
+    updateMeetingStatus(formData.status);
     message.success('状态修改成功');
   } catch (error: any) {
     console.error('状态修改失败:', error);
