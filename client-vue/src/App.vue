@@ -1,6 +1,3 @@
-<script setup lang="ts">
-</script>
-
 <template>
   <n-config-provider style="height: 100%; overflow: auto;">
     <n-message-provider>
