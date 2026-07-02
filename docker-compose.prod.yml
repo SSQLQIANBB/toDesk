@@ -1,8 +1,6 @@
 services:
   backend:
-    build:
-      context: .
-      dockerfile: backend-koa/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-ssq5603151}/todesk-backend:${IMAGE_TAG:-latest}
     container_name: todesk-backend
     restart: unless-stopped
     env_file:
@@ -16,9 +14,7 @@ services:
       - bill-network
 
   web:
-    build:
-      context: .
-      dockerfile: client-vue/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-ssq5603151}/todesk-web:${IMAGE_TAG:-latest}
     container_name: todesk-web
     restart: unless-stopped
     depends_on:
