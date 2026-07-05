@@ -11,21 +11,17 @@ const authenticatedRoutes = [
 
 const publicRoutes = ['/login', '/chat', '/socket', '/share'];
 
-async function preparePage(page: Page) {
-  await page.addInitScript(() => {
+async function preparePage(page: Page, userId = 1) {
+  await page.addInitScript(({ authenticatedUserId }) => {
     localStorage.setItem('token', 'layout-test-token');
     localStorage.setItem('user', JSON.stringify({
-      id: 1,
-      username: 'owner',
-      nickname: '测试用户',
+      id: authenticatedUserId,
+      username: authenticatedUserId === 1 ? 'owner' : 'member',
+      nickname: authenticatedUserId === 1 ? '测试用户' : '成员二',
       status: 'online',
     }));
 
-    const stream = {
-      getTracks: () => [],
-      getVideoTracks: () => [],
-      getAudioTracks: () => [],
-    };
+    const stream = new MediaStream();
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: {
@@ -47,7 +43,7 @@ async function preparePage(page: Page) {
       configurable: true,
       value: PeerConnectionStub,
     });
-  });
+  }, { authenticatedUserId: userId });
 
   await page.route(/\/api\/(auth|groups|messages|invitations)(?:\/|\?|$)/, async (route) => {
     const url = route.request().url();
@@ -102,6 +98,21 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe('响应式布局', () => {
+  test('普通成员在手机端也能查看视频和共享的完整人员列表', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await preparePage(page, 2);
+
+    for (const route of ['/group-video/7', '/group-screen/7']) {
+      await page.goto(route);
+      await page.waitForLoadState('networkidle');
+      await page.getByRole('button', { name: '群成员' }).click();
+      await expect(page.getByText('群成员', { exact: true })).toBeVisible();
+      await expect(page.locator('.n-drawer:visible').getByText('未参与').first()).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await page.keyboard.press('Escape');
+    }
+  });
+
   test('手机宽度下主要页面、弹窗和视频区域不会横向溢出', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await preparePage(page);

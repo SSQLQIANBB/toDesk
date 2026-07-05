@@ -8,7 +8,7 @@
         </n-avatar>
         <div class="text-white min-w-0">
           <div class="font-bold truncate">{{ groupInfo?.name }}</div>
-          <div class="text-xs text-gray-400">{{ members.length }} 人参与通话</div>
+          <div class="text-xs text-gray-400">{{ participantUserIds.length }} 人参与通话</div>
         </div>
       </div>
 
@@ -59,14 +59,12 @@
           @recording-stop="handleRecordingStop"
         />
 
-        <!-- 设置 -->
-        <n-dropdown v-if="isOwner" :options="settingsOptions" @select="handleSettingSelect">
-          <n-button circle>
-            <template #icon>
-              <n-icon :component="SettingsFilled" />
-            </template>
-          </n-button>
-        </n-dropdown>
+        <!-- 群成员列表；成员控制操作仍仅群主可用 -->
+        <n-button circle aria-label="群成员" @click="showMemberControl = true">
+          <template #icon>
+            <n-icon :component="PeopleFilled" />
+          </template>
+        </n-button>
 
         <!-- 退出通话 -->
         <n-button type="error" @click="handleHangup">
@@ -127,9 +125,9 @@
       </div>
     </div>
 
-    <!-- 成员控制抽屉 (仅群主可见) -->
+    <!-- 群成员抽屉 -->
     <n-drawer v-model:show="showMemberControl" width="min(350px, calc(100vw - 24px))" placement="right">
-      <n-drawer-content title="成员控制">
+      <n-drawer-content title="群成员">
         <div class="space-y-3">
           <div
             v-for="member in members"
@@ -145,6 +143,12 @@
                 <div class="text-xs text-gray-500">
                   <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
                   <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
+                  <n-tag
+                    :type="isMemberParticipating(member.id) ? 'success' : 'default'"
+                    size="tiny"
+                  >
+                    {{ isMemberParticipating(member.id) ? '参与中' : '未参与' }}
+                  </n-tag>
                 </div>
               </div>
             </div>
@@ -175,7 +179,7 @@ import {
   VideocamFilled,
   VideocamOffFilled,
   CallEndFilled,
-  SettingsFilled
+  PeopleFilled,
 } from '@vicons/material';
 import type { Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
@@ -189,6 +193,10 @@ import {
   onMeetingAuthenticated,
 } from '@/services/meetingSocket';
 import { groupSessionState } from '@/services/groupSessionState';
+import {
+  createMediaParticipantState,
+  type ParticipantSnapshot,
+} from '@/services/mediaParticipantState';
 import {
   RemotePeerRegistry,
   type RemoteMember,
@@ -205,6 +213,7 @@ const socket = ref<Socket | null>(null);
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { socketId?: string; online?: boolean })[]>([]);
 const peerRegistry = new RemotePeerRegistry(createPeerConnection);
+const participantState = createMediaParticipantState();
 const remotePeers = computed(() => peerRegistry.values().map(peer => ({
   ...peer,
   userId: peer.id,
@@ -216,6 +225,10 @@ const remotePeers = computed(() => peerRegistry.values().map(peer => ({
 const isMicMuted = ref(false);
 const isCameraOff = ref(false);
 const showMemberControl = ref(false);
+const participantUserIds = computed(() => {
+  participantState.version.value;
+  return participantState.userIds(groupId.value, 'video');
+});
 
 const localStream = ref<MediaStream | null>(null);
 const originalLocalStream = ref<MediaStream | null>(null); // 原始流（用于虚拟背景）
@@ -245,14 +258,6 @@ const videoGridClass = computed(() => {
   if (total <= 9) return 'grid-cols-2 lg:grid-cols-3';
   return 'grid-cols-2 lg:grid-cols-4';
 });
-
-// 设置选项
-const settingsOptions = computed(() => [
-  {
-    label: '成员控制',
-    key: 'members',
-  },
-]);
 
 // 加载群组详情
 async function loadGroupDetail() {
@@ -329,6 +334,8 @@ function initSocket() {
   // 新成员加入
   socket.value.on('group_call_member_joined', handleCallMemberJoined);
   socket.value.on('group_call_member_left', handleCallMemberLeft);
+  socket.value.on('group_call_presence', handleCallPresence);
+  socket.value.on('group_call_ended', handleCallEnded);
   socket.value.on('disconnect', handleSocketDisconnect);
 
   // WebRTC 信令
@@ -337,16 +344,7 @@ function initSocket() {
   socket.value.on('group_webrtc_ice', handleIceCandidate);
 
   // 麦克风权限变化
-  socket.value.on('mic_permission_changed', (data: any) => {
-    if (data.groupId === groupId.value) {
-      if (!data.canSpeak) {
-        isMicMuted.value = true;
-        message.warning('您已被群主禁言');
-      } else {
-        message.success('您已被允许发言');
-      }
-    }
-  });
+  socket.value.on('mic_permission_changed', handleMicPermissionChanged);
 
   // 成员麦克风状态变化
   socket.value.on('member_mic_changed', handleMemberMicChanged);
@@ -440,6 +438,11 @@ function findPeerBySocket(socketId: string) {
 
 function handleCallState(data: any) {
   if (data.groupId !== groupId.value || !data.sessions.video || joinedCall) return;
+  participantState.setChannel(
+    groupId.value,
+    'video',
+    data.sessions.video.channelId,
+  );
   joinedCall = true;
   socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 1 });
 }
@@ -467,9 +470,26 @@ function handleCallMemberLeft(data: any) {
   peerRegistry.remove(data.userId, data.socketId);
 }
 
+function handleCallPresence(data: ParticipantSnapshot) {
+  if (data.groupId !== groupId.value || data.type !== 'video') return;
+  participantState.apply(data);
+}
+
+function handleCallEnded(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 1) return;
+  joinedCall = false;
+  participantState.clear(groupId.value, 'video');
+}
+
 function handleSocketDisconnect() {
   joinedCall = false;
+  participantState.clear(groupId.value, 'video');
   peerRegistry.clear();
+}
+
+function isMemberParticipating(userId: number) {
+  participantState.version.value;
+  return participantState.isParticipating(groupId.value, 'video', userId);
 }
 
 function mergeMemberSocket(member: RemoteMember) {
@@ -482,6 +502,16 @@ function handleMemberMicChanged(data: any) {
   if (peer) {
     const viewPeer = remotePeers.value.find(item => item.id === peer.id);
     if (viewPeer) viewPeer.isMicMuted = data.muted;
+  }
+}
+
+function handleMicPermissionChanged(data: any) {
+  if (data.groupId !== groupId.value) return;
+  if (!data.canSpeak) {
+    isMicMuted.value = true;
+    message.warning('您已被群主禁言');
+  } else {
+    message.success('您已被允许发言');
   }
 }
 
@@ -526,13 +556,6 @@ function handleControlMemberMic(socketId: string, canSpeak: boolean) {
   }
 }
 
-// 处理设置选择
-function handleSettingSelect(key: string) {
-  if (key === 'members') {
-    showMemberControl.value = true;
-  }
-}
-
 // 挂断
 function handleHangup() {
   cleanupCall(true);
@@ -551,6 +574,7 @@ function cleanupCall(endOwnedSession: boolean) {
 
   // 关闭所有对等连接
   peerRegistry.clear();
+  participantState.clear(groupId.value, 'video');
 
   // 通知服务器
   if (endOwnedSession && groupSessionState.getSession(groupId.value, 'video')?.ownerUserId === currentUser.value?.id) {
@@ -567,10 +591,13 @@ function unbindSocketEvents() {
   socket.value?.off('group_call_members', handleCallMembers);
   socket.value?.off('group_call_member_joined', handleCallMemberJoined);
   socket.value?.off('group_call_member_left', handleCallMemberLeft);
+  socket.value?.off('group_call_presence', handleCallPresence);
+  socket.value?.off('group_call_ended', handleCallEnded);
   socket.value?.off('disconnect', handleSocketDisconnect);
   socket.value?.off('group_webrtc_offer', handleOffer);
   socket.value?.off('group_webrtc_answer', handleAnswer);
   socket.value?.off('group_webrtc_ice', handleIceCandidate);
+  socket.value?.off('mic_permission_changed', handleMicPermissionChanged);
   socket.value?.off('member_mic_changed', handleMemberMicChanged);
 }
 
