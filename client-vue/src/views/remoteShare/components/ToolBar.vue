@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isSupportMedia" class="h-12 flex items-center gap-2 px-3 bg-gradient-to-r from-slate-200 to-slate-300 border-t border-slate-400 shadow-sm">
+  <div v-if="isSupportMedia" class="min-h-12 flex flex-wrap items-center gap-2 px-3 py-1 bg-gradient-to-r from-slate-200 to-slate-300 border-t border-slate-400 shadow-sm">
     <n-tooltip placement="top">
       <template #trigger>
         <n-button 
@@ -90,7 +90,7 @@
       </div>
     </template>
 
-    <div class="flex gap-4" :class="connectionType === DEVICE_TYPE.CAMERA ? 'flex-row' : 'flex-col'">
+    <div class="flex flex-col md:flex-row gap-4">
       <!-- 对方画面 -->
       <div class="relative bg-gray-900 rounded-lg overflow-hidden" 
            :class="connectionType === DEVICE_TYPE.CAMERA ? 'flex-1' : 'w-full aspect-video'">
@@ -106,7 +106,7 @@
 
       <!-- 我的画面（仅视频通话时显示） -->
       <div v-if="connectionType === DEVICE_TYPE.CAMERA" 
-           class="relative bg-gray-900 rounded-lg overflow-hidden w-80 aspect-video">
+           class="relative bg-gray-900 rounded-lg overflow-hidden w-full md:w-80 flex-shrink-0 aspect-video">
         <video ref="videoSelfRef" class="w-full h-full object-cover" autoplay playsinline muted />
         <div class="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
           我的画面

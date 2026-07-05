@@ -17,6 +17,7 @@
     "esModuleInterop": true,
     // 禁止对同一个文件的不一致的引用
     "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
     "paths": {
       "@/*": ["src/*"]
     }

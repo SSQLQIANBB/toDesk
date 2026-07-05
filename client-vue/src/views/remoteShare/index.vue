@@ -1,8 +1,12 @@
 <template>
   <n-layout has-sider class="h-full w-full bg-gradient-to-br from-slate-50 to-slate-100">
-    <n-layout-sider 
-      bordered 
-      :width="280" 
+    <n-layout-sider
+      class="remote-sidebar"
+      bordered
+      :width="280"
+      :collapsed-width="0"
+      collapse-mode="transform"
+      show-trigger="bar"
       content-class="flex flex-col bg-white shadow-lg"
     >
       <!-- 用户信息卡片 -->
@@ -143,7 +147,7 @@
     <n-layout-content content-class="w-full flex flex-col">
       <div v-if="contactUser" class="h-full w-full flex flex-col bg-white">
         <!-- 聊天头部 -->
-        <header class="h-16 shadow-sm flex items-center px-6 bg-gradient-to-r from-white to-gray-50 border-b">
+        <header class="min-h-16 shadow-sm flex items-center px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-500 flex items-center justify-center text-white font-bold">
               {{ (contactUser.nickname || contactUser.username || String(contactUser.id)).slice(0, 2) }}
@@ -158,7 +162,7 @@
           <ul class="space-y-3">
             <li class="flex flex-col w-full" :class="msg.fromUserId === currentUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="index">
               <span class="text-xs text-gray-400 mb-1">{{msg.time}}</span>
-              <div class="p-3 rounded-lg max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md" 
+              <div class="p-3 rounded-lg max-w-[88%] sm:max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md"
                    :class="msg.fromUserId === currentUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
                 {{ msg.message }}
               </div>
@@ -683,3 +687,14 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisible);
 });
 </script>
+
+<style scoped>
+@media (max-width: 767px) {
+  :deep(.remote-sidebar) {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    max-width: calc(100vw - 44px);
+  }
+}
+</style>

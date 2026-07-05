@@ -1,18 +1,18 @@
 <template>
   <div class="h-screen w-full bg-gray-900 flex flex-col">
     <!-- 头部控制栏 -->
-    <header class="h-16 bg-gray-800 flex items-center justify-between px-6 shadow-lg">
-      <div class="flex items-center gap-4">
+    <header class="min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
+      <div class="flex items-center gap-2 sm:gap-4 min-w-0">
         <n-avatar :size="40" :src="groupInfo?.avatar || undefined" class="ring-2 ring-white">
           {{ groupInfo?.name?.charAt(0) }}
         </n-avatar>
-        <div class="text-white">
-          <div class="font-bold">{{ groupInfo?.name }}</div>
+        <div class="text-white min-w-0">
+          <div class="font-bold truncate">{{ groupInfo?.name }}</div>
           <div class="text-xs text-gray-400">{{ members.length }} 人参与通话</div>
         </div>
       </div>
-      
-      <div class="flex items-center gap-3">
+
+      <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
         <!-- 麦克风控制 -->
         <n-tooltip>
           <template #trigger>
@@ -73,24 +73,21 @@
           <template #icon>
             <n-icon :component="CallEndFilled" />
           </template>
-          退出通话
+          <span class="hidden sm:inline">退出通话</span>
         </n-button>
       </div>
     </header>
 
     <!-- 视频区域 -->
-    <div class="flex-1 overflow-hidden p-4">
-      <div class="h-full grid gap-4" :class="videoGridClass">
+    <div class="flex-1 overflow-y-auto p-2 sm:p-4">
+      <div class="min-h-full grid gap-2 sm:gap-4 auto-rows-fr" :class="videoGridClass">
         <!-- 本地视频 -->
         <div class="relative bg-gray-800 rounded-lg overflow-hidden shadow-xl">
-          <video
-            ref="localVideoRef"
-            autoplay
-            muted
-            playsinline
-            class="w-full h-full object-cover"
+          <MediaVideo
+            :stream="localStream"
+            local
             :class="{ 'mirror': !isCameraOff }"
-          ></video>
+          />
           <div class="absolute bottom-3 left-3 bg-black bg-opacity-60 px-3 py-1 rounded-full">
             <span class="text-white text-sm font-semibold">
               {{ currentUser?.nickname || currentUser?.username }} (我)
@@ -112,12 +109,7 @@
           :key="peer.userId"
           class="relative bg-gray-800 rounded-lg overflow-hidden shadow-xl"
         >
-          <video
-            :ref="el => setRemoteVideoRef(peer.userId, el)"
-            autoplay
-            playsinline
-            class="w-full h-full object-cover"
-          ></video>
+          <MediaVideo :stream="peer.stream" />
           <div class="absolute bottom-3 left-3 bg-black bg-opacity-60 px-3 py-1 rounded-full">
             <span class="text-white text-sm font-semibold">
               {{ peer.user?.nickname || peer.user?.username }}
@@ -136,7 +128,7 @@
     </div>
 
     <!-- 成员控制抽屉 (仅群主可见) -->
-    <n-drawer v-model:show="showMemberControl" :width="350" placement="right">
+    <n-drawer v-model:show="showMemberControl" width="min(350px, calc(100vw - 24px))" placement="right">
       <n-drawer-content title="成员控制">
         <div class="space-y-3">
           <div
@@ -174,37 +166,52 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
-import { 
-  MicFilled, 
-  MicOffFilled, 
-  VideocamFilled, 
-  VideocamOffFilled, 
-  CallEndFilled, 
-  SettingsFilled 
+import {
+  MicFilled,
+  MicOffFilled,
+  VideocamFilled,
+  VideocamOffFilled,
+  CallEndFilled,
+  SettingsFilled
 } from '@vicons/material';
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
 import VirtualBackground from '@/components/VirtualBackground.vue';
 import MediaRecorder from '@/components/MediaRecorder.vue';
+import MediaVideo from '@/components/MediaVideo.vue';
+import {
+  joinMeetingGroup,
+  leaveMeetingGroup,
+  onMeetingAuthenticated,
+} from '@/services/meetingSocket';
+import { groupSessionState } from '@/services/groupSessionState';
+import {
+  RemotePeerRegistry,
+  type RemoteMember,
+} from '@/services/remotePeerRegistry';
 
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
-const { currentUser, token } = useAuth();
+const { currentUser } = useAuth();
 
 const groupId = ref(parseInt(route.params.id as string));
 const socket = ref<Socket | null>(null);
 
-const localVideoRef = ref<HTMLVideoElement | null>(null);
-const remoteVideoRefs = reactive<Map<number, HTMLVideoElement>>(new Map());
-
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { socketId?: string; online?: boolean })[]>([]);
-const remotePeers = ref<any[]>([]);
+const peerRegistry = new RemotePeerRegistry(createPeerConnection);
+const remotePeers = computed(() => peerRegistry.values().map(peer => ({
+  ...peer,
+  userId: peer.id,
+  user: peer,
+  isMicMuted: false,
+  isCameraOff: false,
+})));
 
 const isMicMuted = ref(false);
 const isCameraOff = ref(false);
@@ -212,7 +219,9 @@ const showMemberControl = ref(false);
 
 const localStream = ref<MediaStream | null>(null);
 const originalLocalStream = ref<MediaStream | null>(null); // 原始流（用于虚拟背景）
-const peerConnections = reactive<Map<string, RTCPeerConnection>>(new Map());
+let joinedCall = false;
+let cleanedUp = false;
+let removeAuthenticatedListener: (() => void) | null = null;
 
 // 是否是群主
 const isOwner = computed(() => {
@@ -230,11 +239,11 @@ const canSpeak = computed(() => {
 const videoGridClass = computed(() => {
   const total = remotePeers.value.length + 1;
   if (total === 1) return 'grid-cols-1';
-  if (total === 2) return 'grid-cols-2';
-  if (total <= 4) return 'grid-cols-2 grid-rows-2';
-  if (total <= 6) return 'grid-cols-3 grid-rows-2';
-  if (total <= 9) return 'grid-cols-3 grid-rows-3';
-  return 'grid-cols-4';
+  if (total === 2) return 'grid-cols-1 sm:grid-cols-2';
+  if (total <= 4) return 'grid-cols-1 sm:grid-cols-2';
+  if (total <= 6) return 'grid-cols-2 lg:grid-cols-3';
+  if (total <= 9) return 'grid-cols-2 lg:grid-cols-3';
+  return 'grid-cols-2 lg:grid-cols-4';
 });
 
 // 设置选项
@@ -244,13 +253,6 @@ const settingsOptions = computed(() => [
     key: 'members',
   },
 ]);
-
-// 设置远程视频引用
-function setRemoteVideoRef(userId: number, el: any) {
-  if (el) {
-    remoteVideoRefs.set(userId, el);
-  }
-}
 
 // 加载群组详情
 async function loadGroupDetail() {
@@ -271,13 +273,9 @@ async function initLocalStream() {
       video: { width: 1280, height: 720 },
       audio: true,
     });
-    
+
     originalLocalStream.value = stream; // 保存原始流
     localStream.value = stream; // 当前流（可能被虚拟背景处理）
-
-    if (localVideoRef.value) {
-      localVideoRef.value.srcObject = localStream.value;
-    }
   } catch (error: any) {
     message.error('获取媒体设备失败: ' + error.message);
   }
@@ -285,10 +283,19 @@ async function initLocalStream() {
 
 // 虚拟背景流更新
 function handleVirtualBGUpdate(processedStream: MediaStream) {
+  const previousVideoTrack = localStream.value?.getVideoTracks()[0];
   localStream.value = processedStream;
-  if (localVideoRef.value) {
-    localVideoRef.value.srcObject = processedStream;
+
+  const nextVideoTrack = processedStream.getVideoTracks()[0];
+  if (nextVideoTrack) {
+    remotePeers.value.forEach(peer => {
+      const connection = peer.connection as RTCPeerConnection;
+      const sender = connection.getSenders()
+        .find((item: RTCRtpSender) => item.track?.kind === 'video');
+      void sender?.replaceTrack(nextVideoTrack);
+    });
   }
+  if (previousVideoTrack && previousVideoTrack !== nextVideoTrack) previousVideoTrack.stop();
   message.success('虚拟背景已应用');
   // 可以在这里更新发送给其他对等端的流
 }
@@ -305,57 +312,29 @@ function handleRecordingStop(blob: Blob) {
 
 // 初始化Socket连接
 function initSocket() {
-  socket.value = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
-    path: '/meeting',
-    auth: {
-      token: token.value,
-    },
-  });
+  socket.value = joinMeetingGroup(groupId.value);
 
-  socket.value.emit('authenticate', {
-    token: token.value,
-    nickname: currentUser.value?.nickname,
-    avatar: currentUser.value?.avatar,
-  });
-
-  socket.value.on('authenticated', () => {
-    socket.value?.emit('join_group', { groupId: groupId.value });
-    socket.value?.emit('group_call_start', { 
-      groupId: groupId.value, 
+  const enterCall = () => {
+    socket.value?.emit('group_call_start', {
+      groupId: groupId.value,
       deviceType: 1 // 1: 视频通话
     });
-  });
+  };
+  removeAuthenticatedListener = onMeetingAuthenticated(enterCall);
 
   // 接收群组成员列表
-  socket.value.on('group_members', (data: any) => {
-    if (data.groupId === groupId.value) {
-      data.members.forEach((member: any) => {
-        if (member.id !== currentUser.value?.id) {
-          createPeerConnection(member.socketId, member);
-        }
-      });
-    }
-  });
+  socket.value.on('group_call_state', handleCallState);
+  socket.value.on('group_call_members', handleCallMembers);
 
   // 新成员加入
-  socket.value.on('group_member_joined', (data: any) => {
-    if (data.groupId === groupId.value && data.member.id !== currentUser.value?.id) {
-      createPeerConnection(data.member.socketId, data.member);
-    }
-  });
+  socket.value.on('group_call_member_joined', handleCallMemberJoined);
+  socket.value.on('group_call_member_left', handleCallMemberLeft);
+  socket.value.on('disconnect', handleSocketDisconnect);
 
   // WebRTC 信令
-  socket.value.on('group_webrtc_offer', async (data: any) => {
-    await handleOffer(data.from, data.offer);
-  });
-
-  socket.value.on('group_webrtc_answer', async (data: any) => {
-    await handleAnswer(data.from, data.answer);
-  });
-
-  socket.value.on('group_webrtc_ice', async (data: any) => {
-    await handleIceCandidate(data.from, data.candidate);
-  });
+  socket.value.on('group_webrtc_offer', handleOffer);
+  socket.value.on('group_webrtc_answer', handleAnswer);
+  socket.value.on('group_webrtc_ice', handleIceCandidate);
 
   // 麦克风权限变化
   socket.value.on('mic_permission_changed', (data: any) => {
@@ -370,16 +349,11 @@ function initSocket() {
   });
 
   // 成员麦克风状态变化
-  socket.value.on('member_mic_changed', (data: any) => {
-    const peer = remotePeers.value.find(p => p.socketId === data.socketId);
-    if (peer) {
-      peer.isMicMuted = data.muted;
-    }
-  });
+  socket.value.on('member_mic_changed', handleMemberMicChanged);
 }
 
 // 创建对等连接
-async function createPeerConnection(socketId: string, user: any) {
+function createPeerConnection(member: RemoteMember) {
   const pc = new RTCPeerConnection({
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -393,45 +367,31 @@ async function createPeerConnection(socketId: string, user: any) {
 
   // 处理远程流
   pc.ontrack = (event) => {
-    const peer = remotePeers.value.find(p => p.socketId === socketId);
-    if (peer && event.streams[0]) {
-      peer.stream = event.streams[0];
-      const videoEl = remoteVideoRefs.get(peer.userId);
-      if (videoEl) {
-        videoEl.srcObject = event.streams[0];
-      }
-    }
+    if (event.streams[0]) peerRegistry.setStream(member.id, event.streams[0]);
   };
 
   // ICE 候选
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       socket.value?.emit('group_webrtc_ice', {
-        to: socketId,
+        to: member.socketId,
         candidate: event.candidate,
         groupId: groupId.value,
+        deviceType: 1,
       });
     }
   };
+  return pc;
+}
 
-  peerConnections.set(socketId, pc);
-
-  // 添加到远程对等列表
-  remotePeers.value.push({
-    socketId,
-    userId: user.id,
-    user,
-    stream: null,
-    isMicMuted: false,
-    isCameraOff: false,
-  });
-
-  // 创建并发送 offer
+async function createAndSendOffer(member: RemoteMember) {
+  const peer = peerRegistry.upsert(member);
+  const pc = peer.connection as RTCPeerConnection;
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  
+
   socket.value?.emit('group_webrtc_offer', {
-    to: socketId,
+    to: member.socketId,
     offer,
     deviceType: 1,
     groupId: groupId.value,
@@ -439,43 +399,89 @@ async function createPeerConnection(socketId: string, user: any) {
 }
 
 // 处理 offer
-async function handleOffer(from: string, offer: RTCSessionDescriptionInit) {
-  let pc = peerConnections.get(from);
-  
-  if (!pc) {
-    // 如果连接不存在，创建新的
-    const member = members.value.find(m => m.socketId === from);
-    if (member) {
-      await createPeerConnection(from, member);
-      pc = peerConnections.get(from);
-    }
-  }
+async function handleOffer(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 1 || !data.fromUser) return;
+  // 如果连接不存在，创建新的
+  const peer = peerRegistry.upsert({ ...data.fromUser, socketId: data.from });
+  const pc = peer.connection as RTCPeerConnection;
+  await pc.setRemoteDescription(data.offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
 
-  if (pc) {
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    
-    socket.value?.emit('group_webrtc_answer', {
-      to: from,
-      answer,
-    });
-  }
+  socket.value?.emit('group_webrtc_answer', {
+    to: data.from,
+    answer,
+    deviceType: 1,
+    groupId: groupId.value,
+  });
 }
 
 // 处理 answer
-async function handleAnswer(from: string, answer: RTCSessionDescriptionInit) {
-  const pc = peerConnections.get(from);
+async function handleAnswer(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 1) return;
+  const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) {
-    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    await pc.setRemoteDescription(data.answer);
   }
 }
 
 // 处理 ICE 候选
-async function handleIceCandidate(from: string, candidate: RTCIceCandidateInit) {
-  const pc = peerConnections.get(from);
+async function handleIceCandidate(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 1) return;
+  const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) {
-    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    await pc.addIceCandidate(data.candidate);
+  }
+}
+
+function findPeerBySocket(socketId: string) {
+  return peerRegistry.values().find(peer => peer.socketId === socketId);
+}
+
+function handleCallState(data: any) {
+  if (data.groupId !== groupId.value || !data.sessions.video || joinedCall) return;
+  joinedCall = true;
+  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 1 });
+}
+
+function handleCallMembers(data: any) {
+  if (data.groupId !== groupId.value || data.type !== 'video') return;
+  data.members.forEach((member: RemoteMember) => {
+    if (member.id !== currentUser.value?.id) {
+      peerRegistry.upsert(member);
+      mergeMemberSocket(member);
+    }
+  });
+}
+
+async function handleCallMemberJoined(data: any) {
+  if (data.groupId !== groupId.value || data.type !== 'video') return;
+  if (data.member.id === currentUser.value?.id) return;
+  mergeMemberSocket(data.member);
+  // 只有房间中的现有成员向新成员发 offer，避免双方同时协商。
+  await createAndSendOffer(data.member);
+}
+
+function handleCallMemberLeft(data: any) {
+  if (data.groupId !== groupId.value || data.type !== 'video' || !data.userId) return;
+  peerRegistry.remove(data.userId, data.socketId);
+}
+
+function handleSocketDisconnect() {
+  joinedCall = false;
+  peerRegistry.clear();
+}
+
+function mergeMemberSocket(member: RemoteMember) {
+  const groupMember = members.value.find(item => item.id === member.id);
+  if (groupMember) groupMember.socketId = member.socketId;
+}
+
+function handleMemberMicChanged(data: any) {
+  const peer = findPeerBySocket(data.socketId);
+  if (peer) {
+    const viewPeer = remotePeers.value.find(item => item.id === peer.id);
+    if (viewPeer) viewPeer.isMicMuted = data.muted;
   }
 }
 
@@ -512,7 +518,7 @@ function handleControlMemberMic(socketId: string, canSpeak: boolean) {
     targetSocketId: socketId,
     canSpeak,
   });
-  
+
   // 更新本地数据
   const member = members.value.find(m => m.socketId === socketId);
   if (member) {
@@ -529,19 +535,43 @@ function handleSettingSelect(key: string) {
 
 // 挂断
 function handleHangup() {
+  cleanupCall(true);
+  router.back();
+}
+
+function cleanupCall(endOwnedSession: boolean) {
+  if (cleanedUp) return;
+  cleanedUp = true;
+
   // 停止本地流
   localStream.value?.getTracks().forEach(track => track.stop());
-  
+  if (originalLocalStream.value !== localStream.value) {
+    originalLocalStream.value?.getTracks().forEach(track => track.stop());
+  }
+
   // 关闭所有对等连接
-  peerConnections.forEach(pc => pc.close());
-  peerConnections.clear();
-  
+  peerRegistry.clear();
+
   // 通知服务器
-  socket.value?.emit('group_call_end', { groupId: groupId.value });
-  socket.value?.emit('leave_group', { groupId: groupId.value });
-  socket.value?.disconnect();
-  
-  router.back();
+  if (endOwnedSession && groupSessionState.getSession(groupId.value, 'video')?.ownerUserId === currentUser.value?.id) {
+    socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 1 });
+  }
+  socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: 1 });
+  removeAuthenticatedListener?.();
+  unbindSocketEvents();
+  leaveMeetingGroup(groupId.value);
+}
+
+function unbindSocketEvents() {
+  socket.value?.off('group_call_state', handleCallState);
+  socket.value?.off('group_call_members', handleCallMembers);
+  socket.value?.off('group_call_member_joined', handleCallMemberJoined);
+  socket.value?.off('group_call_member_left', handleCallMemberLeft);
+  socket.value?.off('disconnect', handleSocketDisconnect);
+  socket.value?.off('group_webrtc_offer', handleOffer);
+  socket.value?.off('group_webrtc_answer', handleAnswer);
+  socket.value?.off('group_webrtc_ice', handleIceCandidate);
+  socket.value?.off('member_mic_changed', handleMemberMicChanged);
 }
 
 onMounted(async () => {
@@ -551,7 +581,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  handleHangup();
+  cleanupCall(true);
 });
 </script>
 
@@ -560,4 +590,3 @@ onUnmounted(() => {
   transform: scaleX(-1);
 }
 </style>
-

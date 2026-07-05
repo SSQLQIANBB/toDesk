@@ -6,3 +6,6 @@ dist
 !.env.example
 !.env.production.example
 !.env.infrastructure.example
+.superpowers/
+client-vue/test-results/
+client-vue/playwright-report/

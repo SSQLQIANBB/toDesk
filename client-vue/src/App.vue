@@ -20,4 +20,18 @@
   height: 100vh;
   overflow: hidden;
 }
+
+html,
+body {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  max-width: 100%;
+}
 </style>

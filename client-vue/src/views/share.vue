@@ -201,6 +201,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .screen-share {
   padding: 12px;
+  width: 100%;
   max-width: 800px;
   min-height: 100%;
   margin: 0 auto;
@@ -210,7 +211,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
   margin-bottom: 12px;
-  height: 56px;
+  min-height: 56px;
   background: #fff;
   flex-wrap: wrap;
   align-items: center;
@@ -231,6 +232,8 @@ onBeforeUnmount(() => {
 
 .video-wrapper {
   position: relative;
+  width: 100%;
+  overflow: hidden;
 }
 
 .camera-preview {
@@ -243,5 +246,16 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 8px rgba(0,0,0,0.3);
   z-index: 10;
   background: #000;
+}
+
+@media (max-width: 480px) {
+  .screen-share {
+    padding: 8px;
+  }
+
+  .camera-preview {
+    width: 112px;
+    height: 84px;
+  }
 }
 </style>

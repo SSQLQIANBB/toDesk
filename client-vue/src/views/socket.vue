@@ -1,5 +1,5 @@
 <template>
-  <n-card style="height: 100%" content-style="max-height: 500px; overflow: auto">
+  <n-card class="socket-page" style="height: 100%" content-style="max-height: 100%; overflow: auto">
     <template #header>
       <n-space>
         <n-button v-if="![SocketStatus.Connected, SocketStatus.Connecting].includes(status)" type="primary" @click="handleConnect">connect socket</n-button>
@@ -18,8 +18,8 @@
     <n-form-item label="房间">
       <n-input v-model:value="roomId" />
     </n-form-item>
-    <video ref="videoRef" autoplay style="width: 480px;height: 270px;"  />
-    <img ref="imgRef" :width="480" :height="270" />
+    <video ref="videoRef" autoplay playsinline class="media-preview" />
+    <img ref="imgRef" class="media-preview" />
     <canvas style="visibility: hidden;" ref="canvasRef" />
 
     <li v-for="user in userList" :key="user.userId" style="display: flex; justify-content: space-between;">
@@ -268,3 +268,18 @@ function remoteCallee() {
   }
 }
 </script>
+
+<style scoped>
+.socket-page {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.media-preview {
+  display: block;
+  width: min(480px, 100%);
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}
+</style>

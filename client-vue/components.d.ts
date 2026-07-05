@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     MediaRecorder: typeof import('./src/components/MediaRecorder.vue')['default']
+    MediaVideo: typeof import('./src/components/MediaVideo.vue')['default']
     NAlert: typeof import('naive-ui')['NAlert']
     NAvatar: typeof import('naive-ui')['NAvatar']
     NBadge: typeof import('naive-ui')['NBadge']

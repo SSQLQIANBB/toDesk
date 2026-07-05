@@ -1,20 +1,20 @@
 <template>
   <div class="h-screen w-full bg-gray-900 flex flex-col">
     <!-- 头部控制栏 -->
-    <header class="h-16 bg-gray-800 flex items-center justify-between px-6 shadow-lg">
-      <div class="flex items-center gap-4">
+    <header class="min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
+      <div class="flex items-center gap-2 sm:gap-4 min-w-0">
         <n-avatar :size="40" :src="groupInfo?.avatar || undefined" class="ring-2 ring-white">
           {{ groupInfo?.name?.charAt(0) }}
         </n-avatar>
-        <div class="text-white">
-          <div class="font-bold">{{ groupInfo?.name }} - 屏幕共享</div>
+        <div class="text-white min-w-0">
+          <div class="font-bold truncate">{{ groupInfo?.name }} - 屏幕共享</div>
           <div class="text-xs text-gray-400">
             {{ isSharing ? '正在共享屏幕' : '观看屏幕共享' }} · {{ members.length }} 人参与
           </div>
         </div>
       </div>
-      
-      <div class="flex items-center gap-3">
+
+      <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
         <!-- 麦克风控制 -->
         <n-tooltip>
           <template #trigger>
@@ -95,7 +95,7 @@
           <template #icon>
             <n-icon :component="CallEndFilled" />
           </template>
-          退出
+          <span class="hidden sm:inline">退出</span>
         </n-button>
       </div>
     </header>
@@ -103,17 +103,16 @@
     <!-- 主内容区 -->
     <div class="flex-1 flex overflow-hidden">
       <!-- 屏幕共享主区域 -->
-      <div class="flex-1 p-4 flex items-center justify-center">
+      <div class="flex-1 min-w-0 p-2 sm:p-4 flex items-center justify-center">
         <div class="relative w-full h-full bg-gray-800 rounded-lg overflow-hidden shadow-2xl">
           <!-- 共享屏幕视频 -->
-          <video
+          <MediaVideo
             v-if="isSharing || sharer"
-            ref="screenVideoRef"
-            autoplay
-            playsinline
+            :stream="displayStream"
+            :local="isSharing"
             class="w-full h-full object-contain"
-          ></video>
-          
+          />
+
           <!-- 无共享提示 -->
           <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-white">
             <n-icon :component="ScreenShareFilled" :size="80" class="text-gray-600 mb-4" />
@@ -146,7 +145,7 @@
       </div>
 
       <!-- 侧边栏 - 参与者列表 -->
-      <div class="w-64 bg-gray-800 p-4 overflow-y-auto">
+      <div class="hidden md:block w-64 flex-shrink-0 bg-gray-800 p-4 overflow-y-auto">
         <div class="text-white font-semibold mb-4">参与者 ({{ members.length }})</div>
         <div class="space-y-2">
           <div
@@ -173,7 +172,7 @@
     </div>
 
     <!-- 成员控制抽屉 (仅群主可见) -->
-    <n-drawer v-model:show="showMemberControl" :width="350" placement="right">
+    <n-drawer v-model:show="showMemberControl" width="min(350px, calc(100vw - 24px))" placement="right">
       <n-drawer-content title="成员控制">
         <div class="space-y-3">
           <div
@@ -214,29 +213,38 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
-import { 
-  MicFilled, 
-  MicOffFilled, 
-  CallEndFilled, 
-  ScreenShareFilled, 
+import {
+  MicFilled,
+  MicOffFilled,
+  CallEndFilled,
+  ScreenShareFilled,
   CancelPresentationFilled,
   TuneFilled,
   PeopleFilled
 } from '@vicons/material';
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
 import MediaRecorder from '@/components/MediaRecorder.vue';
+import MediaVideo from '@/components/MediaVideo.vue';
+import {
+  joinMeetingGroup,
+  leaveMeetingGroup,
+  onMeetingAuthenticated,
+} from '@/services/meetingSocket';
+import { groupSessionState } from '@/services/groupSessionState';
+import {
+  RemotePeerRegistry,
+  type RemoteMember,
+} from '@/services/remotePeerRegistry';
 
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
-const { currentUser, token } = useAuth();
+const { currentUser } = useAuth();
 
 const groupId = ref(parseInt(route.params.id as string));
 const socket = ref<Socket | null>(null);
-
-const screenVideoRef = ref<HTMLVideoElement | null>(null);
 
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { socketId?: string; isMicMuted?: boolean })[]>([]);
@@ -248,9 +256,14 @@ const showMemberControl = ref(false);
 const showAnnotation = ref(false); // 是否显示标注
 
 const localStream = ref<MediaStream | null>(null);
-const peerConnection = ref<RTCPeerConnection | null>(null);
+const remoteStream = ref<MediaStream | null>(null);
+const peerRegistry = new RemotePeerRegistry(createPeerConnection);
 const currentQuality = ref('high'); // 当前视频质量
 const screenStream = computed(() => localStream.value); // 用于录制
+const displayStream = computed(() => isSharing.value ? localStream.value : remoteStream.value);
+let joinedCall = false;
+let cleanedUp = false;
+let removeAuthenticatedListener: (() => void) | null = null;
 
 // 视频质量配置
 const qualityPresets = {
@@ -305,69 +318,29 @@ async function loadGroupDetail() {
 
 // 初始化Socket连接
 function initSocket() {
-  socket.value = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
-    path: '/meeting',
-    auth: {
-      token: token.value,
-    },
-  });
-
-  socket.value.emit('authenticate', {
-    token: token.value,
-    nickname: currentUser.value?.nickname,
-    avatar: currentUser.value?.avatar,
-  });
-
-  socket.value.on('authenticated', () => {
-    socket.value?.emit('join_group', { groupId: groupId.value });
+  socket.value = joinMeetingGroup(groupId.value);
+  removeAuthenticatedListener = onMeetingAuthenticated(() => {
+    const session = groupSessionState.getSession(groupId.value, 'screen');
+    if (session) joinScreenCall(session.ownerUserId);
   });
 
   // 接收群组成员列表
-  socket.value.on('group_members', (data: any) => {
-    if (data.groupId === groupId.value) {
-      // 更新成员列表
-      data.members.forEach((socketMember: any) => {
-        const member = members.value.find(m => m.id === socketMember.id);
-        if (member) {
-          member.socketId = socketMember.socketId;
-        }
-      });
-    }
-  });
+  socket.value.on('group_call_state', handleCallState);
+  socket.value.on('group_call_members', handleCallMembers);
+  socket.value.on('group_call_member_joined', handleCallMemberJoined);
+  socket.value.on('group_call_member_left', handleCallMemberLeft);
+  socket.value.on('disconnect', handleSocketDisconnect);
 
   // 通话开始
-  socket.value.on('group_call_started', (data: any) => {
-    if (data.groupId === groupId.value && data.deviceType === 2) {
-      // 屏幕共享开始
-      if (data.from !== socket.value?.id) {
-        sharer.value = data.user;
-        message.info(`${data.user?.nickname || data.user?.username} 开始共享屏幕`);
-      }
-    }
-  });
+  socket.value.on('group_call_started', handleCallStarted);
 
   // 通话结束
-  socket.value.on('group_call_ended', (data: any) => {
-    if (data.groupId === groupId.value) {
-      if (sharer.value && data.from === sharer.value.socketId) {
-        sharer.value = null;
-        message.info('屏幕共享已结束');
-      }
-    }
-  });
+  socket.value.on('group_call_ended', handleCallEnded);
 
   // WebRTC 信令
-  socket.value.on('group_webrtc_offer', async (data: any) => {
-    await handleOffer(data.from, data.offer);
-  });
-
-  socket.value.on('group_webrtc_answer', async (data: any) => {
-    await handleAnswer(data.from, data.answer);
-  });
-
-  socket.value.on('group_webrtc_ice', async (data: any) => {
-    await handleIceCandidate(data.from, data.candidate);
-  });
+  socket.value.on('group_webrtc_offer', handleOffer);
+  socket.value.on('group_webrtc_answer', handleAnswer);
+  socket.value.on('group_webrtc_ice', handleIceCandidate);
 
   // 麦克风权限变化
   socket.value.on('mic_permission_changed', (data: any) => {
@@ -382,19 +355,14 @@ function initSocket() {
   });
 
   // 成员麦克风状态变化
-  socket.value.on('member_mic_changed', (data: any) => {
-    const member = members.value.find(m => m.socketId === data.socketId);
-    if (member) {
-      member.isMicMuted = data.muted;
-    }
-  });
+  socket.value.on('member_mic_changed', handleMemberMicChanged);
 }
 
 // 开始屏幕共享
 async function startScreenShare() {
   try {
     const preset = qualityPresets[currentQuality.value as keyof typeof qualityPresets];
-    
+
     // 获取屏幕共享流
     const screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: {
@@ -417,12 +385,8 @@ async function startScreenShare() {
       ...audioStream.getAudioTracks(),
     ]);
 
-    // 显示本地屏幕
-    if (screenVideoRef.value && localStream.value) {
-      screenVideoRef.value.srcObject = localStream.value;
-    }
-
     isSharing.value = true;
+    sharer.value = currentUser.value;
 
     // 通知服务器开始共享
     socket.value?.emit('group_call_start', {
@@ -439,7 +403,7 @@ async function startScreenShare() {
     }
 
     // 向所有成员发送流
-    broadcastStream();
+    await broadcastStream();
   } catch (error: any) {
     message.error('开始屏幕共享失败: ' + error.message);
   }
@@ -451,23 +415,24 @@ function stopScreenShare() {
   localStream.value = null;
   isSharing.value = false;
 
-  if (peerConnection.value) {
-    peerConnection.value.close();
-    peerConnection.value = null;
-  }
-
-  socket.value?.emit('group_call_end', { groupId: groupId.value });
+  peerRegistry.clear();
+  socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 2 });
+  socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: 2 });
+  joinedCall = false;
+  sharer.value = null;
   message.info('已停止屏幕共享');
 }
 
 // 广播流到所有成员
 async function broadcastStream() {
+  const targets = peerRegistry.values().filter(peer => peer.id !== currentUser.value?.id);
+  await Promise.all(targets.map(member => createAndSendOffer(member)));
   // 这里简化处理，实际应该为每个成员创建独立的连接
   // 在实际应用中，应该使用 SFU (Selective Forwarding Unit) 服务器
 }
 
 // 创建对等连接
-async function createPeerConnection(socketId: string) {
+function createPeerConnection(member: RemoteMember) {
   const pc = new RTCPeerConnection({
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -483,8 +448,9 @@ async function createPeerConnection(socketId: string) {
 
   // 处理远程流
   pc.ontrack = (event) => {
-    if (screenVideoRef.value && event.streams[0]) {
-      screenVideoRef.value.srcObject = event.streams[0];
+    if (event.streams[0]) {
+      peerRegistry.setStream(member.id, event.streams[0]);
+      remoteStream.value = event.streams[0];
     }
   };
 
@@ -492,21 +458,24 @@ async function createPeerConnection(socketId: string) {
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       socket.value?.emit('group_webrtc_ice', {
-        to: socketId,
+        to: member.socketId,
         candidate: event.candidate,
         groupId: groupId.value,
+        deviceType: 2,
       });
     }
   };
+  return pc;
+}
 
-  peerConnection.value = pc;
-
-  // 创建并发送 offer
+async function createAndSendOffer(member: RemoteMember) {
+  const peer = peerRegistry.upsert(member);
+  const pc = peer.connection as RTCPeerConnection;
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  
+
   socket.value?.emit('group_webrtc_offer', {
-    to: socketId,
+    to: member.socketId,
     offer,
     deviceType: 2,
     groupId: groupId.value,
@@ -514,33 +483,115 @@ async function createPeerConnection(socketId: string) {
 }
 
 // 处理 offer
-async function handleOffer(_from: string, offer: RTCSessionDescriptionInit) {
-  await createPeerConnection(_from);
-  
-  if (peerConnection.value) {
-    await peerConnection.value.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.value.createAnswer();
-    await peerConnection.value.setLocalDescription(answer);
-    
-    socket.value?.emit('group_webrtc_answer', {
-      to: _from,
-      answer,
-    });
-  }
+async function handleOffer(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 2 || !data.fromUser) return;
+  const peer = peerRegistry.upsert({ ...data.fromUser, socketId: data.from });
+  const pc = peer.connection as RTCPeerConnection;
+  await pc.setRemoteDescription(data.offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  socket.value?.emit('group_webrtc_answer', {
+    to: data.from,
+    answer,
+    deviceType: 2,
+    groupId: groupId.value,
+  });
 }
 
 // 处理 answer
-async function handleAnswer(_from: string, answer: RTCSessionDescriptionInit) {
-  if (peerConnection.value) {
-    await peerConnection.value.setRemoteDescription(new RTCSessionDescription(answer));
-  }
+async function handleAnswer(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 2) return;
+  const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
+  if (pc) await pc.setRemoteDescription(data.answer);
 }
 
 // 处理 ICE 候选
-async function handleIceCandidate(_from: string, candidate: RTCIceCandidateInit) {
-  if (peerConnection.value) {
-    await peerConnection.value.addIceCandidate(new RTCIceCandidate(candidate));
+async function handleIceCandidate(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 2) return;
+  const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
+  if (pc) await pc.addIceCandidate(data.candidate);
+}
+
+function findPeerBySocket(socketId: string) {
+  return peerRegistry.values().find(peer => peer.socketId === socketId);
+}
+
+function handleCallState(data: any) {
+  if (data.groupId !== groupId.value) return;
+  const session = data.sessions.screen;
+  if (session) {
+    joinScreenCall(session.ownerUserId);
+  } else if (!isSharing.value) {
+    sharer.value = null;
+    remoteStream.value = null;
   }
+}
+
+function joinScreenCall(ownerUserId: number) {
+  const owner = members.value.find(member => member.id === ownerUserId);
+  sharer.value = owner || { id: ownerUserId, username: '共享者' };
+  if (joinedCall) return;
+  joinedCall = true;
+  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 2 });
+}
+
+function handleCallStarted(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 2) return;
+  // 屏幕共享开始
+  if (data.from !== socket.value?.id) {
+    sharer.value = data.user;
+    message.info(`${data.user?.nickname || data.user?.username} 开始共享屏幕`);
+  }
+  joinScreenCall(data.ownerUserId || data.user?.id);
+}
+
+function handleCallEnded(data: any) {
+  if (data.groupId !== groupId.value || data.deviceType !== 2) return;
+  sharer.value = null;
+  remoteStream.value = null;
+  joinedCall = false;
+  peerRegistry.clear();
+  message.info('屏幕共享已结束');
+}
+
+function handleCallMembers(data: any) {
+  if (data.groupId !== groupId.value || data.type !== 'screen') return;
+  data.members.forEach((member: RemoteMember) => {
+    if (member.id === currentUser.value?.id) return;
+    peerRegistry.upsert(member);
+    mergeMemberSocket(member);
+  });
+  if (isSharing.value) void broadcastStream();
+}
+
+function handleCallMemberJoined(data: any) {
+  if (data.groupId !== groupId.value || data.type !== 'screen') return;
+  if (data.member.id === currentUser.value?.id) return;
+  peerRegistry.upsert(data.member);
+  mergeMemberSocket(data.member);
+  if (isSharing.value) void createAndSendOffer(data.member);
+}
+
+function handleCallMemberLeft(data: any) {
+  if (data.groupId !== groupId.value || data.type !== 'screen' || !data.userId) return;
+  peerRegistry.remove(data.userId, data.socketId);
+}
+
+function handleSocketDisconnect() {
+  joinedCall = false;
+  remoteStream.value = null;
+  peerRegistry.clear();
+}
+
+function mergeMemberSocket(member: RemoteMember) {
+  const groupMember = members.value.find(item => item.id === member.id);
+  if (groupMember) groupMember.socketId = member.socketId;
+}
+
+function handleMemberMicChanged(data: any) {
+  const member = members.value.find(item => item.socketId === data.socketId);
+  if (member) member.isMicMuted = data.muted;
 }
 
 // 切换麦克风
@@ -568,7 +619,7 @@ function handleControlMemberMic(socketId: string, canSpeak: boolean) {
     targetSocketId: socketId,
     canSpeak,
   });
-  
+
   // 更新本地数据
   const member = members.value.find(m => m.socketId === socketId);
   if (member) {
@@ -580,7 +631,7 @@ function handleControlMemberMic(socketId: string, canSpeak: boolean) {
 async function handleQualityChange(key: string) {
   currentQuality.value = key;
   message.success(`视频质量已切换为 ${currentQualityLabel.value}`);
-  
+
   // 如果正在共享，重新获取流
   if (isSharing.value) {
     const wasSharing = isSharing.value;
@@ -593,14 +644,37 @@ async function handleQualityChange(key: string) {
 
 // 退出
 function handleExit() {
-  if (isSharing.value) {
-    stopScreenShare();
-  }
-  
-  socket.value?.emit('leave_group', { groupId: groupId.value });
-  socket.value?.disconnect();
-  
+  cleanupScreenCall(true);
   router.back();
+}
+
+function cleanupScreenCall(endOwnedSession: boolean) {
+  if (cleanedUp) return;
+  cleanedUp = true;
+
+  localStream.value?.getTracks().forEach(track => track.stop());
+  peerRegistry.clear();
+  if (endOwnedSession && groupSessionState.getSession(groupId.value, 'screen')?.ownerUserId === currentUser.value?.id) {
+    socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 2 });
+  }
+  socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: 2 });
+  removeAuthenticatedListener?.();
+  unbindSocketEvents();
+  leaveMeetingGroup(groupId.value);
+}
+
+function unbindSocketEvents() {
+  socket.value?.off('group_call_state', handleCallState);
+  socket.value?.off('group_call_members', handleCallMembers);
+  socket.value?.off('group_call_member_joined', handleCallMemberJoined);
+  socket.value?.off('group_call_member_left', handleCallMemberLeft);
+  socket.value?.off('disconnect', handleSocketDisconnect);
+  socket.value?.off('group_call_started', handleCallStarted);
+  socket.value?.off('group_call_ended', handleCallEnded);
+  socket.value?.off('group_webrtc_offer', handleOffer);
+  socket.value?.off('group_webrtc_answer', handleAnswer);
+  socket.value?.off('group_webrtc_ice', handleIceCandidate);
+  socket.value?.off('member_mic_changed', handleMemberMicChanged);
 }
 
 // 录制功能回调
@@ -619,7 +693,6 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  handleExit();
+  cleanupScreenCall(true);
 });
 </script>
-

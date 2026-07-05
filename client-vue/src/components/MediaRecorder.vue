@@ -72,7 +72,7 @@
       v-model:show="showSaveDialog"
       preset="card"
       title="录制完成"
-      style="width: 600px"
+      style="width: min(600px, calc(100vw - 24px))"
     >
       <n-space vertical>
         <div>

@@ -1,10 +1,10 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-6">
+  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-3 sm:p-6 overflow-x-hidden">
     <div class="max-w-4xl mx-auto">
       <!-- 页面头部 -->
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 class="text-3xl font-bold text-gray-800">个人中心</h1>
+          <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">个人中心</h1>
           <p class="text-gray-500 mt-1">管理您的个人信息</p>
         </div>
         <n-button @click="goBack" secondary>
@@ -258,7 +258,7 @@
       </n-card>
 
       <!-- 修改密码弹窗 -->
-      <n-modal v-model:show="showPasswordModal" preset="card" title="修改密码" style="width: 500px">
+      <n-modal v-model:show="showPasswordModal" preset="card" title="修改密码" style="width: min(500px, calc(100vw - 24px))">
         <n-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules">
           <n-form-item label="当前密码" path="oldPassword">
             <n-input 

@@ -1,13 +1,13 @@
 <template>
   <div class="h-screen flex flex-col bg-gradient-to-br from-blue-50 to-purple-50">
-    <div class="flex-1 overflow-hidden flex flex-col max-w-7xl mx-auto w-full p-6">
+    <div class="flex-1 overflow-hidden flex flex-col max-w-7xl mx-auto w-full p-3 sm:p-6">
       <!-- 页面头部 -->
-      <div class="flex items-center justify-between mb-6 flex-shrink-0">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6 flex-shrink-0">
         <div>
-          <h1 class="text-3xl font-bold text-gray-800">群组管理</h1>
+          <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">群组管理</h1>
           <p class="text-gray-500 mt-1">创建和管理您的群组</p>
         </div>
-        <div class="flex gap-3">
+        <div class="flex flex-wrap gap-2 sm:gap-3">
         <n-button @click="goBack" secondary>
           <template #icon>
             <n-icon :component="ArrowBackFilled" />
@@ -54,15 +54,15 @@
               </div>
             </div>
             <template #action>
-              <div class="flex gap-2">
+              <div class="flex flex-wrap gap-2">
                 <n-button size="small" secondary @click.stop="handleChatClick(group)">
                   聊天
                 </n-button>
                 <n-button size="small" secondary @click.stop="handleVideoCall(group)">
-                  视频
+                  {{ groupSessionState.getButtonLabel(group.id, 'video') }}
                 </n-button>
                 <n-button size="small" secondary @click.stop="handleScreenShare(group)">
-                  共享
+                  {{ groupSessionState.getButtonLabel(group.id, 'screen') }}
                 </n-button>
                 <n-dropdown
                   v-if="group.role === 'owner' || group.role === 'admin'"
@@ -92,7 +92,7 @@
       </div>
 
       <!-- 创建群组弹窗 -->
-      <n-modal v-model:show="showCreateModal" preset="card" title="创建群组" style="width: 500px">
+      <n-modal v-model:show="showCreateModal" preset="card" title="创建群组" class="responsive-modal modal-sm">
         <n-form ref="createFormRef" :model="createForm" :rules="createRules">
           <n-form-item label="群组名称" path="name">
             <n-input v-model:value="createForm.name" placeholder="请输入群组名称" maxlength="50" show-count />
@@ -119,7 +119,7 @@
       </n-modal>
 
       <!-- 群组详情弹窗 -->
-      <n-modal v-model:show="showDetailModal" preset="card" :title="currentGroup?.name" style="width: 600px">
+      <n-modal v-model:show="showDetailModal" preset="card" :title="currentGroup?.name" class="responsive-modal modal-lg">
         <n-spin :show="detailLoading">
           <n-tabs type="line" animated>
             <!-- 群组信息 -->
@@ -194,7 +194,7 @@
       </n-modal>
 
       <!-- 编辑群组弹窗 -->
-      <n-modal v-model:show="showEditModal" preset="card" title="编辑群组" style="width: 500px">
+      <n-modal v-model:show="showEditModal" preset="card" title="编辑群组" class="responsive-modal modal-sm">
         <n-form ref="editFormRef" :model="editForm" :rules="createRules">
           <n-form-item label="群组名称" path="name">
             <n-input v-model:value="editForm.name" placeholder="请输入群组名称" maxlength="50" show-count />
@@ -221,9 +221,10 @@
       </n-modal>
 
       <!-- 邀请成员弹窗 -->
-      <n-modal v-model:show="showInviteModal" preset="card" title="邀请成员" style="width: 500px">
+      <n-modal v-model:show="showInviteModal" preset="card" title="邀请成员" class="responsive-modal modal-sm">
         <n-spin :show="usersLoading">
           <n-transfer
+            class="group-transfer"
             v-model:value="inviteUserIds"
             :options="availableUsers"
             source-filterable
@@ -244,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
 import { ArrowBackFilled, AddFilled, MoreVertFilled, PersonAddFilled } from '@vicons/material';
@@ -260,6 +261,8 @@ import {
   type GroupDetail as GroupDetailType 
 } from '@/api/group';
 import { getUserList } from '@/api/auth';
+import { joinMeetingGroup, leaveMeetingGroup } from '@/services/meetingSocket';
+import { groupSessionState } from '@/services/groupSessionState';
 
 const router = useRouter();
 const message = useMessage();
@@ -319,6 +322,7 @@ async function loadGroups() {
     loading.value = true;
     const { groups: list } = await getMyGroups();
     groups.value = list;
+    list.forEach(group => joinMeetingGroup(group.id));
   } catch (error: any) {
     message.error('加载群组列表失败: ' + error.message);
   } finally {
@@ -519,6 +523,10 @@ function goBack() {
 onMounted(() => {
   loadGroups();
 });
+
+onUnmounted(() => {
+  groups.value.forEach(group => leaveMeetingGroup(group.id));
+});
 </script>
 
 <style scoped>
@@ -527,6 +535,30 @@ onMounted(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+:deep(.responsive-modal.modal-sm) {
+  width: min(500px, calc(100vw - 24px));
+}
+
+:deep(.responsive-modal.modal-lg) {
+  width: min(600px, calc(100vw - 24px));
+}
+
+@media (max-width: 640px) {
+  :deep(.group-transfer) {
+    display: block;
+  }
+
+  :deep(.group-transfer .n-transfer-list) {
+    width: 100%;
+  }
+
+  :deep(.group-transfer .n-transfer-gap) {
+    padding: 8px 0;
+    flex-direction: row;
+    justify-content: center;
+  }
 }
 </style>
 

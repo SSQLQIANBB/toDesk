@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500">
+  <div class="min-h-screen flex items-center justify-center p-3 sm:p-6 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500">
     <div class="w-full max-w-md">
       <n-card class="shadow-2xl">
         <template #header>

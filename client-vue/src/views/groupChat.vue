@@ -1,9 +1,13 @@
 <template>
   <n-layout has-sider class="h-screen w-full bg-gradient-to-br from-slate-50 to-slate-100">
     <!-- 侧边栏 -->
-    <n-layout-sider 
-      bordered 
-      :width="280" 
+    <n-layout-sider
+      class="group-chat-sider"
+      bordered
+      :width="280"
+      :collapsed-width="0"
+      collapse-mode="transform"
+      show-trigger="bar"
       content-class="flex flex-col bg-white shadow-lg"
     >
       <!-- 群组信息卡片 -->
@@ -57,13 +61,13 @@
           <template #icon>
             <n-icon :component="VideocamFilled" />
           </template>
-          发起视频通话
+          {{ groupSessionState.getButtonLabel(groupId, 'video') }}
         </n-button>
         <n-button block secondary @click="handleScreenShare">
           <template #icon>
             <n-icon :component="ScreenShareFilled" />
           </template>
-          发起屏幕共享
+          {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
         </n-button>
         <n-button block secondary @click="goBack">
           <template #icon>
@@ -78,14 +82,14 @@
     <n-layout-content content-class="w-full flex flex-col">
       <div class="h-full w-full flex flex-col bg-white">
         <!-- 聊天头部 -->
-        <header class="h-16 shadow-sm flex items-center px-6 bg-gradient-to-r from-white to-gray-50 border-b">
-          <div class="flex items-center gap-3 flex-1">
+        <header class="min-h-16 shadow-sm flex items-center gap-2 px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
+          <div class="flex items-center gap-3 flex-1 min-w-0">
             <n-avatar :size="40" :src="groupInfo?.avatar || undefined">
               {{ groupInfo?.name?.charAt(0) }}
             </n-avatar>
-            <div>
-              <div class="font-bold text-base">{{ groupInfo?.name }}</div>
-              <div class="text-xs text-gray-500">{{ groupInfo?.description || '暂无简介' }}</div>
+            <div class="min-w-0">
+              <div class="font-bold text-base truncate">{{ groupInfo?.name }}</div>
+              <div class="text-xs text-gray-500 truncate">{{ groupInfo?.description || '暂无简介' }}</div>
             </div>
           </div>
           <n-button secondary @click="showGroupDetail = true">
@@ -105,7 +109,7 @@
               class="flex flex-col"
               :class="msg.isMine ? 'items-end' : 'items-start'"
             >
-              <div class="flex items-end gap-2 max-w-[70%]" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
+              <div class="flex items-end gap-2 max-w-[88%] sm:max-w-[70%]" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
                 <n-avatar :size="32" :src="msg.user?.avatar || undefined">
                   {{ msg.user?.nickname?.charAt(0) || msg.user?.username?.charAt(0) || '?' }}
                 </n-avatar>
@@ -139,7 +143,7 @@
 
         <!-- 输入框 -->
         <footer class="p-4 border-t bg-gray-50">
-          <div class="flex gap-3">
+          <div class="flex gap-2 sm:gap-3 min-w-0">
             <n-input
               v-model:value="inputMessage"
               type="textarea"
@@ -164,7 +168,7 @@
     </n-layout-content>
 
     <!-- 群组详情抽屉 -->
-    <n-drawer v-model:show="showGroupDetail" :width="400" placement="right">
+    <n-drawer v-model:show="showGroupDetail" width="min(400px, calc(100vw - 24px))" placement="right">
       <n-drawer-content title="群组详情">
         <n-spin :show="detailLoading">
           <div class="space-y-4">
@@ -199,13 +203,13 @@
                 <template #icon>
                   <n-icon :component="VideocamFilled" />
                 </template>
-                发起视频通话
+                {{ groupSessionState.getButtonLabel(groupId, 'video') }}
               </n-button>
               <n-button block secondary @click="handleScreenShare">
                 <template #icon>
                   <n-icon :component="ScreenShareFilled" />
                 </template>
-                发起屏幕共享
+                {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
               </n-button>
             </div>
           </div>
@@ -225,7 +229,8 @@ import { useAuth } from '@/stores/auth';
 import type { Socket } from 'socket.io-client';
 import notificationService from '@/services/notificationService';
 import { getGroupMessages } from '@/api/message';
-import { connectMeetingSocket } from '@/services/meetingSocket';
+import { joinMeetingGroup, leaveMeetingGroup } from '@/services/meetingSocket';
+import { groupSessionState } from '@/services/groupSessionState';
 
 const route = useRoute();
 const router = useRouter();
@@ -287,24 +292,13 @@ async function loadGroupHistory() {
 }
 
 function initSocket() {
-  socket.value = connectMeetingSocket();
+  socket.value = joinMeetingGroup(groupId.value);
 
   // 认证
-  socket.value.off('authenticated');
   socket.value.off('group_members');
   socket.value.off('group_member_joined');
   socket.value.off('group_member_left');
   socket.value.off('group_message');
-  socket.value.off('group_call_started');
-
-  // 认证成功后加入群组
-  socket.value.on('authenticated', () => {
-    socket.value?.emit('join_group', { groupId: groupId.value });
-  });
-
-  if (socket.value.connected) {
-    socket.value.emit('join_group', { groupId: groupId.value });
-  }
 
   // 接收群组成员列表
   socket.value.on('group_members', (data: { groupId: number; members: any[] }) => {
@@ -363,12 +357,14 @@ function initSocket() {
   });
 
   // 监听视频通话开始
-  socket.value.on('group_call_started', (data: any) => {
-    if (data.groupId === groupId.value) {
-      const callType = data.deviceType === 2 ? '屏幕共享' : '视频通话';
-      message.info(`${data.user?.nickname || data.user?.username} 发起了${callType}`);
-    }
-  });
+  socket.value.on('group_call_started', handleGroupCallStarted);
+}
+
+function handleGroupCallStarted(data: any) {
+  if (data.groupId === groupId.value) {
+    const callType = data.deviceType === 2 ? '屏幕共享' : '视频通话';
+    message.info(`${data.user?.nickname || data.user?.username} 发起了${callType}`);
+  }
 }
 
 // 发送消息
@@ -434,8 +430,20 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (socket.value) {
-    socket.value.emit('leave_group', { groupId: groupId.value });
+    socket.value.off('group_call_started', handleGroupCallStarted);
   }
+  leaveMeetingGroup(groupId.value);
 });
 </script>
+
+<style scoped>
+@media (max-width: 767px) {
+  :deep(.group-chat-sider) {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    max-width: calc(100vw - 44px);
+  }
+}
+</style>
 

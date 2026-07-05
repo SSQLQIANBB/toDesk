@@ -2,6 +2,12 @@ import { type Server } from 'http';
 import { Server as Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
 import { GroupMessage, Message, User as UserModel } from '../models';
+import {
+  GroupSessionService,
+  type GroupSession,
+  type GroupSessionType,
+} from '../services/groupSessionService';
+import { RedisGroupSessionStore } from '../services/redisGroupSessionStore';
 
 type PresenceStatus = 'online' | 'offline' | 'busy';
 
@@ -17,6 +23,32 @@ type MeetingUser = {
 const userMap = new Map<string, MeetingUser>();
 const socketToUserMap = new Map<string, number>();
 const groupRooms = new Map<number, Set<string>>();
+const mediaRooms = new Map<string, Set<string>>();
+const groupSessionService = new GroupSessionService(new RedisGroupSessionStore());
+
+function getSessionType(deviceType: number): GroupSessionType {
+  return deviceType === 2 ? 'screen' : 'video';
+}
+
+function removeFromMediaRoom(
+  socketId: string,
+  session: GroupSession,
+  notify: (event: string, payload: any) => void,
+) {
+  const room = mediaRooms.get(session.channelId);
+  if (!room?.delete(socketId)) return;
+
+  if (room.size === 0) {
+    mediaRooms.delete(session.channelId);
+  }
+
+  notify('group_call_member_left', {
+    groupId: session.groupId,
+    type: session.type,
+    channelId: session.channelId,
+    socketId,
+  });
+}
 
 function getPublicUsers() {
   const users = new Map<number, MeetingUser>();
@@ -51,6 +83,8 @@ const initialMeeting = (server: Server) => {
   io.on('connection', (socket) => {
     const socketId = socket.id;
     let currentUser: MeetingUser | null = null;
+    const joinedMediaSessions = new Map<string, GroupSession>();
+    const ownedSessions = new Map<string, GroupSession>();
 
     socket.on('authenticate', async (data: { token: string; nickname?: string; avatar?: string }) => {
       try {
@@ -87,7 +121,7 @@ const initialMeeting = (server: Server) => {
       emitUserList();
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       userMap.delete(socketId);
       socketToUserMap.delete(socketId);
 
@@ -96,6 +130,29 @@ const initialMeeting = (server: Server) => {
           socket.to(`group_${groupId}`).emit('group_member_left', { socketId, userId: currentUser?.id });
         }
       });
+
+      for (const session of joinedMediaSessions.values()) {
+        removeFromMediaRoom(socketId, session, (event, payload) => {
+          socket.to(session.channelId).emit(event, {
+            ...payload,
+            userId: currentUser?.id,
+          });
+        });
+      }
+
+      for (const session of ownedSessions.values()) {
+        const ended = currentUser
+          ? await groupSessionService.end(session.groupId, session.type, currentUser.id)
+          : false;
+        if (ended) {
+          io.to(`group_${session.groupId}`).emit('group_call_ended', {
+            from: socketId,
+            groupId: session.groupId,
+            type: session.type,
+            deviceType: session.type === 'screen' ? 2 : 1,
+          });
+        }
+      }
 
       emitUserList();
     });
@@ -185,7 +242,8 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    socket.on('join_group', (data: { groupId: number }) => {
+    socket.on('join_group', async (data: { groupId: number }) => {
+      if (!currentUser || !data.groupId) return;
       const roomName = `group_${data.groupId}`;
 
       socket.join(roomName);
@@ -200,6 +258,10 @@ const initialMeeting = (server: Server) => {
         .filter(Boolean);
 
       socket.emit('group_members', { groupId: data.groupId, members });
+      socket.emit('group_call_state', {
+        groupId: data.groupId,
+        sessions: await groupSessionService.getGroupState(data.groupId),
+      });
       socket.to(roomName).emit('group_member_joined', {
         groupId: data.groupId,
         member: currentUser,
@@ -252,6 +314,7 @@ const initialMeeting = (server: Server) => {
       if (data.to) {
         socket.to(data.to).emit('group_webrtc_offer', {
           from: socketId,
+          fromUser: currentUser,
           offer: data.offer,
           deviceType: data.deviceType,
           groupId: data.groupId,
@@ -263,7 +326,10 @@ const initialMeeting = (server: Server) => {
       if (data.to) {
         socket.to(data.to).emit('group_webrtc_answer', {
           from: socketId,
+          fromUser: currentUser,
           answer: data.answer,
+          deviceType: data.deviceType,
+          groupId: data.groupId,
         });
       }
     });
@@ -272,24 +338,106 @@ const initialMeeting = (server: Server) => {
       if (data.to) {
         socket.to(data.to).emit('group_webrtc_ice', {
           from: socketId,
+          fromUser: currentUser,
           candidate: data.candidate,
+          deviceType: data.deviceType,
+          groupId: data.groupId,
         });
       }
     });
 
-    socket.on('group_call_start', (data: { groupId: number; deviceType: number }) => {
-      socket.to(`group_${data.groupId}`).emit('group_call_started', {
-        from: socketId,
+    socket.on('group_call_start', async (data: { groupId: number; deviceType: number }) => {
+      if (!currentUser || !data.groupId) return;
+      const type = getSessionType(data.deviceType);
+      const result = await groupSessionService.start(data.groupId, type, currentUser);
+      if (result.created) {
+        ownedSessions.set(result.session.channelId, result.session);
+        io.to(`group_${data.groupId}`).emit('group_call_started', {
+          from: socketId,
+          ...result.session,
+          deviceType: data.deviceType,
+          user: currentUser,
+        });
+      }
+      socket.emit('group_call_state', {
         groupId: data.groupId,
-        deviceType: data.deviceType,
-        user: currentUser,
+        sessions: await groupSessionService.getGroupState(data.groupId),
       });
     });
 
-    socket.on('group_call_end', (data: { groupId: number }) => {
-      socket.to(`group_${data.groupId}`).emit('group_call_ended', {
-        from: socketId,
+    socket.on('group_call_end', async (data: { groupId: number; deviceType?: number; type?: GroupSessionType }) => {
+      if (!currentUser || !data.groupId) return;
+      const types: GroupSessionType[] = data.type
+        ? [data.type]
+        : data.deviceType
+          ? [getSessionType(data.deviceType)]
+          : ['video', 'screen'];
+
+      for (const type of types) {
+        const session = await groupSessionService.get(data.groupId, type);
+        const ended = await groupSessionService.end(data.groupId, type, currentUser.id);
+        if (!ended || !session) continue;
+
+        ownedSessions.delete(session.channelId);
+        io.to(`group_${data.groupId}`).emit('group_call_ended', {
+          from: socketId,
+          groupId: data.groupId,
+          type,
+          deviceType: type === 'screen' ? 2 : 1,
+        });
+      }
+    });
+
+    socket.on('join_group_call', async (data: { groupId: number; deviceType: number }) => {
+      if (!currentUser || !data.groupId) return;
+      const type = getSessionType(data.deviceType);
+      const session = await groupSessionService.get(data.groupId, type);
+      if (!session) {
+        socket.emit('group_call_error', { groupId: data.groupId, type, message: '会话不存在或已结束' });
+        return;
+      }
+
+      socket.join(session.channelId);
+      if (!mediaRooms.has(session.channelId)) {
+        mediaRooms.set(session.channelId, new Set());
+      }
+      const room = mediaRooms.get(session.channelId)!;
+      const alreadyJoined = room.has(socketId);
+      room.add(socketId);
+      joinedMediaSessions.set(session.channelId, session);
+
+      const members = Array.from(room)
+        .map((sid) => userMap.get(sid))
+        .filter(Boolean);
+
+      socket.emit('group_call_members', {
         groupId: data.groupId,
+        type,
+        channelId: session.channelId,
+        members,
+      });
+      if (!alreadyJoined) {
+        socket.to(session.channelId).emit('group_call_member_joined', {
+          groupId: data.groupId,
+          type,
+          channelId: session.channelId,
+          member: currentUser,
+        });
+      }
+    });
+
+    socket.on('leave_group_call', async (data: { groupId: number; deviceType: number }) => {
+      const type = getSessionType(data.deviceType);
+      const session = joinedMediaSessions.get(`group:${data.groupId}:${type}`);
+      if (!session) return;
+
+      socket.leave(session.channelId);
+      joinedMediaSessions.delete(session.channelId);
+      removeFromMediaRoom(socketId, session, (event, payload) => {
+        socket.to(session.channelId).emit(event, {
+          ...payload,
+          userId: currentUser?.id,
+        });
       });
     });
 
