@@ -92,7 +92,12 @@
       </div>
 
       <!-- 创建群组弹窗 -->
-      <n-modal v-model:show="showCreateModal" preset="card" title="创建群组" class="responsive-modal modal-sm">
+      <n-modal
+        v-model:show="showCreateModal"
+        preset="card"
+        title="创建群组"
+        style="width: 500px; max-width: calc(100vw - 24px)"
+      >
         <n-form ref="createFormRef" :model="createForm" :rules="createRules">
           <n-form-item label="群组名称" path="name">
             <n-input v-model:value="createForm.name" placeholder="请输入群组名称" maxlength="50" show-count />
@@ -119,7 +124,12 @@
       </n-modal>
 
       <!-- 群组详情弹窗 -->
-      <n-modal v-model:show="showDetailModal" preset="card" :title="currentGroup?.name" class="responsive-modal modal-lg">
+      <n-modal
+        v-model:show="showDetailModal"
+        preset="card"
+        :title="currentGroup?.name"
+        style="width: 600px; max-width: calc(100vw - 24px)"
+      >
         <n-spin :show="detailLoading">
           <n-tabs type="line" animated>
             <!-- 群组信息 -->
@@ -211,7 +221,12 @@
       </n-modal>
 
       <!-- 编辑群组弹窗 -->
-      <n-modal v-model:show="showEditModal" preset="card" title="编辑群组" class="responsive-modal modal-sm">
+      <n-modal
+        v-model:show="showEditModal"
+        preset="card"
+        title="编辑群组"
+        style="width: 500px; max-width: calc(100vw - 24px)"
+      >
         <n-form ref="editFormRef" :model="editForm" :rules="createRules">
           <n-form-item label="群组名称" path="name">
             <n-input v-model:value="editForm.name" placeholder="请输入群组名称" maxlength="50" show-count />
@@ -238,7 +253,12 @@
       </n-modal>
 
       <!-- 邀请成员弹窗 -->
-      <n-modal v-model:show="showInviteModal" preset="card" title="邀请成员" class="responsive-modal modal-sm">
+      <n-modal
+        v-model:show="showInviteModal"
+        preset="card"
+        title="邀请成员"
+        style="width: 500px; max-width: calc(100vw - 24px)"
+      >
         <n-spin :show="usersLoading">
           <n-transfer
             class="group-transfer"
@@ -587,14 +607,6 @@ onUnmounted(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-:deep(.responsive-modal.modal-sm) {
-  width: min(500px, calc(100vw - 24px));
-}
-
-:deep(.responsive-modal.modal-lg) {
-  width: min(600px, calc(100vw - 24px));
 }
 
 @media (max-width: 640px) {
