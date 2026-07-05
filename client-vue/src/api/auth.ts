@@ -1,4 +1,4 @@
-import { http } from '@/utils/request';
+import { http, request } from '@/utils/request';
 
 export interface User {
   id: number;
@@ -48,8 +48,10 @@ export function refreshAccessToken(refreshToken: string) {
 /**
  * 获取当前用户信息
  */
-export function getCurrentUser() {
-  return http.get<{ user: User }>('/api/auth/me');
+export function getCurrentUser(options?: { skipAuthRedirect?: boolean }) {
+  return request<{ user: User }>('/api/auth/me', {
+    _skipAuthRedirect: options?.skipAuthRedirect,
+  });
 }
 
 /**

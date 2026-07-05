@@ -1,6 +1,11 @@
 import { Context } from 'koa';
-import { Group, GroupMember, User, GroupInvitation } from '../models';
-import { Op } from 'sequelize';
+import { Group, GroupMember, User, GroupInvitation, GroupMessage } from '../models';
+import sequelize from '../config/database';
+import redisService from '../services/redisService';
+import {
+  GroupDeletionError,
+  GroupDeletionService,
+} from '../services/groupDeletionService';
 
 /**
  * 创建群组
@@ -367,6 +372,71 @@ export async function leaveGroup(ctx: Context) {
     console.error('退出群组失败:', error);
     ctx.status = 500;
     ctx.body = { error: '退出群组失败: ' + error.message };
+  }
+}
+
+/**
+ * 删除群组
+ */
+export async function deleteGroup(ctx: Context) {
+  const groupId = parseInt(ctx.params.id);
+  const userId = ctx.state.user?.userId;
+
+  if (!Number.isInteger(groupId) || !userId) {
+    ctx.status = 400;
+    ctx.body = { error: '无效的群组ID' };
+    return;
+  }
+
+  const service = new GroupDeletionService({
+    findMembership: (id, memberUserId) => GroupMember.findOne({
+      where: { groupId: id, userId: memberUserId },
+    }),
+    findGroup: id => Group.findByPk(id),
+    transaction: callback => sequelize.transaction(transaction => callback(transaction)),
+    deleteMessages: (id, transaction) => GroupMessage.destroy({
+      where: { groupId: id },
+      transaction: transaction as any,
+    }),
+    deleteInvitations: (id, transaction) => GroupInvitation.destroy({
+      where: { groupId: id },
+      transaction: transaction as any,
+    }),
+    deleteMembers: (id, transaction) => GroupMember.destroy({
+      where: { groupId: id },
+      transaction: transaction as any,
+    }),
+    deleteGroup: (id, transaction) => Group.destroy({
+      where: { id },
+      transaction: transaction as any,
+    }),
+  });
+
+  try {
+    await service.delete(groupId, userId);
+
+    // 数据库删除已经成功时，缓存清理失败只记录日志，避免向客户端返回伪失败。
+    try {
+      await Promise.all([
+        redisService.delGroupInfo(groupId),
+        redisService.delGroupMembers(groupId),
+        redisService.delPattern(`group:session:${groupId}:*`),
+      ]);
+    } catch (error) {
+      console.error('删除群组后的缓存清理失败:', error);
+    }
+
+    ctx.body = { message: '群组已删除' };
+  } catch (error: any) {
+    if (error instanceof GroupDeletionError) {
+      ctx.status = error.status;
+      ctx.body = { error: error.message };
+      return;
+    }
+
+    console.error('删除群组失败:', error);
+    ctx.status = 500;
+    ctx.body = { error: '删除群组失败: ' + error.message };
   }
 }
 

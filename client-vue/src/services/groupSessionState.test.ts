@@ -47,4 +47,20 @@ describe('groupSessionState', () => {
     expect(state.getButtonLabel(7, 'video')).toBe('发起视频通话');
     expect(state.getButtonLabel(7, 'screen')).toBe('发起屏幕共享');
   });
+
+  it('删除群组时清理该群组的视频和共享状态，不影响其他群组', () => {
+    const state = createGroupSessionState();
+    state.applySnapshot(7, { video: videoSession, screen: screenSession });
+    state.applyStarted({
+      ...videoSession,
+      groupId: 8,
+      channelId: 'group:8:video',
+    });
+
+    state.clearGroup(7);
+
+    expect(state.getSession(7, 'video')).toBeNull();
+    expect(state.getSession(7, 'screen')).toBeNull();
+    expect(state.getSession(8, 'video')).not.toBeNull();
+  });
 });

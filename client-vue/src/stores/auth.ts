@@ -55,6 +55,17 @@ function updateToken(newAccessToken: string, newRefreshToken?: string) {
   }
 }
 
+// 只清理本地认证状态，被动鉴权失败时不能再次请求受保护的登出接口
+function clearAuthLocal() {
+  currentUser.value = null;
+  token.value = null;
+  refreshToken.value = null;
+
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+}
+
 // 清除认证信息
 async function clearAuth() {
   // 调用后端登出接口
@@ -66,14 +77,8 @@ async function clearAuth() {
       console.error('登出请求失败:', error);
     }
   }
-  
-  currentUser.value = null;
-  token.value = null;
-  refreshToken.value = null;
-  
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
+
+  clearAuthLocal();
 }
 
 // 更新用户信息
@@ -82,6 +87,11 @@ function updateUserInfo(user: Partial<User>) {
     currentUser.value = { ...currentUser.value, ...user };
     localStorage.setItem('user', JSON.stringify(currentUser.value));
   }
+}
+
+function restoreUser(user: User) {
+  currentUser.value = user;
+  localStorage.setItem('user', JSON.stringify(user));
 }
 
 // 是否已登录
@@ -97,7 +107,9 @@ export function useAuth() {
     setAuth,
     updateToken,
     clearAuth,
+    clearAuthLocal,
     updateUserInfo,
+    restoreUser,
   };
 }
 

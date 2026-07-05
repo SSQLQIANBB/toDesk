@@ -144,6 +144,23 @@
                     <n-tag v-else size="small">成员</n-tag>
                   </p>
                 </div>
+                <template v-if="currentGroup?.role === 'owner'">
+                  <n-divider />
+                  <div class="p-4 border border-red-200 bg-red-50 rounded-lg">
+                    <h4 class="font-semibold text-red-700">危险操作</h4>
+                    <p class="text-sm text-red-600 mt-1">
+                      删除群组后，群消息、成员关系和邀请都无法恢复。
+                    </p>
+                    <n-button
+                      type="error"
+                      class="mt-3"
+                      :loading="deleteLoading"
+                      @click="handleDeleteGroup"
+                    >
+                      删除群组
+                    </n-button>
+                  </div>
+                </template>
               </div>
             </n-tab-pane>
 
@@ -247,7 +264,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useMessage, type FormInst, type FormRules } from 'naive-ui';
+import { useDialog, useMessage, type FormInst, type FormRules } from 'naive-ui';
 import { ArrowBackFilled, AddFilled, MoreVertFilled, PersonAddFilled } from '@vicons/material';
 import { 
   getMyGroups, 
@@ -257,6 +274,7 @@ import {
   setMemberPermission,
   updateGroup,
   leaveGroup,
+  deleteGroup,
   type Group,
   type GroupDetail as GroupDetailType 
 } from '@/api/group';
@@ -266,12 +284,14 @@ import { groupSessionState } from '@/services/groupSessionState';
 
 const router = useRouter();
 const message = useMessage();
+const dialog = useDialog();
 
 const loading = ref(false);
 const createLoading = ref(false);
 const detailLoading = ref(false);
 const inviteLoading = ref(false);
 const usersLoading = ref(false);
+const deleteLoading = ref(false);
 
 const showCreateModal = ref(false);
 const showDetailModal = ref(false);
@@ -513,6 +533,38 @@ async function handleEdit() {
   } finally {
     editLoading.value = false;
   }
+}
+
+// 删除群组
+function handleDeleteGroup() {
+  const group = currentGroup.value;
+  if (!group || group.role !== 'owner') return;
+
+  dialog.warning({
+    title: '确认删除群组',
+    content: '删除后群消息、成员关系和邀请都会被永久删除，且无法恢复。',
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        deleteLoading.value = true;
+        await deleteGroup(group.id);
+        groupSessionState.clearGroup(group.id);
+        leaveMeetingGroup(group.id);
+        groups.value = groups.value.filter(item => item.id !== group.id);
+        showEditModal.value = false;
+        showDetailModal.value = false;
+        currentGroup.value = null;
+        groupDetail.value = null;
+        await loadGroups();
+        message.success('群组已删除');
+      } catch (error: any) {
+        message.error(error.message || '删除群组失败');
+      } finally {
+        deleteLoading.value = false;
+      }
+    },
+  });
 }
 
 // 返回

@@ -44,6 +44,7 @@
                 block 
                 size="large"
                 :loading="loading"
+                :disabled="loading"
                 @click="handleLogin"
                 class="mt-2"
               >
@@ -103,7 +104,8 @@
                 type="primary" 
                 block 
                 size="large"
-                :loading="loading"
+                :loading="registerLoading"
+                :disabled="registerLoading"
                 @click="handleRegister"
                 class="mt-2"
               >
@@ -119,18 +121,28 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
 import { PersonFilled, LockFilled } from '@vicons/material';
 import { login, register } from '@/api/auth';
 import { useAuth } from '@/stores/auth';
+import { createLoginController } from '@/services/loginController';
 
 const router = useRouter();
+const route = useRoute();
 const message = useMessage();
 const { setAuth } = useAuth();
 
 const activeTab = ref<'login' | 'register'>('login');
-const loading = ref(false);
+const registerLoading = ref(false);
+const loginController = createLoginController({
+  login,
+  setAuth,
+  navigate: path => router.replace(path),
+  showSuccess: text => message.success(text),
+  showError: text => message.error(text),
+});
+const { loading } = loginController;
 
 // 登录表单
 const loginFormRef = ref<FormInst | null>(null);
@@ -180,30 +192,22 @@ const registerRules: FormRules = {
 
 // 登录
 async function handleLogin() {
-  try {
-    await loginFormRef.value?.validate();
-    loading.value = true;
-
-    const res = await login({
+  await loginController.submit({
+    validate: () => loginFormRef.value?.validate() || Promise.resolve(),
+    credentials: {
       username: loginForm.value.username,
       password: loginForm.value.password,
-    });
-
-    setAuth(res.user, res.accessToken, res.refreshToken);
-    message.success('登录成功');
-    router.push('/remote');
-  } catch (error: any) {
-    message.error(error.message || '登录失败');
-  } finally {
-    loading.value = false;
-  }
+    },
+    redirect: route.query.redirect,
+  });
 }
 
 // 注册
 async function handleRegister() {
+  if (registerLoading.value) return;
+  registerLoading.value = true;
   try {
     await registerFormRef.value?.validate();
-    loading.value = true;
 
     const res = await register({
       username: registerForm.value.username,
@@ -213,11 +217,11 @@ async function handleRegister() {
 
     setAuth(res.user, res.accessToken, res.refreshToken);
     message.success('注册成功');
-    router.push('/remote');
+    await router.replace('/remote');
   } catch (error: any) {
     message.error(error.message || '注册失败');
   } finally {
-    loading.value = false;
+    registerLoading.value = false;
   }
 }
 </script>

@@ -73,3 +73,10 @@ export function leaveGroup(groupId: number) {
   return http.delete<{ message: string }>(`/api/groups/${groupId}/leave`);
 }
 
+/**
+ * 删除群组（仅群主）
+ */
+export function deleteGroup(groupId: number) {
+  return http.delete<{ message: string }>(`/api/groups/${groupId}`);
+}
+

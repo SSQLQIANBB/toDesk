@@ -46,7 +46,7 @@
       </div>
 
       <!-- Tab 切换 -->
-      <n-tabs type="line" animated justify-content="space-evenly" class="flex-1 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
+      <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="flex-1 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
         <!-- 在线用户 -->
         <n-tab-pane name="users" tab="在线用户" display-directive="show:lazy" class="flex flex-col h-full">
           <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50">
@@ -198,7 +198,7 @@
 
 <script lang="ts" setup>
 import { onMounted, onUnmounted, ref, nextTick, watch, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import type { Socket } from 'socket.io-client';
 import { useMessage, useDialog } from 'naive-ui';
 import { useAuth } from '@/stores/auth';
@@ -208,10 +208,22 @@ import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupIn
 import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
-import { connectMeetingSocket, disconnectMeetingSocket } from '@/services/meetingSocket';
+import {
+  connectMeetingSocket,
+  disconnectMeetingSocket,
+  getMeetingConnectionStatus,
+  subscribeMeetingAuthenticated,
+} from '@/services/meetingSocket';
+import {
+  getRemoteTabQuery,
+  parseRemoteTab,
+  type RemoteTab,
+} from '@/services/remoteTabState';
 
 const router = useRouter();
+const route = useRoute();
 const { currentUser: authUser, token, clearAuth } = useAuth();
+const activeTab = ref<RemoteTab>(parseRemoteTab(route.query.tab));
 
 type User = {
   id: number;
@@ -231,6 +243,7 @@ type MessageInfo = {
 }
 
 let socket: Socket | null = null;
+let removeConnectionNoticeListener: (() => void) | null = null;
 const online = ref(false);
 const loading = ref(false);
 
@@ -247,7 +260,8 @@ const pendingInvitations = ref<GroupInvitation[]>([]);
 
 // 计算用户状态（基于Socket连接状态）
 const userStatus = computed(() => {
-  return currentUser.value?.status || authUser.value?.status || (online.value ? 'online' : 'offline');
+  if (!online.value) return 'offline';
+  return currentUser.value?.status || authUser.value?.status || 'online';
 });
 
 // 获取状态颜色
@@ -286,141 +300,152 @@ const toolBarRef = ref();
 // 退出登录
 async function handleLogout() {
   disconnect(true);
-  clearAuth();
-  await router.push('/login');
-  window.location.reload(); // 确保完全重置状态
+  await clearAuth();
+  await router.replace('/login');
 }
 
 function initialSocket() {
   socket = connectMeetingSocket();
-  loading.value = true;
+  const alreadyAuthenticated = getMeetingConnectionStatus() === 'authenticated';
+  loading.value = !alreadyAuthenticated;
+  online.value = alreadyAuthenticated;
+  if (authUser.value) {
+    currentUser.value = {
+      ...authUser.value,
+      socketId: socket.id || '',
+    };
+  }
 
-  socket.off('authenticated');
-  socket.off('auth_error');
-  socket.off('user_list');
-  socket.off('private_message');
-  socket.off('webrtc_offer');
-  socket.off('webrtc_answer');
-  socket.off('webrtc_ice');
-  socket.off('webrtc_call_request');
-  socket.off('webrtc_call_response');
-  socket.off('webrtc_hangup');
-  
-  // 连接建立后立即认证
-  socket.on('connect', () => {
-    console.log('Socket已连接:', socket?.id);
-    
-    // 立即进行认证
-  })
-
-  // 认证成功
-  socket.on('authenticated', (data) => {
-    console.log('认证成功:', data);
-    currentUser.value = data;
+  removeConnectionNoticeListener = subscribeMeetingAuthenticated(() => {
     online.value = true;
     loading.value = false;
     message.success('连接成功！');
-  })
-  
-  // 认证失败
-  socket.on('auth_error', (data) => {
-    console.error('认证失败:', data);
-    message.error('认证失败: ' + data.message);
-    loading.value = false;
-    online.value = false;
-  })
+  });
 
-  // 用户列表
-  socket.on('user_list', (list: User[]) => {
-    console.log('收到用户列表:', list);
-    // 过滤掉当前用户
-    userList.value = list.filter(u => u.id !== authUser.value?.id && u.socketId !== socket?.id)
-    console.log('过滤后的用户列表:', userList.value);
-  })
+  // 页面只注册自己的具名监听器，卸载时不会误删共享 Socket 监听。
+  socket.on('connect', handleSocketConnect);
+  socket.on('disconnect', handleSocketDisconnect);
+  socket.on('authenticated', handleSocketAuthenticated);
+  socket.on('auth_error', handleSocketAuthError);
+  socket.on('user_list', handleUserList);
+  socket.on('private_message', handlePrivateMessage);
+  socket.on('webrtc_offer', handleWebrtcOffer);
+  socket.on('webrtc_answer', handleWebrtcAnswer);
+  socket.on('webrtc_ice', handleWebrtcIce);
+  socket.on('webrtc_call_request', handleCallRequest);
+  socket.on('webrtc_call_response', handleCallResponse);
+  socket.on('webrtc_hangup', handleWebrtcHangup);
+}
 
-  // 私信
-  socket.on('private_message', (data) => {
-    console.log('receive-message:', data);
+// 连接建立后立即认证
+function handleSocketConnect() {
+  console.log('Socket已连接:', socket?.id);
+}
 
-    const senderId = Number(data.fromUserId);
-    setMessage(senderId, {
-      from: data.from,
-      fromUserId: senderId,
-      toUserId: data.toUserId,
-      message: data.message,
-      time: data.time || new Date().toLocaleString(),
-    })
+function handleSocketDisconnect() {
+  online.value = false;
+  loading.value = true;
+}
 
-    const count = unReadMessageCount.value[senderId] || 0
-    unReadMessageCount.value[senderId] = count + 1
+// 认证成功
+function handleSocketAuthenticated(data: User) {
+  console.log('认证成功:', data);
+  currentUser.value = data;
+  online.value = true;
+  loading.value = false;
+}
 
-    if (senderId === contactUser.value?.id) {
-      currentMessageList.value = privateMessageMap.get(senderId) || []
-      scrollToBottom();
-    }
+// 认证失败
+function handleSocketAuthError(data: { message: string }) {
+  console.error('认证失败:', data);
+  message.error('认证失败: ' + data.message);
+  loading.value = false;
+  online.value = false;
+}
 
-    // 如果窗口未聚焦或不是当前联系人，显示桌面通知
-    if (document.hidden || senderId !== contactUser.value?.id) {
-      const sender = userList.value.find(u => u.id === senderId) || data.sender;
-      const senderName = sender?.nickname || sender?.username || '未知用户';
-      notificationService.showMessage(
-        senderName,
-        data.message,
-        sender?.avatar,
-        () => {
-          // 点击通知时聚焦窗口并选择该联系人
-          window.focus();
-          if (sender) {
-            selectContact(sender);
-          }
-        }
-      );
-    }
-  })
+// 用户列表
+function handleUserList(list: User[]) {
+  console.log('收到用户列表:', list);
+  // 过滤掉当前用户
+  userList.value = list.filter(u => u.id !== authUser.value?.id && u.socketId !== socket?.id);
+  console.log('过滤后的用户列表:', userList.value);
+}
 
-  // WebRTC信令监听
-  socket.on('webrtc_offer', (data) => {
-    console.log('收到offer:', data);
-    toolBarRef.value?.handleOffer(data.offer);
-  })
+// 私信
+function handlePrivateMessage(data: any) {
+  console.log('receive-message:', data);
 
-  socket.on('webrtc_answer', (data) => {
-    console.log('收到answer:', data);
-    toolBarRef.value?.handleAnswer(data.answer);
-  })
+  const senderId = Number(data.fromUserId);
+  setMessage(senderId, {
+    from: data.from,
+    fromUserId: senderId,
+    toUserId: data.toUserId,
+    message: data.message,
+    time: data.time || new Date().toLocaleString(),
+  });
 
-  socket.on('webrtc_ice', (data) => {
-    console.log('收到ice candidate:', data);
-    toolBarRef.value?.handleIceCandidate(data.candidate);
-  })
+  const count = unReadMessageCount.value[senderId] || 0;
+  unReadMessageCount.value[senderId] = count + 1;
 
-  socket.on('webrtc_call_request', (data) => {
-    console.log('收到呼叫请求:', data);
-    toolBarRef.value?.handleIncomingCall(data);
-    
-    // 显示来电通知
-    const caller = userList.value.find(u => u.socketId === data.from);
-    const callerName = caller?.nickname || caller?.username || '未知用户';
-    const callType = data.deviceType === 'camera' ? 'video' : data.deviceType === 'screen' ? 'screen' : 'audio';
-    notificationService.showCall(callerName, callType, caller?.avatar);
-  })
-
-  socket.on('webrtc_call_response', (data) => {
-    console.log('收到呼叫响应:', data);
-    toolBarRef.value?.handleCallResponse(data);
-  })
-
-  socket.on('webrtc_hangup', () => {
-    console.log('对方挂断');
-    toolBarRef.value?.handleHangup();
-  })
-  if (socket.connected) {
-    socket.emit('authenticate', {
-      token: token.value,
-      nickname: authUser.value?.nickname,
-      avatar: authUser.value?.avatar,
-    });
+  if (senderId === contactUser.value?.id) {
+    currentMessageList.value = privateMessageMap.get(senderId) || [];
+    scrollToBottom();
   }
+
+  // 如果窗口未聚焦或不是当前联系人，显示桌面通知
+  if (document.hidden || senderId !== contactUser.value?.id) {
+    const sender = userList.value.find(u => u.id === senderId) || data.sender;
+    const senderName = sender?.nickname || sender?.username || '未知用户';
+    notificationService.showMessage(
+      senderName,
+      data.message,
+      sender?.avatar,
+      () => {
+        // 点击通知时聚焦窗口并选择该联系人
+        window.focus();
+        if (sender) {
+          selectContact(sender);
+        }
+      }
+    );
+  }
+}
+
+// WebRTC信令监听
+function handleWebrtcOffer(data: any) {
+  console.log('收到offer:', data);
+  toolBarRef.value?.handleOffer(data.offer);
+}
+
+function handleWebrtcAnswer(data: any) {
+  console.log('收到answer:', data);
+  toolBarRef.value?.handleAnswer(data.answer);
+}
+
+function handleWebrtcIce(data: any) {
+  console.log('收到ice candidate:', data);
+  toolBarRef.value?.handleIceCandidate(data.candidate);
+}
+
+function handleCallRequest(data: any) {
+  console.log('收到呼叫请求:', data);
+  toolBarRef.value?.handleIncomingCall(data);
+
+  // 显示来电通知
+  const caller = userList.value.find(u => u.socketId === data.from);
+  const callerName = caller?.nickname || caller?.username || '未知用户';
+  const callType = data.deviceType === 'camera' ? 'video' : data.deviceType === 'screen' ? 'screen' : 'audio';
+  notificationService.showCall(callerName, callType, caller?.avatar);
+}
+
+function handleCallResponse(data: any) {
+  console.log('收到呼叫响应:', data);
+  toolBarRef.value?.handleCallResponse(data);
+}
+
+function handleWebrtcHangup() {
+  console.log('对方挂断');
+  toolBarRef.value?.handleHangup();
 }
 
 function setMessage(id: number, data: MessageInfo) {
@@ -431,21 +456,25 @@ function setMessage(id: number, data: MessageInfo) {
 
 function disconnect(closeSocket = false) {
   if (socket) {
-    socket.off('authenticated');
-    socket.off('auth_error');
-    socket.off('user_list');
-    socket.off('private_message');
-    socket.off('webrtc_offer');
-    socket.off('webrtc_answer');
-    socket.off('webrtc_ice');
-    socket.off('webrtc_call_request');
-    socket.off('webrtc_call_response');
-    socket.off('webrtc_hangup');
+    socket.off('connect', handleSocketConnect);
+    socket.off('disconnect', handleSocketDisconnect);
+    socket.off('authenticated', handleSocketAuthenticated);
+    socket.off('auth_error', handleSocketAuthError);
+    socket.off('user_list', handleUserList);
+    socket.off('private_message', handlePrivateMessage);
+    socket.off('webrtc_offer', handleWebrtcOffer);
+    socket.off('webrtc_answer', handleWebrtcAnswer);
+    socket.off('webrtc_ice', handleWebrtcIce);
+    socket.off('webrtc_call_request', handleCallRequest);
+    socket.off('webrtc_call_response', handleCallResponse);
+    socket.off('webrtc_hangup', handleWebrtcHangup);
 
     if (closeSocket) {
       disconnectMeetingSocket();
     }
   }
+  removeConnectionNoticeListener?.();
+  removeConnectionNoticeListener = null;
   socket = null;
   online.value = false;
   userList.value = [];
@@ -656,6 +685,17 @@ const goToGroupChat = (groupId: number) => {
 // 监听消息列表变化，自动滚动到底部
 watch(() => currentMessageList.value.length, () => {
   scrollToBottom();
+});
+
+watch(activeTab, (tab) => {
+  void router.replace({
+    path: '/remote',
+    query: getRemoteTabQuery(tab),
+  });
+});
+
+watch(() => route.query.tab, (tab) => {
+  activeTab.value = parseRemoteTab(tab);
 });
 
 const handleVisible = () => {

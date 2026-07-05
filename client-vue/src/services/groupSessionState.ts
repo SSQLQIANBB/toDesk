@@ -53,6 +53,11 @@ export function createGroupSessionState() {
     return type === 'video' ? '发起视频通话' : '发起屏幕共享';
   }
 
+  function clearGroup(groupId: number) {
+    sessions.delete(getKey(groupId, 'video'));
+    sessions.delete(getKey(groupId, 'screen'));
+  }
+
   return {
     sessions,
     applySnapshot,
@@ -60,6 +65,7 @@ export function createGroupSessionState() {
     applyEnded,
     getSession,
     getButtonLabel,
+    clearGroup,
   };
 }
 

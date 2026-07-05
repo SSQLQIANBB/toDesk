@@ -5,12 +5,13 @@ import {
   type GroupSession,
   type GroupSessionType,
 } from './groupSessionState';
+import { ConnectionLifecycle } from './connectionLifecycle';
 
 type PresenceStatus = 'online' | 'offline' | 'busy';
 
 let socket: Socket | null = null;
-let authenticated = false;
 const joinedGroups = new Set<number>();
+const connectionLifecycle = new ConnectionLifecycle();
 
 function rejoinGroups() {
   for (const groupId of joinedGroups) {
@@ -47,12 +48,15 @@ function bindSharedEvents(target: Socket) {
     groupSessionState.applyEnded(data.groupId, type);
   };
 
+  target.on('connect', () => {
+    connectionLifecycle.transition('connecting');
+  });
   target.on('authenticated', () => {
-    authenticated = true;
+    connectionLifecycle.transition('authenticated');
     handleAuthenticated();
   });
   target.on('disconnect', () => {
-    authenticated = false;
+    connectionLifecycle.transition('disconnected');
   });
   target.on('group_call_state', handleState);
   target.on('group_call_started', handleStarted);
@@ -78,17 +82,13 @@ export function connectMeetingSocket() {
   socket.off('connect', authenticate);
   socket.on('connect', authenticate);
 
-  if (socket.connected) {
-    authenticate();
-  }
-
   return socket;
 }
 
 export function disconnectMeetingSocket() {
   socket?.disconnect();
   socket = null;
-  authenticated = false;
+  connectionLifecycle.transition('disconnected');
   joinedGroups.clear();
 }
 
@@ -113,6 +113,15 @@ export function leaveMeetingGroup(groupId: number) {
 export function onMeetingAuthenticated(handler: () => void) {
   const target = connectMeetingSocket();
   target.on('authenticated', handler);
-  if (authenticated) queueMicrotask(handler);
+  if (connectionLifecycle.getStatus() === 'authenticated') queueMicrotask(handler);
   return () => target.off('authenticated', handler);
+}
+
+export function subscribeMeetingAuthenticated(handler: () => void) {
+  connectMeetingSocket();
+  return connectionLifecycle.subscribeAuthenticated(handler);
+}
+
+export function getMeetingConnectionStatus() {
+  return connectionLifecycle.getStatus();
 }
