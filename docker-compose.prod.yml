@@ -11,7 +11,7 @@ services:
       - todesk-uploads:/app/backend-koa/uploads
     networks:
       - todesk-internal
-      - bill-network
+      - shared-services
 
   web:
     image: ${DOCKERHUB_NAMESPACE:-ssq5603151}/todesk-web:${IMAGE_TAG:-latest}
@@ -19,18 +19,38 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    expose:
+      - "80"
+    networks:
+      - todesk-internal
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: todesk-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      - web
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
     networks:
       - todesk-internal
 
 volumes:
   todesk-uploads:
+  caddy-data:
+  caddy-config:
 
 networks:
   todesk-internal:
     driver: bridge
 
-  bill-network:
+  shared-services:
     external: true
-    name: ${BILL_DOCKER_NETWORK}
+    name: ${SHARED_SERVICES_NETWORK:-shared-services}
