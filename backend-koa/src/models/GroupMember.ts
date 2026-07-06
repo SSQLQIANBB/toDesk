@@ -13,14 +13,14 @@ export interface GroupMemberAttributes {
 }
 
 class GroupMember extends Model<GroupMemberAttributes> implements GroupMemberAttributes {
-  public id!: number;
-  public groupId!: number;
-  public userId!: number;
-  public role?: 'owner' | 'admin' | 'member';
-  public canSpeak?: boolean;
-  public joinedAt?: Date;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare groupId: number;
+  declare userId: number;
+  declare role?: 'owner' | 'admin' | 'member';
+  declare canSpeak?: boolean;
+  declare joinedAt?: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 GroupMember.init(

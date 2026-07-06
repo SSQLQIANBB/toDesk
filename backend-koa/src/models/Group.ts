@@ -12,13 +12,13 @@ export interface GroupAttributes {
 }
 
 class Group extends Model<GroupAttributes> implements GroupAttributes {
-  public id!: number;
-  public name!: string;
-  public description?: string;
-  public avatar?: string;
-  public ownerId!: number;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare name: string;
+  declare description?: string;
+  declare avatar?: string;
+  declare ownerId: number;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 Group.init(

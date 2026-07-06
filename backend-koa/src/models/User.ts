@@ -17,18 +17,18 @@ export interface UserAttributes {
 }
 
 class User extends Model<UserAttributes> implements UserAttributes {
-  public id!: number;
-  public username!: string;
-  public password!: string;
-  public nickname?: string;
-  public avatar?: string;
-  public email?: string;
-  public phone?: string;
-  public bio?: string;
-  public status?: 'online' | 'offline' | 'busy';
-  public lastLoginAt?: Date;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare username: string;
+  declare password: string;
+  declare nickname?: string;
+  declare avatar?: string;
+  declare email?: string;
+  declare phone?: string;
+  declare bio?: string;
+  declare status?: 'online' | 'offline' | 'busy';
+  declare lastLoginAt?: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 User.init(
