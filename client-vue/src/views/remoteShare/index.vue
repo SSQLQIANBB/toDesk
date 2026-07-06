@@ -15,7 +15,7 @@
           <n-avatar 
             :size="48" 
             :src="authUser?.avatar || undefined"
-            class="cursor-pointer ring-2 ring-white ring-opacity-50"
+            class="cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
             @click="goToProfile"
           >
             {{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}
@@ -48,7 +48,7 @@
       <!-- Tab 切换 -->
       <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="flex-1 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
         <!-- 在线用户 -->
-        <n-tab-pane name="users" tab="在线用户" display-directive="show:lazy" class="flex flex-col h-full">
+        <n-tab-pane name="users" tab="在线用户" display-directive="show:lazy" class="flex flex-col h-full pt-0">
           <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50">
             在线用户 ({{ userList.length }})
           </div>
@@ -86,11 +86,7 @@
                 size="small"
               >
                 <template #icon>
-                  <n-icon size="48" color="#d0d0d0">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                    </svg>
-                  </n-icon>
+                  <n-icon size="32" color="#d0d0d0" :component="PersonOutline" />
                 </template>
               </n-empty>
             </ul>
@@ -98,7 +94,7 @@
         </n-tab-pane>
 
         <!-- 我的群组 -->
-        <n-tab-pane name="groups" tab="我的群组" display-directive="show:lazy" class="flex flex-col h-full">
+        <n-tab-pane name="groups" tab="我的群组" display-directive="show:lazy" class="flex flex-col h-full pt-0">
           <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between">
             <span>我的群组 ({{ myGroups.length }})</span>
             <n-button size="tiny" @click="goToGroups">管理</n-button>
@@ -160,10 +156,10 @@
         </header>
         <n-scrollbar class="grow p-4" ref="scrollbarRef">
           <ul class="space-y-3">
-            <li class="flex flex-col w-full" :class="msg.fromUserId === currentUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="index">
+            <li class="flex flex-col w-full" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="index">
               <span class="text-xs text-gray-400 mb-1">{{msg.time}}</span>
               <div class="p-3 rounded-lg max-w-[88%] sm:max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md"
-                   :class="msg.fromUserId === currentUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
+                   :class="msg.fromUserId === authUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
                 {{ msg.message }}
               </div>
             </li>
@@ -179,11 +175,7 @@
       <div class="h-full w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100" v-else>
         <n-empty description="请从左侧选择一个联系人开始聊天" size="large">
           <template #icon>
-            <n-icon size="80" color="#b0b0b0">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
-              </svg>
-            </n-icon>
+            <n-icon size="50" color="#b0b0b0" :component="ChatboxEllipsesOutline" />
           </template>
           <template #extra>
             <div class="text-sm text-gray-500 mt-2">
@@ -200,8 +192,10 @@
 import { onMounted, onUnmounted, ref, nextTick, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Socket } from 'socket.io-client';
+import { storeToRefs } from 'pinia';
 import { useMessage, useDialog } from 'naive-ui';
 import { useAuth } from '@/stores/auth';
+import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { getMyGroups, type Group } from '@/api/group';
 import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type OfflineMessage } from '@/api/message';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
@@ -209,30 +203,20 @@ import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
 import {
-  connectMeetingSocket,
-  disconnectMeetingSocket,
-  getMeetingConnectionStatus,
-  subscribeMeetingAuthenticated,
-} from '@/services/meetingSocket';
-import {
   getRemoteTabQuery,
   parseRemoteTab,
   type RemoteTab,
 } from '@/services/remoteTabState';
+import { ChatboxEllipsesOutline, PersonOutline } from '@vicons/ionicons5';
 
 const router = useRouter();
 const route = useRoute();
 const { currentUser: authUser, token, clearAuth } = useAuth();
+const socketStore = useSocketStore();
+const { socket, authenticated: online, userList } = storeToRefs(socketStore);
 const activeTab = ref<RemoteTab>(parseRemoteTab(route.query.tab));
 
-type User = {
-  id: number;
-  socketId: string;
-  username?: string;
-  nickname?: string;
-  avatar?: string;
-  status?: 'online' | 'offline' | 'busy';
-}
+type User = OnlineUser;
 
 type MessageInfo = {
   time: string;
@@ -242,18 +226,11 @@ type MessageInfo = {
   message: string;
 }
 
-let socket: Socket | null = null;
-let removeConnectionNoticeListener: (() => void) | null = null;
-const online = ref(false);
-const loading = ref(false);
-
 const message = useMessage();
 const dialog = useDialog();
 
-const currentUser = ref<User | null>(null);
 const contactUser = ref<User | null>(null);
 
-const userList = ref<User[]>([]);
 const myGroups = ref<Group[]>([]);
 const offlineMessages = ref<OfflineMessage[]>([]);
 const pendingInvitations = ref<GroupInvitation[]>([]);
@@ -261,7 +238,7 @@ const pendingInvitations = ref<GroupInvitation[]>([]);
 // 计算用户状态（基于Socket连接状态）
 const userStatus = computed(() => {
   if (!online.value) return 'offline';
-  return currentUser.value?.status || authUser.value?.status || 'online';
+  return authUser.value?.status || 'online';
 });
 
 // 获取状态颜色
@@ -299,76 +276,8 @@ const toolBarRef = ref();
 
 // 退出登录
 async function handleLogout() {
-  disconnect(true);
   await clearAuth();
   await router.replace('/login');
-}
-
-function initialSocket() {
-  socket = connectMeetingSocket();
-  const alreadyAuthenticated = getMeetingConnectionStatus() === 'authenticated';
-  loading.value = !alreadyAuthenticated;
-  online.value = alreadyAuthenticated;
-  if (authUser.value) {
-    currentUser.value = {
-      ...authUser.value,
-      socketId: socket.id || '',
-    };
-  }
-
-  removeConnectionNoticeListener = subscribeMeetingAuthenticated(() => {
-    online.value = true;
-    loading.value = false;
-    message.success('连接成功！');
-  });
-
-  // 页面只注册自己的具名监听器，卸载时不会误删共享 Socket 监听。
-  socket.on('connect', handleSocketConnect);
-  socket.on('disconnect', handleSocketDisconnect);
-  socket.on('authenticated', handleSocketAuthenticated);
-  socket.on('auth_error', handleSocketAuthError);
-  socket.on('user_list', handleUserList);
-  socket.on('private_message', handlePrivateMessage);
-  socket.on('webrtc_offer', handleWebrtcOffer);
-  socket.on('webrtc_answer', handleWebrtcAnswer);
-  socket.on('webrtc_ice', handleWebrtcIce);
-  socket.on('webrtc_call_request', handleCallRequest);
-  socket.on('webrtc_call_response', handleCallResponse);
-  socket.on('webrtc_hangup', handleWebrtcHangup);
-}
-
-// 连接建立后立即认证
-function handleSocketConnect() {
-  console.log('Socket已连接:', socket?.id);
-}
-
-function handleSocketDisconnect() {
-  online.value = false;
-  loading.value = true;
-}
-
-// 认证成功
-function handleSocketAuthenticated(data: User) {
-  console.log('认证成功:', data);
-  currentUser.value = data;
-  online.value = true;
-  loading.value = false;
-}
-
-// 认证失败
-function handleSocketAuthError(data: { message: string }) {
-  console.error('认证失败:', data);
-  message.error('认证失败: ' + data.message);
-  loading.value = false;
-  online.value = false;
-}
-
-// 用户列表
-function handleUserList(list: User[]) {
-  console.log('收到用户列表:', list);
-  // 过滤掉当前用户
-  userList.value = list.filter(u => u.id !== authUser.value?.id && u.socketId !== socket?.id);
-  console.log('过滤后的用户列表:', userList.value);
 }
 
 // 私信
@@ -454,33 +363,24 @@ function setMessage(id: number, data: MessageInfo) {
   privateMessageMap.set(id, [...list, data])
 }
 
-function disconnect(closeSocket = false) {
-  if (socket) {
-    socket.off('connect', handleSocketConnect);
-    socket.off('disconnect', handleSocketDisconnect);
-    socket.off('authenticated', handleSocketAuthenticated);
-    socket.off('auth_error', handleSocketAuthError);
-    socket.off('user_list', handleUserList);
-    socket.off('private_message', handlePrivateMessage);
-    socket.off('webrtc_offer', handleWebrtcOffer);
-    socket.off('webrtc_answer', handleWebrtcAnswer);
-    socket.off('webrtc_ice', handleWebrtcIce);
-    socket.off('webrtc_call_request', handleCallRequest);
-    socket.off('webrtc_call_response', handleCallResponse);
-    socket.off('webrtc_hangup', handleWebrtcHangup);
+function bindPageSocketEvents(target: Socket) {
+  target.on('private_message', handlePrivateMessage);
+  target.on('webrtc_offer', handleWebrtcOffer);
+  target.on('webrtc_answer', handleWebrtcAnswer);
+  target.on('webrtc_ice', handleWebrtcIce);
+  target.on('webrtc_call_request', handleCallRequest);
+  target.on('webrtc_call_response', handleCallResponse);
+  target.on('webrtc_hangup', handleWebrtcHangup);
+}
 
-    if (closeSocket) {
-      disconnectMeetingSocket();
-    }
-  }
-  removeConnectionNoticeListener?.();
-  removeConnectionNoticeListener = null;
-  socket = null;
-  online.value = false;
-  userList.value = [];
-  contactUser.value = null;
-  currentMessageList.value = [];
-  currentUser.value = null;
+function unbindPageSocketEvents(target: Socket | null | undefined) {
+  target?.off('private_message', handlePrivateMessage);
+  target?.off('webrtc_offer', handleWebrtcOffer);
+  target?.off('webrtc_answer', handleWebrtcAnswer);
+  target?.off('webrtc_ice', handleWebrtcIce);
+  target?.off('webrtc_call_request', handleCallRequest);
+  target?.off('webrtc_call_response', handleCallResponse);
+  target?.off('webrtc_hangup', handleWebrtcHangup);
 }
 
 
@@ -511,13 +411,13 @@ function sendMsg(v: string) {
   if (!contactUser.value || !authUser.value) return;
 
   // 私信
-  socket?.emit('private_message', {
+  socket.value?.emit('private_message', {
     to: contactUser.value,
     message: v,
   })
   
   setMessage(contactUser.value.id, {
-    from: socket?.id!,
+    from: socket.value?.id!,
     fromUserId: authUser.value.id,
     toUserId: contactUser.value.id,
     message: v,
@@ -698,6 +598,11 @@ watch(() => route.query.tab, (tab) => {
   activeTab.value = parseRemoteTab(tab);
 });
 
+watch(socket, (nextSocket, previousSocket) => {
+  unbindPageSocketEvents(previousSocket);
+  if (nextSocket) bindPageSocketEvents(nextSocket);
+}, { immediate: true });
+
 const handleVisible = () => {
   console.log('--', document.visibilityState)
   if (document.visibilityState === 'visible') {
@@ -712,18 +617,17 @@ onMounted(async () => {
   // 请求通知权限
   await notificationService.requestPermission();
   
-  // 自动连接Socket
   if (authUser.value && token.value) {
-    initialSocket();
-    // 加载数据
-    loadMyGroups();
-    loadOfflineMessages();
-    loadPendingInvitations();
+    await Promise.all([
+      loadMyGroups(),
+      loadOfflineMessages(),
+      loadPendingInvitations(),
+    ]);
   }
 });
 
 onUnmounted(() => {
-  disconnect();
+  unbindPageSocketEvents(socket.value);
   document.removeEventListener('visibilitychange', handleVisible);
 });
 </script>
@@ -736,5 +640,8 @@ onUnmounted(() => {
     z-index: 20;
     max-width: calc(100vw - 44px);
   }
+}
+.n-tabs.n-tabs--top .n-tab-pane {
+  padding-top: 0px;
 }
 </style>

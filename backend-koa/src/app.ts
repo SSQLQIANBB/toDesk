@@ -37,7 +37,7 @@ async function startServer() {
 
     // 2. 初始化Socket.IO
     console.log(chalk.yellow('🔌 正在初始化 Socket.IO...'));
-    initializeSocket(httpServer)
+    // initializeSocket(httpServer)
     initialMeeting(httpServer)
     console.log(chalk.green('✓ Socket.IO 初始化完成\n'));
 

@@ -4,30 +4,13 @@ import {
   getAuthRedirect,
   resolvePostLoginPath,
 } from '@/services/authNavigation';
+import { getCurrentUser } from '@/api/auth';
 
 const routes = [
   {
     name: 'Login',
     path: '/login',
     component: () => import('@/views/login.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    name: 'Chat',
-    path: '/chat',
-    component: () => import('@/views/chat.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    name: 'Socket',
-    path: '/socket',
-    component: () => import('@/views/socket.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    name: 'Share',
-    path: '/share',
-    component: () => import('@/views/share.vue'),
     meta: { requiresAuth: false }
   },
   {
@@ -66,6 +49,26 @@ const routes = [
     component: () => import('@/views/groupScreen.vue'),
     meta: { requiresAuth: true }
   },
+  //#region 测试功能路由
+  {
+    name: 'Chat',
+    path: '/chat',
+    component: () => import('@/views/chat.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    name: 'Socket',
+    path: '/socket',
+    component: () => import('@/views/socket.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    name: 'Share',
+    path: '/share',
+    component: () => import('@/views/share.vue'),
+    meta: { requiresAuth: false }
+  },
+  //#endregion 测试功能路由
   {
     path: '/',
     redirect: '/login'
@@ -84,7 +87,6 @@ router.beforeEach(async (to, _from, next) => {
   // 如果有token但没有用户信息，尝试恢复用户信息
   if (token.value && !currentUser.value && to.path !== '/login') {
     try {
-      const { getCurrentUser } = await import('@/api/auth');
       const { user } = await getCurrentUser({ skipAuthRedirect: true });
       restoreUser(user);
     } catch (error) {

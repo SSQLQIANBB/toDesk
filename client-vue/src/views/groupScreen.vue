@@ -237,9 +237,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
+import { storeToRefs } from 'pinia';
 import {
   MicFilled,
   MicOffFilled,
@@ -249,17 +250,12 @@ import {
   TuneFilled,
   PeopleFilled
 } from '@vicons/material';
-import type { Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
+import { useSocketStore } from '@/stores/socket';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
 import ScreenAnnotation from '@/components/ScreenAnnotation.vue';
-import {
-  joinMeetingGroup,
-  leaveMeetingGroup,
-  onMeetingAuthenticated,
-} from '@/services/meetingSocket';
 import { groupSessionState } from '@/services/groupSessionState';
 import {
   createMediaParticipantState,
@@ -279,9 +275,10 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const { currentUser } = useAuth();
+const socketStore = useSocketStore();
+const { socket, authenticated } = storeToRefs(socketStore);
 
 const groupId = ref(parseInt(route.params.id as string));
-const socket = ref<Socket | null>(null);
 
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { socketId?: string; isMicMuted?: boolean })[]>([]);
@@ -309,7 +306,7 @@ const participantUserIds = computed(() => {
 });
 let joinedCall = false;
 let cleanedUp = false;
-let removeAuthenticatedListener: (() => void) | null = null;
+let stopAuthenticatedWatch: (() => void) | null = null;
 
 // 视频质量配置
 const qualityPresets = {
@@ -364,44 +361,52 @@ async function loadGroupDetail() {
 
 // 初始化Socket连接
 function initSocket() {
-  socket.value = joinMeetingGroup(groupId.value);
-  removeAuthenticatedListener = onMeetingAuthenticated(() => {
-    const session = groupSessionState.getSession(groupId.value, 'screen');
-    if (session) joinScreenCall(session.ownerUserId);
-  });
+  socketStore.joinGroup(groupId.value);
+  const target = socket.value;
+  if (!target) return;
+
+  stopAuthenticatedWatch = watch(
+    authenticated,
+    ready => {
+      if (!ready) return;
+      const session = groupSessionState.getSession(groupId.value, 'screen');
+      if (session) joinScreenCall(session.ownerUserId);
+    },
+    { immediate: true },
+  );
 
   // 接收群组成员列表
-  socket.value.on('group_call_state', handleCallState);
-  socket.value.on('group_call_members', handleCallMembers);
-  socket.value.on('group_call_member_joined', handleCallMemberJoined);
-  socket.value.on('group_call_member_left', handleCallMemberLeft);
-  socket.value.on('group_call_presence', handleCallPresence);
-  socket.value.on('disconnect', handleSocketDisconnect);
+  target.on('group_call_state', handleCallState);
+  target.on('group_call_members', handleCallMembers);
+  target.on('group_call_member_joined', handleCallMemberJoined);
+  target.on('group_call_member_left', handleCallMemberLeft);
+  target.on('group_call_presence', handleCallPresence);
+  target.on('disconnect', handleSocketDisconnect);
 
   // 通话开始
-  socket.value.on('group_call_started', handleCallStarted);
+  target.on('group_call_started', handleCallStarted);
 
   // 通话结束
-  socket.value.on('group_call_ended', handleCallEnded);
+  target.on('group_call_ended', handleCallEnded);
 
   // WebRTC 信令
-  socket.value.on('group_webrtc_offer', handleOffer);
-  socket.value.on('group_webrtc_answer', handleAnswer);
-  socket.value.on('group_webrtc_ice', handleIceCandidate);
+  target.on('group_webrtc_offer', handleOffer);
+  target.on('group_webrtc_answer', handleAnswer);
+  target.on('group_webrtc_ice', handleIceCandidate);
 
   // 麦克风权限变化
-  socket.value.on('mic_permission_changed', handleMicPermissionChanged);
+  target.on('mic_permission_changed', handleMicPermissionChanged);
 
   // 成员麦克风状态变化
-  socket.value.on('member_mic_changed', handleMemberMicChanged);
+  target.on('member_mic_changed', handleMemberMicChanged);
 
   // 屏幕标注状态
-  socket.value.on('screen_annotation_snapshot', handleAnnotationSnapshot);
-  socket.value.on('screen_annotation_draft', handleAnnotationDraft);
-  socket.value.on('screen_annotation_complete', handleAnnotationComplete);
-  socket.value.on('screen_annotation_undo', handleAnnotationUndo);
-  socket.value.on('screen_annotation_clear', handleAnnotationClear);
-  socket.value.on('screen_annotation_error', handleAnnotationError);
+  target.on('screen_annotation_snapshot', handleAnnotationSnapshot);
+  target.on('screen_annotation_draft', handleAnnotationDraft);
+  target.on('screen_annotation_complete', handleAnnotationComplete);
+  target.on('screen_annotation_undo', handleAnnotationUndo);
+  target.on('screen_annotation_clear', handleAnnotationClear);
+  target.on('screen_annotation_error', handleAnnotationError);
 }
 
 // 开始屏幕共享
@@ -826,9 +831,10 @@ function cleanupScreenCall(endOwnedSession: boolean) {
     socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 2 });
   }
   socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: 2 });
-  removeAuthenticatedListener?.();
+  stopAuthenticatedWatch?.();
+  stopAuthenticatedWatch = null;
   unbindSocketEvents();
-  leaveMeetingGroup(groupId.value);
+  socketStore.leaveGroup(groupId.value);
 }
 
 function unbindSocketEvents() {

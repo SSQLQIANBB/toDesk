@@ -8,6 +8,27 @@
   </n-config-provider>
 </template>
 
+<script setup lang="ts">
+import { watch } from 'vue';
+import { useAuth } from '@/stores/auth';
+import { useSocketStore } from '@/stores/socket';
+
+const { token, currentUser } = useAuth();
+const socketStore = useSocketStore();
+
+watch(
+  [token, currentUser],
+  ([currentToken, user]) => {
+    if (currentToken && user) {
+      socketStore.connect(currentToken, user);
+    } else {
+      socketStore.disconnect();
+    }
+  },
+  { immediate: true },
+);
+</script>
+
 <style>
 * {
   margin: 0;

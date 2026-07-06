@@ -170,9 +170,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
+import { storeToRefs } from 'pinia';
 import {
   MicFilled,
   MicOffFilled,
@@ -181,17 +182,12 @@ import {
   CallEndFilled,
   PeopleFilled,
 } from '@vicons/material';
-import type { Socket } from 'socket.io-client';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
+import { useSocketStore } from '@/stores/socket';
 import VirtualBackground from '@/components/VirtualBackground.vue';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
-import {
-  joinMeetingGroup,
-  leaveMeetingGroup,
-  onMeetingAuthenticated,
-} from '@/services/meetingSocket';
 import { groupSessionState } from '@/services/groupSessionState';
 import {
   createMediaParticipantState,
@@ -206,9 +202,10 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const { currentUser } = useAuth();
+const socketStore = useSocketStore();
+const { socket, authenticated } = storeToRefs(socketStore);
 
 const groupId = ref(parseInt(route.params.id as string));
-const socket = ref<Socket | null>(null);
 
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { socketId?: string; online?: boolean })[]>([]);
@@ -234,7 +231,7 @@ const localStream = ref<MediaStream | null>(null);
 const originalLocalStream = ref<MediaStream | null>(null); // 原始流（用于虚拟背景）
 let joinedCall = false;
 let cleanedUp = false;
-let removeAuthenticatedListener: (() => void) | null = null;
+let stopAuthenticatedWatch: (() => void) | null = null;
 
 // 是否是群主
 const isOwner = computed(() => {
@@ -317,37 +314,43 @@ function handleRecordingStop(blob: Blob) {
 
 // 初始化Socket连接
 function initSocket() {
-  socket.value = joinMeetingGroup(groupId.value);
+  socketStore.joinGroup(groupId.value);
+  const target = socket.value;
+  if (!target) return;
 
-  const enterCall = () => {
-    socket.value?.emit('group_call_start', {
-      groupId: groupId.value,
-      deviceType: 1 // 1: 视频通话
-    });
-  };
-  removeAuthenticatedListener = onMeetingAuthenticated(enterCall);
+  stopAuthenticatedWatch = watch(
+    authenticated,
+    ready => {
+      if (!ready) return;
+      socket.value?.emit('group_call_start', {
+        groupId: groupId.value,
+        deviceType: 1,
+      });
+    },
+    { immediate: true },
+  );
 
   // 接收群组成员列表
-  socket.value.on('group_call_state', handleCallState);
-  socket.value.on('group_call_members', handleCallMembers);
+  target.on('group_call_state', handleCallState);
+  target.on('group_call_members', handleCallMembers);
 
   // 新成员加入
-  socket.value.on('group_call_member_joined', handleCallMemberJoined);
-  socket.value.on('group_call_member_left', handleCallMemberLeft);
-  socket.value.on('group_call_presence', handleCallPresence);
-  socket.value.on('group_call_ended', handleCallEnded);
-  socket.value.on('disconnect', handleSocketDisconnect);
+  target.on('group_call_member_joined', handleCallMemberJoined);
+  target.on('group_call_member_left', handleCallMemberLeft);
+  target.on('group_call_presence', handleCallPresence);
+  target.on('group_call_ended', handleCallEnded);
+  target.on('disconnect', handleSocketDisconnect);
 
   // WebRTC 信令
-  socket.value.on('group_webrtc_offer', handleOffer);
-  socket.value.on('group_webrtc_answer', handleAnswer);
-  socket.value.on('group_webrtc_ice', handleIceCandidate);
+  target.on('group_webrtc_offer', handleOffer);
+  target.on('group_webrtc_answer', handleAnswer);
+  target.on('group_webrtc_ice', handleIceCandidate);
 
   // 麦克风权限变化
-  socket.value.on('mic_permission_changed', handleMicPermissionChanged);
+  target.on('mic_permission_changed', handleMicPermissionChanged);
 
   // 成员麦克风状态变化
-  socket.value.on('member_mic_changed', handleMemberMicChanged);
+  target.on('member_mic_changed', handleMemberMicChanged);
 }
 
 // 创建对等连接
@@ -581,9 +584,10 @@ function cleanupCall(endOwnedSession: boolean) {
     socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 1 });
   }
   socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: 1 });
-  removeAuthenticatedListener?.();
+  stopAuthenticatedWatch?.();
+  stopAuthenticatedWatch = null;
   unbindSocketEvents();
-  leaveMeetingGroup(groupId.value);
+  socketStore.leaveGroup(groupId.value);
 }
 
 function unbindSocketEvents() {

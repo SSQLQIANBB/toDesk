@@ -226,19 +226,20 @@ import { useMessage, type ScrollbarInst } from 'naive-ui';
 import { ArrowBackFilled, VideocamFilled, ScreenShareFilled, InfoFilled } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuth } from '@/stores/auth';
-import type { Socket } from 'socket.io-client';
+import { storeToRefs } from 'pinia';
+import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
 import { getGroupMessages } from '@/api/message';
-import { joinMeetingGroup, leaveMeetingGroup } from '@/services/meetingSocket';
 import { groupSessionState } from '@/services/groupSessionState';
 
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const { currentUser } = useAuth();
+const socketStore = useSocketStore();
+const { socket } = storeToRefs(socketStore);
 
 const groupId = ref(parseInt(route.params.id as string));
-const socket = ref<Socket | null>(null);
 const scrollbarRef = ref<ScrollbarInst | null>(null);
 
 const detailLoading = ref(false);
@@ -292,72 +293,55 @@ async function loadGroupHistory() {
 }
 
 function initSocket() {
-  socket.value = joinMeetingGroup(groupId.value);
+  socketStore.joinGroup(groupId.value);
+  socket.value?.on('group_members', handleGroupMembers);
+  socket.value?.on('group_member_joined', handleGroupMemberJoined);
+  socket.value?.on('group_member_left', handleGroupMemberLeft);
+  socket.value?.on('group_message', handleGroupMessage);
+  socket.value?.on('group_call_started', handleGroupCallStarted);
+}
 
-  // 认证
-  socket.value.off('group_members');
-  socket.value.off('group_member_joined');
-  socket.value.off('group_member_left');
-  socket.value.off('group_message');
+function handleGroupMembers(data: { groupId: number; members: any[] }) {
+  if (data.groupId !== groupId.value) return;
 
-  // 接收群组成员列表
-  socket.value.on('group_members', (data: { groupId: number; members: any[] }) => {
-    if (data.groupId === groupId.value) {
-      // 更新成员在线状态
-      data.members.forEach(socketMember => {
-        const member = members.value.find(m => m.id === socketMember.id);
-        if (member) {
-          member.online = true;
-        }
-      });
-    }
+  data.members.forEach(socketMember => {
+    const member = members.value.find(item => item.id === socketMember.id);
+    if (member) member.online = true;
   });
+}
 
-  // 新成员加入
-  socket.value.on('group_member_joined', (data: { groupId: number; member: any }) => {
-    if (data.groupId === groupId.value) {
-      const member = members.value.find(m => m.id === data.member.id);
-      if (member) {
-        member.online = true;
-      }
-      message.info(`${data.member.nickname || data.member.username} 加入了群组`);
-    }
+function handleGroupMemberJoined(data: { groupId: number; member: any }) {
+  if (data.groupId !== groupId.value) return;
+
+  const member = members.value.find(item => item.id === data.member.id);
+  if (member) member.online = true;
+  message.info(`${data.member.nickname || data.member.username} 加入了群组`);
+}
+
+function handleGroupMemberLeft(_data: { socketId: string }) {
+  // 服务端当前未返回 userId，暂时无法准确更新对应成员。
+}
+
+function handleGroupMessage(data: any) {
+  if (data.groupId !== groupId.value) return;
+
+  messages.value.push({
+    message: data.message,
+    time: data.time,
+    user: data.user,
+    isMine: false,
   });
+  scrollToBottom();
 
-  // 成员离开
-  socket.value.on('group_member_left', (_data: { socketId: string }) => {
-    // 这里需要通过socketId找到对应的成员
-    // 简化处理，可以在后端返回userId
-  });
-
-  // 接收群组消息
-  socket.value.on('group_message', (data: any) => {
-    if (data.groupId === groupId.value) {
-      messages.value.push({
-        message: data.message,
-        time: data.time,
-        user: data.user,
-        isMine: false,
-      });
-      scrollToBottom();
-      
-      // 如果窗口未聚焦，显示桌面通知
-      if (document.hidden && data.user?.id !== currentUser.value?.id) {
-        notificationService.showGroupMessage(
-          groupInfo.value?.name || '群组',
-          data.user?.nickname || data.user?.username || '群成员',
-          data.message,
-          data.user?.avatar,
-          () => {
-            window.focus();
-          }
-        );
-      }
-    }
-  });
-
-  // 监听视频通话开始
-  socket.value.on('group_call_started', handleGroupCallStarted);
+  if (document.hidden && data.user?.id !== currentUser.value?.id) {
+    notificationService.showGroupMessage(
+      groupInfo.value?.name || '群组',
+      data.user?.nickname || data.user?.username || '群成员',
+      data.message,
+      data.user?.avatar,
+      () => window.focus(),
+    );
+  }
 }
 
 function handleGroupCallStarted(data: any) {
@@ -429,10 +413,12 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (socket.value) {
-    socket.value.off('group_call_started', handleGroupCallStarted);
-  }
-  leaveMeetingGroup(groupId.value);
+  socket.value?.off('group_members', handleGroupMembers);
+  socket.value?.off('group_member_joined', handleGroupMemberJoined);
+  socket.value?.off('group_member_left', handleGroupMemberLeft);
+  socket.value?.off('group_message', handleGroupMessage);
+  socket.value?.off('group_call_started', handleGroupCallStarted);
+  socketStore.leaveGroup(groupId.value);
 });
 </script>
 

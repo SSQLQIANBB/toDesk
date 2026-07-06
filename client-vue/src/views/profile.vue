@@ -302,12 +302,13 @@ import { useMessage, type FormInst, type FormRules, type UploadCustomRequestOpti
 import { ArrowBackFilled } from '@vicons/material';
 import { getCurrentUser, updateUser } from '@/api/auth';
 import { useAuth } from '@/stores/auth';
+import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
-import { updateMeetingStatus } from '@/services/meetingSocket';
 
 const router = useRouter();
 const message = useMessage();
 const { updateUserInfo } = useAuth();
+const socketStore = useSocketStore();
 
 const formRef = ref<FormInst | null>(null);
 const passwordFormRef = ref<FormInst | null>(null);
@@ -597,7 +598,7 @@ async function handleStatusChange() {
     const result = await updateUser({ status: formData.status });
     console.log('状态更新结果:', result);
     updateUserInfo({ status: formData.status });
-    updateMeetingStatus(formData.status);
+    socketStore.updateStatus(formData.status);
     message.success('状态修改成功');
   } catch (error: any) {
     console.error('状态修改失败:', error);

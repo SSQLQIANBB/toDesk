@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import type { User } from '@/api/auth';
+import { logout } from '@/api/auth';
 
 // 用户状态管理
 const currentUser = ref<User | null>(null);
@@ -71,7 +72,6 @@ async function clearAuth() {
   // 调用后端登出接口
   if (token.value) {
     try {
-      const { logout } = await import('@/api/auth');
       await logout();
     } catch (error) {
       console.error('登出请求失败:', error);

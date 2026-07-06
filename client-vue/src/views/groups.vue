@@ -299,12 +299,13 @@ import {
   type GroupDetail as GroupDetailType 
 } from '@/api/group';
 import { getUserList } from '@/api/auth';
-import { joinMeetingGroup, leaveMeetingGroup } from '@/services/meetingSocket';
+import { useSocketStore } from '@/stores/socket';
 import { groupSessionState } from '@/services/groupSessionState';
 
 const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
+const socketStore = useSocketStore();
 
 const loading = ref(false);
 const createLoading = ref(false);
@@ -362,7 +363,7 @@ async function loadGroups() {
     loading.value = true;
     const { groups: list } = await getMyGroups();
     groups.value = list;
-    list.forEach(group => joinMeetingGroup(group.id));
+    list.forEach(group => socketStore.joinGroup(group.id));
   } catch (error: any) {
     message.error('加载群组列表失败: ' + error.message);
   } finally {
@@ -570,7 +571,7 @@ function handleDeleteGroup() {
         deleteLoading.value = true;
         await deleteGroup(group.id);
         groupSessionState.clearGroup(group.id);
-        leaveMeetingGroup(group.id);
+        socketStore.leaveGroup(group.id);
         groups.value = groups.value.filter(item => item.id !== group.id);
         showEditModal.value = false;
         showDetailModal.value = false;
@@ -597,7 +598,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  groups.value.forEach(group => leaveMeetingGroup(group.id));
+  groups.value.forEach(group => socketStore.leaveGroup(group.id));
 });
 </script>
 

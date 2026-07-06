@@ -111,6 +111,9 @@ importers:
       '@sycsq/common':
         specifier: ^0.0.3
         version: 0.0.3
+      '@vicons/ionicons5':
+        specifier: ^0.13.0
+        version: 0.13.0
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.9.3)(vue@3.5.22(typescript@5.9.3))
@@ -848,6 +851,9 @@ packages:
 
   '@vicons/fluent@0.13.0':
     resolution: {integrity: sha512-bYGZsOE3qzvm3Cm43e7tybgGlr5ZUpYqtRZq0g0Tfupe8jIzLolpvQLNUt1zS8Mgt6goTbUk5YH7Fkv16jkykg==}
+
+  '@vicons/ionicons5@0.13.0':
+    resolution: {integrity: sha512-zvZKBPjEXKN7AXNo2Na2uy+nvuv6SP4KAMQxpKL2vfHMj0fSvuw7JZcOPCjQC3e7ayssKnaoFVAhbYcW6v41qQ==}
 
   '@vicons/material@0.13.0':
     resolution: {integrity: sha512-lKVxFNprM+CaBkUH3gt6VjIeiMsKQl2zARQMwTCZruQl2vRHzyeZiKeCflWS99CEfv2JzX/6y697smxlzyxcVw==}
@@ -3882,6 +3888,8 @@ snapshots:
   '@types/validator@13.15.4': {}
 
   '@vicons/fluent@0.13.0': {}
+
+  '@vicons/ionicons5@0.13.0': {}
 
   '@vicons/material@0.13.0': {}
 
