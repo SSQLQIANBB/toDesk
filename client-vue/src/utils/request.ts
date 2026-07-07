@@ -101,7 +101,11 @@ export async function request<T = any>(
     requestHeaders.Authorization = `Bearer ${auth.token}`;
   }
 
-  requestHeaders['Content-Type'] = 'application/json';
+  const isFormData = body instanceof FormData;
+
+  if (!isFormData) {
+    requestHeaders['Content-Type'] = requestHeaders['Content-Type'] || 'application/json';
+  }
 
   const config: RequestInit = {
     method,
@@ -109,7 +113,7 @@ export async function request<T = any>(
   };
 
   if (body && method !== 'GET') {
-    config.body = JSON.stringify(body);
+    config.body = isFormData ? body : JSON.stringify(body);
   }
 
   try {

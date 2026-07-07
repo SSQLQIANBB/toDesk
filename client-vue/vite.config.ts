@@ -53,6 +53,10 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
         // rewrite: path => path.replace(/^\/sse/, '/'),
+      },
+      '/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
       }
     }
   }

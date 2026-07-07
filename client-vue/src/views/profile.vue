@@ -20,16 +20,16 @@
         <n-tabs type="line" animated>
           <!-- 基本信息 -->
           <n-tab-pane name="basic" tab="基本信息">
-            <n-form ref="formRef" :model="formData" :rules="rules" label-placement="left" label-width="100">
+            <n-form ref="formRef" :model="formData" :rules="rules" label-placement="top" label-width="100">
               <!-- 头像 -->
-              <n-form-item label="头像">
+              <n-form-item :show-label="false">
                 <div class="flex items-center gap-4">
                   <n-avatar 
                     :size="80" 
-                    :src="formData.avatar || undefined"
-                    class="shadow-md"
+                    :src="formData.avatar"
+                    class="shadow-md flex-shrink-0"
                   >
-                    {{ formData.nickname?.charAt(0) || formData.username?.charAt(0) || '?' }}
+                    <span v-if="!formData.avatar">{{ formData.nickname?.charAt(0) || formData.username?.charAt(0) || '?' }}</span>
                   </n-avatar>
                   <div class="flex flex-col gap-2">
                     <n-upload
@@ -95,7 +95,7 @@
 
               <!-- 操作按钮 -->
               <n-form-item>
-                <div class="flex gap-3">
+                <div class="w-full flex gap-3 justify-center">
                   <n-button 
                     type="primary" 
                     :loading="loading"
@@ -304,6 +304,7 @@ import { getCurrentUser, updateUser } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
+import { uploadFile } from '@/api/common';
 
 const router = useRouter();
 const message = useMessage();
@@ -500,31 +501,36 @@ async function loadUserInfo() {
 }
 
 // 处理头像上传
-async function handleAvatarUpload({ file }: UploadCustomRequestOptions) {
+async function handleAvatarUpload({ file, onFinish, onError }: UploadCustomRequestOptions) {
   const maxSize = 2 * 1024 * 1024; // 2MB
+  const rawFile = file.file;
   
-  if (file.file && file.file.size > maxSize) {
+  if (!rawFile) {
+    message.error('请选择文件');
+    onError();
+    return;
+  }
+
+  if (rawFile.size > maxSize) {
     message.error('图片大小不能超过 2MB');
+    onError();
     return;
   }
 
   try {
-    // 将图片转换为base64
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      if (e.target?.result) {
-        formData.avatar = e.target.result as string;
-        message.success('头像上传成功');
-      }
-    };
-    reader.onerror = () => {
-      message.error('图片读取失败');
-    };
-    if (file.file) {
-      reader.readAsDataURL(file.file);
-    }
+    const uploadFormData = new FormData();
+
+    uploadFormData.append('file', rawFile);
+
+    const { file: uploadedFile } = await uploadFile(uploadFormData);
+    formData.avatar = uploadedFile.fileUrl;
+
+    console.log(formData)
+    message.success('头像上传成功');
+    onFinish();
   } catch (error: any) {
     message.error('上传失败: ' + error.message);
+    onError();
   }
 }
 
@@ -615,9 +621,11 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
-:deep(.n-card) {
-  border-radius: 12px;
+<style scoped lang="less">
+:deep {
+  .n-card {
+    border-radius: 12px;
+  }
 }
 </style>
 
