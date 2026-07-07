@@ -25,6 +25,7 @@ type MeetingUser = {
   nickname?: string;
   avatar?: string;
   status: PresenceStatus;
+  bio?: string;
 };
 
 const userMap = new Map<string, MeetingUser>();
@@ -118,6 +119,7 @@ const initialMeeting = (server: Server) => {
           nickname: data.nickname || dbUser?.nickname || payload.username,
           avatar: data.avatar || dbUser?.avatar,
           status,
+          bio: dbUser?.bio,
         };
 
         userMap.set(socketId, currentUser);

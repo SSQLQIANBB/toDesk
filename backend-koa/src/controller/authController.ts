@@ -158,6 +158,7 @@ export async function getCurrentUser(ctx: Context) {
         email: userData.email,
         phone: userData.phone,
         status: userData.status,
+        bio: userData.bio,
       });
     }
 
@@ -170,6 +171,7 @@ export async function getCurrentUser(ctx: Context) {
         email: userData.email,
         phone: userData.phone,
         status: userData.status,
+        bio: userData.bio,
       },
     };
   } catch (error: any) {

@@ -18,7 +18,7 @@
             class="cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
             @click="goToProfile"
           >
-            {{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}
+            <span v-if="!authUser?.avatar">{{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}</span>
           </n-avatar>
           <div class="flex-1">
             <div class="font-bold text-sm">{{ authUser?.nickname || authUser?.username || '未登录' }}</div>
@@ -68,14 +68,14 @@
                   :class="contactUser?.id === user.id ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
                   @click="selectContact(user)"
                 >
-                  <n-avatar :size="40" :src="user.avatar || undefined">
-                    {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
+                  <n-avatar :size="40" :src="user.avatar || undefined" class="flex-shrink-0">
+                    <span v-if="!user.avatar">{{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}</span>
                   </n-avatar>
-                  <div class="flex-1">
-                    <div class="font-semibold text-sm">{{ user.nickname || user.username || `用户-${user.id}` }}</div>
-                    <div class="text-xs text-gray-500">ID: {{ user.id }}</div>
+                  <div class="flex-1 w-0">
+                    <div class="font-semibold text-base">{{ user.nickname || user.username || `用户-${user.id}` }}</div>
+                    <div class="text-xs text-gray-500 truncate">{{ user.bio || '人很懒，无简介~' }}</div>
                   </div>
-                  <div class="w-2 h-2 rounded-full bg-green-400"></div>
+                  <div class="w-2 h-2 rounded-full" :class="getStatusColor(user?.status || 'online')" ></div>
                 </li>
               </n-badge>
 
@@ -113,7 +113,7 @@
                   @click="goToGroupChat(group.id)"
                 >
                   <n-avatar :size="40" :src="group.avatar || undefined">
-                    {{ group.name?.charAt(0) || 'G' }}
+                    <span v-if="!group.avatar">{{ group.name?.charAt(0) || 'G' }}</span>
                   </n-avatar>
                   <div class="flex-1">
                     <div class="font-semibold text-sm">{{ group.name }}</div>
@@ -144,13 +144,13 @@
       <div v-if="contactUser" class="h-full w-full flex flex-col bg-white">
         <!-- 聊天头部 -->
         <header class="min-h-16 shadow-sm flex items-center px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-500 flex items-center justify-center text-white font-bold">
-              {{ (contactUser.nickname || contactUser.username || String(contactUser.id)).slice(0, 2) }}
-            </div>
-            <div>
+          <div class="flex items-center gap-3 w-0 flex-grow overflow-hidden">
+            <n-avatar :size="40" :src="contactUser.avatar || undefined" class="flex-shrink-0">
+              <span v-if="!contactUser.avatar">{{ contactUser.nickname?.charAt(0) || contactUser.username?.charAt(0) || '?' }}</span>
+            </n-avatar>
+            <div class="flex-grow-1 w-auto overflow-hidden">
               <div class="font-bold text-base">{{ contactUser.nickname || contactUser.username || `用户-${contactUser.id}` }}</div>
-              <div class="text-xs text-gray-500">ID: {{ contactUser.id }}</div>
+              <div class="text-xs text-nowrap text-gray-500 truncate">{{ contactUser.bio || '人很懒，无简介~' }}</div>
             </div>
           </div>
         </header>
@@ -431,7 +431,7 @@ function sendMsg(v: string) {
 // 滚动到底部
 function scrollToBottom() {
   nextTick(() => {
-    scrollbarRef.value?.scrollTo({ top: scrollbarRef.value.$el.scrollHeight, behavior: 'smooth' });
+    scrollbarRef.value?.scrollTo({ top: 999999, behavior: 'smooth' });
   });
 }
 
