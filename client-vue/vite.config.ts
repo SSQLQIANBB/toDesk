@@ -5,6 +5,9 @@ import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import Components from 'unplugin-vue-components/vite'
 import { resolve } from 'path'
 import tailwindcss from 'tailwindcss'
+import viteCompression from 'vite-plugin-compression'
+
+const compressibleAssets = /\.(?:js|mjs|json|css|html|svg|txt|xml|wasm)$/i
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -25,6 +28,23 @@ export default defineConfig({
     }),
     Components({
       resolvers: [NaiveUiResolver()]
+    }),
+    viteCompression({
+      algorithm: 'brotliCompress',
+      ext: '.br',
+      threshold: 0,
+      deleteOriginFile: false,
+      filter: compressibleAssets,
+      compressionOptions: {
+        level: 11,
+      },
+    }),
+    viteCompression({
+      algorithm: 'gzip',
+      ext: '.gz',
+      threshold: 0,
+      deleteOriginFile: false,
+      filter: compressibleAssets,
     })
   ],
   worker: {
@@ -40,6 +60,29 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src')
     }
+  },
+
+  build: {
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+
+          if (/[\\/]node_modules[\\/](@vue|vue|vue-router|pinia|pinia-plugin-persistedstate)[\\/]/.test(id)) {
+            return 'vendor-vue'
+          }
+
+          if (/[\\/]node_modules[\\/](naive-ui|@vicons)[\\/]/.test(id)) {
+            return 'vendor-ui'
+          }
+
+          if (/[\\/]node_modules[\\/](socket\.io-client|engine\.io-client|socket\.io-parser|@socket\.io)[\\/]/.test(id)) {
+            return 'vendor-socket'
+          }
+        },
+      },
+    },
   },
 
   server: {
