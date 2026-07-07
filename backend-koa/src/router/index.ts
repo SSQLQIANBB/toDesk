@@ -7,7 +7,7 @@ import invitationRouter from './invitation';
 import fileRouter from './file';
 import Router from 'koa-router';
 
-export const apiRouter = new Router({
+const apiRouter = new Router({
   prefix: '/api'
 })
 

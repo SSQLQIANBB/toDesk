@@ -9,3 +9,4 @@ dist
 .superpowers/
 client-vue/test-results/
 client-vue/playwright-report/
+backend-koa/uploads

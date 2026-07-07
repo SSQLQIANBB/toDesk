@@ -1,6 +1,8 @@
 import Koa from 'koa';
 import chalk from 'chalk'
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import { koaBody } from 'koa-body';
 import setupRouter from './router';
 import initializeSocket from './config/initializeSocket';
@@ -22,6 +24,18 @@ app.use(koaBody({
     maxFileSize: 10 * 1024 * 1024, // 10MB
   }
 }));
+
+app.use(async (ctx, next) => {
+  if (!ctx.path.startsWith('/uploads/')) return next();
+
+  const uploadDir = path.join(process.cwd(), 'uploads');
+  const filePath = path.resolve(uploadDir, `.${ctx.path.replace('/uploads', '')}`);
+
+  if (!filePath.startsWith(uploadDir)) return next();
+  if (!fs.existsSync(filePath)) return next();
+  ctx.type = path.extname(filePath);
+  ctx.body = fs.createReadStream(filePath);
+});
 
 // 启动服务器
 async function startServer() {
