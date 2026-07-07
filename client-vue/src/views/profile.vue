@@ -301,13 +301,13 @@ import { useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules, type UploadCustomRequestOptions } from 'naive-ui';
 import { ArrowBackFilled } from '@vicons/material';
 import { getCurrentUser, updateUser } from '@/api/auth';
-import { useAuth } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
 
 const router = useRouter();
 const message = useMessage();
-const { updateUserInfo } = useAuth();
+const authStore = useAuthStore();
 const socketStore = useSocketStore();
 
 const formRef = ref<FormInst | null>(null);
@@ -543,7 +543,7 @@ async function handleSubmit() {
       status: formData.status,
     });
 
-    updateUserInfo(user);
+    authStore.updateUserInfo(user);
     message.success('保存成功');
   } catch (error: any) {
     if (error.message) {
@@ -579,9 +579,7 @@ async function handleChangePassword() {
     
     // 延迟后登出
     setTimeout(async () => {
-      const { clearAuth } = useAuth();
-      await clearAuth();
-      router.push('/login');
+      await authStore.logout({ navigate: true });
     }, 1500);
   } catch (error: any) {
     if (error.message) {
@@ -597,7 +595,7 @@ async function handleStatusChange() {
   try {
     const result = await updateUser({ status: formData.status });
     console.log('状态更新结果:', result);
-    updateUserInfo({ status: formData.status });
+    authStore.updateUserInfo({ status: formData.status });
     socketStore.updateStatus(formData.status);
     message.success('状态修改成功');
   } catch (error: any) {

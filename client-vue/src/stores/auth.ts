@@ -1,115 +1,129 @@
-import { ref, computed } from 'vue';
-import type { User } from '@/api/auth';
-import { logout } from '@/api/auth';
+import { defineStore } from 'pinia';
+import type { PersistenceOptions } from 'pinia-plugin-persistedstate';
+import type { LocationQueryRaw } from 'vue-router';
+import {
+  getCurrentUser,
+  login as apiLogin,
+  logout as apiLogout,
+  type LoginParams,
+  type User,
+} from '@/api/auth';
 
-// 用户状态管理
-const currentUser = ref<User | null>(null);
-const token = ref<string | null>(null);
-const refreshToken = ref<string | null>(null);
+type LogoutOptions = {
+  callApi?: boolean;
+  redirect?: string;
+  navigate?: boolean;
+};
 
-// 初始化：从localStorage恢复token和用户信息
-function initAuth() {
-  const savedToken = localStorage.getItem('token');
-  const savedRefreshToken = localStorage.getItem('refreshToken');
-  const savedUser = localStorage.getItem('user');
-  
-  if (savedToken) {
-    token.value = savedToken;
-  }
-  
-  if (savedRefreshToken) {
-    refreshToken.value = savedRefreshToken;
-  }
-  
-  if (savedUser) {
-    try {
-      currentUser.value = JSON.parse(savedUser);
-    } catch (error) {
-      console.error('解析用户信息失败:', error);
-      localStorage.removeItem('user');
-    }
-  }
+type CredentialLoginResult = {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+  message: string;
+};
+
+interface AuthState {
+  currentUser: User | null;
+  token: string | null;
+  refreshToken: string | null;
 }
 
-// 设置用户信息和token（兼容旧版本单token）
-function setAuth(user: User, authToken: string, authRefreshToken?: string) {
-  currentUser.value = user;
-  token.value = authToken;
-  
-  localStorage.setItem('token', authToken);
-  localStorage.setItem('user', JSON.stringify(user));
-  
-  if (authRefreshToken) {
-    refreshToken.value = authRefreshToken;
-    localStorage.setItem('refreshToken', authRefreshToken);
-  }
-}
+const persistPrefix = '__STORAGE_PERSIST_AUTH_';
 
-// 更新 access token（用于刷新）
-function updateToken(newAccessToken: string, newRefreshToken?: string) {
-  token.value = newAccessToken;
-  localStorage.setItem('token', newAccessToken);
-  
-  if (newRefreshToken) {
-    refreshToken.value = newRefreshToken;
-    localStorage.setItem('refreshToken', newRefreshToken);
-  }
-}
+const persistOptions: PersistenceOptions<AuthState> = {
+  storage: localStorage,
+  key: persistPrefix,
+  pick: ['token', 'refreshToken'],
+};
 
-// 只清理本地认证状态，被动鉴权失败时不能再次请求受保护的登出接口
-function clearAuthLocal() {
-  currentUser.value = null;
-  token.value = null;
-  refreshToken.value = null;
+export const useAuthStore = defineStore('auth', {
+  state: (): AuthState => ({
+    currentUser: null,
+    token: null,
+    refreshToken: null,
+  }),
 
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
-}
+  getters: {
+    isAuthenticated: state => !!state.token,
+  },
 
-// 清除认证信息
-async function clearAuth() {
-  // 调用后端登出接口
-  if (token.value) {
-    try {
-      await logout();
-    } catch (error) {
-      console.error('登出请求失败:', error);
-    }
-  }
+  actions: {
 
-  clearAuthLocal();
-}
+    setAuth(user: User, authToken: string, authRefreshToken?: string) {
+      this.currentUser = user;
+      this.token = authToken;
 
-// 更新用户信息
-function updateUserInfo(user: Partial<User>) {
-  if (currentUser.value) {
-    currentUser.value = { ...currentUser.value, ...user };
-    localStorage.setItem('user', JSON.stringify(currentUser.value));
-  }
-}
+      if (authRefreshToken) {
+        this.refreshToken = authRefreshToken;
+      }
+    },
 
-function restoreUser(user: User) {
-  currentUser.value = user;
-  localStorage.setItem('user', JSON.stringify(user));
-}
+    updateToken(newAccessToken: string, newRefreshToken?: string) {
+      this.token = newAccessToken;
 
-// 是否已登录
-const isAuthenticated = computed(() => !!token.value);
+      if (newRefreshToken) {
+        this.refreshToken = newRefreshToken;
+      }
+    },
 
-export function useAuth() {
-  return {
-    currentUser,
-    token,
-    refreshToken,
-    isAuthenticated,
-    initAuth,
-    setAuth,
-    updateToken,
-    clearAuth,
-    clearAuthLocal,
-    updateUserInfo,
-    restoreUser,
-  };
-}
+    clearAuthLocal() {
+      this.currentUser = null;
+      this.token = null;
+      this.refreshToken = null;
+    },
 
+    async fetchCurrentUser() {
+      const { user } = await getCurrentUser({ skipAuthRedirect: true });
+      this.currentUser = user;
+      return user;
+    },
+
+    async login(credentials?: LoginParams): Promise<CredentialLoginResult | { user: User }> {
+      if (credentials) {
+        const result = await apiLogin(credentials);
+        this.setAuth(result.user, result.accessToken, result.refreshToken);
+        return result;
+      }
+
+      const user = await this.fetchCurrentUser();
+      return { user };
+    },
+
+    async logout(options: LogoutOptions = {}) {
+      const { callApi = true, navigate = false, redirect } = options;
+      const hadToken = !!this.token;
+
+      if (callApi && hadToken) {
+        try {
+          await apiLogout();
+        } catch (error) {
+          console.error('Logout request failed:', error);
+        }
+      }
+
+      this.clearAuthLocal();
+
+      if (navigate) {
+        const { default: router } = await import('@/router');
+        const query: LocationQueryRaw = redirect ? { redirect } : {};
+        await router.replace({ name: 'Login', query });
+      }
+    },
+
+    async clearAuth() {
+      await this.logout({ callApi: true });
+    },
+
+    updateUserInfo(user: Partial<User>) {
+      if (this.currentUser) {
+        this.currentUser = { ...this.currentUser, ...user };
+      }
+    },
+
+    restoreUser(user: User) {
+      this.currentUser = user;
+    },
+  },
+
+  persist: persistOptions,
+});

@@ -10,10 +10,12 @@
 
 <script setup lang="ts">
 import { watch } from 'vue';
-import { useAuth } from '@/stores/auth';
+import { storeToRefs } from 'pinia';
+import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 
-const { token, currentUser } = useAuth();
+const authStore = useAuthStore();
+const { token, currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 
 watch(

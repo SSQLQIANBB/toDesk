@@ -7,6 +7,9 @@ import {
   type GroupSession,
   type GroupSessionType,
 } from '@/services/groupSessionState';
+import { refreshAccessToken } from '@/utils/request';
+import { useAuthStore } from './auth';
+import { pinia } from '@/stores';
 
 export type PresenceStatus = 'online' | 'offline' | 'busy';
 export type OnlineUser = User & { socketId: string };
@@ -54,7 +57,13 @@ export const useSocketStore = defineStore('socket', () => {
     });
   }
 
-  function handleAuthError() {
+  async function handleAuthError() {
+    const authStore = useAuthStore(pinia);
+    const res = await refreshAccessToken();
+
+    if (!res) {
+      await authStore.logout({ callApi: false, navigate: true });
+    }
     authenticated.value = false;
     userList.value = [];
   }

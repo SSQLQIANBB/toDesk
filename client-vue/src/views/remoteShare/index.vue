@@ -194,7 +194,7 @@ import { useRoute, useRouter } from 'vue-router';
 import type { Socket } from 'socket.io-client';
 import { storeToRefs } from 'pinia';
 import { useMessage, useDialog } from 'naive-ui';
-import { useAuth } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { getMyGroups, type Group } from '@/api/group';
 import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type OfflineMessage } from '@/api/message';
@@ -211,7 +211,8 @@ import { ChatboxEllipsesOutline, PersonOutline } from '@vicons/ionicons5';
 
 const router = useRouter();
 const route = useRoute();
-const { currentUser: authUser, token, clearAuth } = useAuth();
+const authStore = useAuthStore();
+const { currentUser: authUser, token } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const { socket, authenticated: online, userList } = storeToRefs(socketStore);
 const activeTab = ref<RemoteTab>(parseRemoteTab(route.query.tab));
@@ -276,8 +277,7 @@ const toolBarRef = ref();
 
 // 退出登录
 async function handleLogout() {
-  await clearAuth();
-  await router.replace('/login');
+  await authStore.logout({ navigate: true });
 }
 
 // 私信

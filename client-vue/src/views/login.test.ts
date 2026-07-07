@@ -12,12 +12,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/auth', () => ({
-  login: mocks.login,
   register: vi.fn(),
 }));
 
 vi.mock('@/stores/auth', () => ({
-  useAuth: () => ({ setAuth: mocks.setAuth }),
+  useAuthStore: () => ({ setAuth: mocks.setAuth, login: mocks.login }),
 }));
 
 vi.mock('vue-router', () => ({

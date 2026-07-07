@@ -251,7 +251,7 @@ import {
   PeopleFilled
 } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
-import { useAuth } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
@@ -274,7 +274,8 @@ import {
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
-const { currentUser } = useAuth();
+const authStore = useAuthStore();
+const { currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const { socket, authenticated } = storeToRefs(socketStore);
 

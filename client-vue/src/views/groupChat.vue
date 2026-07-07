@@ -225,7 +225,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type ScrollbarInst } from 'naive-ui';
 import { ArrowBackFilled, VideocamFilled, ScreenShareFilled, InfoFilled } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
-import { useAuth } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { storeToRefs } from 'pinia';
 import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
@@ -235,7 +235,8 @@ import { groupSessionState } from '@/services/groupSessionState';
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
-const { currentUser } = useAuth();
+const authStore = useAuthStore();
+const { currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const { socket } = storeToRefs(socketStore);
 

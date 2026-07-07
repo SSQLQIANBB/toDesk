@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAuth } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
+import { pinia } from '@/stores';
 import { request } from './request';
 
 const routerMocks = vi.hoisted(() => ({
@@ -22,10 +23,10 @@ function jsonResponse(status: number, body: Record<string, unknown>) {
 }
 
 function resetAuth() {
-  const auth = useAuth();
-  auth.currentUser.value = null;
-  auth.token.value = null;
-  auth.refreshToken.value = null;
+  const auth = useAuthStore(pinia);
+  auth.currentUser = null;
+  auth.token = null;
+  auth.refreshToken = null;
   localStorage.clear();
   return auth;
 }
@@ -40,7 +41,7 @@ describe('request authentication recovery', () => {
   });
 
   it('多个并发 401 只刷新、清理和跳转一次', async () => {
-    const auth = useAuth();
+    const auth = useAuthStore(pinia);
     auth.setAuth(
       { id: 1, username: 'owner' },
       'expired-access-token',
@@ -71,16 +72,16 @@ describe('request authentication recovery', () => {
       name: 'Login',
       query: { redirect: '/groups?view=mine' },
     });
-    expect(auth.token.value).toBeNull();
-    expect(auth.refreshToken.value).toBeNull();
-    expect(auth.currentUser.value).toBeNull();
+    expect(auth.token).toBeNull();
+    expect(auth.refreshToken).toBeNull();
+    expect(auth.currentUser).toBeNull();
 
     await Promise.allSettled([request('/api/groups/late-response')]);
     expect(routerMocks.replace).toHaveBeenCalledTimes(1);
   });
 
   it('刷新成功后只重试原请求一次并更新 token', async () => {
-    const auth = useAuth();
+    const auth = useAuthStore(pinia);
     auth.setAuth(
       { id: 1, username: 'owner' },
       'expired-access-token',
@@ -103,24 +104,24 @@ describe('request authentication recovery', () => {
 
     await expect(request<{ value: string }>('/api/groups/my')).resolves.toEqual({ value: 'ok' });
     expect(resourceRequests).toBe(2);
-    expect(auth.token.value).toBe('new-access-token');
+    expect(auth.token).toBe('new-access-token');
     expect(routerMocks.replace).not.toHaveBeenCalled();
   });
 
   it('403 权限不足不会清除登录状态', async () => {
-    const auth = useAuth();
+    const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'valid-token', 'valid-refresh');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       jsonResponse(403, { error: '没有权限' }),
     ));
 
     await expect(request('/api/groups/7')).rejects.toThrow('没有权限');
-    expect(auth.token.value).toBe('valid-token');
+    expect(auth.token).toBe('valid-token');
     expect(routerMocks.replace).not.toHaveBeenCalled();
   });
 
   it('登录接口 401 不刷新且不产生重定向循环', async () => {
-    const auth = useAuth();
+    const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'old-token', 'old-refresh');
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(401, { error: '用户名或密码错误' }),
@@ -134,11 +135,11 @@ describe('request authentication recovery', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(routerMocks.replace).not.toHaveBeenCalled();
-    expect(auth.token.value).toBe('old-token');
+    expect(auth.token).toBe('old-token');
   });
 
   it('没有 refreshToken 时直接统一退出并保留原访问地址', async () => {
-    const auth = useAuth();
+    const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'expired-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       jsonResponse(401, { error: 'expired' }),
@@ -151,11 +152,11 @@ describe('request authentication recovery', () => {
       name: 'Login',
       query: { redirect: '/groups?view=mine' },
     });
-    expect(auth.token.value).toBeNull();
+    expect(auth.token).toBeNull();
   });
 
   it('路由守卫恢复用户的 401 交由守卫跳转，不发起嵌套路由导航', async () => {
-    const auth = useAuth();
+    const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'expired-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       jsonResponse(401, { error: 'expired' }),

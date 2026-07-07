@@ -26,7 +26,6 @@ describe('loginController', () => {
         calls.push('login');
         return loginResult;
       }),
-      setAuth: vi.fn(() => calls.push('setAuth')),
       navigate: vi.fn(async () => {
         calls.push('navigate');
       }),
@@ -40,7 +39,7 @@ describe('loginController', () => {
       redirect: '/groups',
     });
 
-    expect(calls).toEqual(['validate', 'login', 'setAuth', 'navigate']);
+    expect(calls).toEqual(['validate', 'login', 'navigate']);
     expect(controller.loading.value).toBe(false);
   });
 
@@ -49,7 +48,6 @@ describe('loginController', () => {
     const login = vi.fn(() => pending.promise);
     const controller = createLoginController({
       login,
-      setAuth: vi.fn(),
       navigate: vi.fn(),
       showSuccess: vi.fn(),
       showError: vi.fn(),
@@ -76,7 +74,6 @@ describe('loginController', () => {
     const navigate = vi.fn();
     const controller = createLoginController({
       login: vi.fn().mockResolvedValue(loginResult),
-      setAuth: vi.fn(),
       navigate,
       showSuccess: vi.fn(),
       showError: vi.fn(),
@@ -105,7 +102,6 @@ describe('loginController', () => {
     const showError = vi.fn();
     const controller = createLoginController({
       login,
-      setAuth: vi.fn(),
       navigate: vi.fn(),
       showSuccess: vi.fn(),
       showError,
@@ -126,7 +122,6 @@ describe('loginController', () => {
     const navigation = deferred<void>();
     const controller = createLoginController({
       login: vi.fn().mockResolvedValue(loginResult),
-      setAuth: vi.fn(),
       navigate: vi.fn(() => navigation.promise),
       showSuccess: vi.fn(),
       showError: vi.fn(),

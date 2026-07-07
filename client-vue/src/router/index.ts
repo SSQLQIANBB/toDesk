@@ -1,10 +1,9 @@
 import { createWebHistory, createRouter } from 'vue-router';
-import { useAuth } from '@/stores/auth';
-import {
-  getAuthRedirect,
-  resolvePostLoginPath,
-} from '@/services/authNavigation';
-import { getCurrentUser } from '@/api/auth';
+import { useAuthStore } from '@/stores/auth';
+import { pinia } from '@/stores';
+import { getAuthRedirect } from '@/services/authNavigation';
+
+const HOME_ROUTE = { name: 'Remote' };
 
 const routes = [
   {
@@ -71,7 +70,7 @@ const routes = [
   //#endregion 测试功能路由
   {
     path: '/',
-    redirect: '/login'
+    redirect: '/remote'
   }
 ]
 
@@ -82,17 +81,43 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
-  const { isAuthenticated, token, currentUser, clearAuthLocal, restoreUser } = useAuth();
-  
-  // 如果有token但没有用户信息，尝试恢复用户信息
-  if (token.value && !currentUser.value && to.path !== '/login') {
+  const auth = useAuthStore(pinia);
+
+  if (to.path === '/login') {
+    if (auth.token) {
+      try {
+        if (!auth.currentUser) {
+          await auth.login();
+        }
+        next(HOME_ROUTE);
+        return;
+      } catch (error) {
+        console.error('Restore current user before login redirect failed:', error);
+        await auth.logout({ callApi: false });
+      }
+    }
+
+    next();
+    return;
+  }
+
+  if (to.meta.requiresAuth && !auth.token) {
+    const redirect = getAuthRedirect(to.fullPath);
+    await auth.logout({ callApi: false });
+    next({
+      name: 'Login',
+      query: redirect ? { redirect } : {},
+    });
+    return;
+  }
+
+  if (auth.token && !auth.currentUser) {
     try {
-      const { user } = await getCurrentUser({ skipAuthRedirect: true });
-      restoreUser(user);
+      await auth.login();
     } catch (error) {
-      console.error('恢复用户信息失败:', error);
-      clearAuthLocal();
+      console.error('Restore current user failed:', error);
       const redirect = getAuthRedirect(to.fullPath);
+      await auth.logout({ callApi: false });
       next({
         name: 'Login',
         query: redirect ? { redirect } : {},
@@ -100,19 +125,18 @@ router.beforeEach(async (to, _from, next) => {
       return;
     }
   }
-  
-  // 需要认证的路由
-  if (to.meta.requiresAuth && !isAuthenticated.value) {
+
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
     const redirect = getAuthRedirect(to.fullPath);
+    await auth.logout({ callApi: false });
     next({
       name: 'Login',
       query: redirect ? { redirect } : {},
     });
-  } else if (to.path === '/login' && isAuthenticated.value) {
-    next(resolvePostLoginPath(to.query.redirect));
-  } else {
-    next();
+    return;
   }
+
+  next();
 });
 
 export default router;

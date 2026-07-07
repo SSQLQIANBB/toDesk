@@ -1,4 +1,5 @@
-import { useAuth } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
+import { pinia } from '@/stores';
 import router from '@/router';
 import { getAuthRedirect } from '@/services/authNavigation';
 
@@ -29,10 +30,10 @@ function skipsAutomaticAuthRecovery(url: string) {
 /**
  * 刷新 access token
  */
-async function refreshAccessToken(): Promise<boolean> {
-  const { refreshToken, updateToken } = useAuth();
+export async function refreshAccessToken(): Promise<boolean> {
+  const auth = useAuthStore(pinia);
 
-  if (!refreshToken.value) {
+  if (!auth.refreshToken) {
     return false;
   }
 
@@ -42,7 +43,7 @@ async function refreshAccessToken(): Promise<boolean> {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refreshToken: refreshToken.value }),
+      body: JSON.stringify({ refreshToken: auth.refreshToken }),
     });
 
     if (!response.ok) {
@@ -50,7 +51,7 @@ async function refreshAccessToken(): Promise<boolean> {
     }
 
     const data = await response.json();
-    updateToken(data.accessToken, data.refreshToken);
+    auth.updateToken(data.accessToken, data.refreshToken);
     return true;
   } catch (error) {
     console.error('Refresh token failed:', error);
@@ -59,9 +60,9 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 async function handleAuthenticationFailure() {
-  const auth = useAuth();
+  const auth = useAuthStore(pinia);
   if (authFailureHandled) {
-    if (!auth.token.value) return;
+    if (!auth.token) return;
     // 已存在新的登录状态，后续 401 属于新的会话。
     authFailureHandled = false;
   }
@@ -70,11 +71,7 @@ async function handleAuthenticationFailure() {
     authFailureHandled = true;
     authFailurePromise = (async () => {
       const redirect = getAuthRedirect(router.currentRoute.value.fullPath);
-      auth.clearAuthLocal();
-      await router.replace({
-        name: 'Login',
-        query: redirect ? { redirect } : {},
-      });
+      await auth.logout({ callApi: false, navigate: true, redirect });
     })().finally(() => {
       authFailurePromise = null;
     });
@@ -99,10 +96,9 @@ export async function request<T = any>(
   } = options;
   const requestHeaders = { ...headers };
 
-  // 获取token
-  const token = localStorage.getItem('token');
-  if (token) {
-    requestHeaders.Authorization = `Bearer ${token}`;
+  const auth = useAuthStore(pinia);
+  if (auth.token) {
+    requestHeaders.Authorization = `Bearer ${auth.token}`;
   }
 
   requestHeaders['Content-Type'] = 'application/json';
