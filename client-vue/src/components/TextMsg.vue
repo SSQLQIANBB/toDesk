@@ -20,9 +20,9 @@
 
     <!-- 发送按钮 -->
     <n-button
-      class="absolute bottom-2 right-6"
+      class="absolute bottom-2 right-2"
       :disabled="!inputValue"
-      size="small"
+      size="large"
       type="primary"
       @click="handleSend"
     >
@@ -40,11 +40,9 @@ const props = withDefaults(
   defineProps<{
     value?: MsgValue
     placeholder?: string
-    enableShortcut?: boolean // 是否启用 Ctrl/Cmd+Enter 快捷发送
   }>(),
   {
     placeholder: '请输入...',
-    enableShortcut: true
   }
 )
 
@@ -90,17 +88,17 @@ function onPaste(e: ClipboardEvent) {
   if (text) document.execCommand('insertText', false, text)
 }
 
-// 键盘事件：Enter 换行，Ctrl+Enter 发送
+// 键盘事件：Enter 发送，Shift+Enter 换行
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') {
-    if (props.enableShortcut && (e.ctrlKey || e.metaKey)) {
-      // Ctrl + Enter → 发送
-      e.preventDefault()
-      handleSend()
-    } else if (!e.shiftKey) {
-      // 默认 Enter → 换行
+    if (e.shiftKey) {
+      // Shift + Enter → 换行
       e.preventDefault()
       insertNewLine()
+    } else {
+      // Enter → 发送
+      e.preventDefault()
+      handleSend()
     }
   }
 }
