@@ -295,8 +295,17 @@ async function initRTC(type = RTC_TYPE.CALLER) {
     // 创建RTCPeerConnection
     peer = new RTCPeerConnection({
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        {
+          urls: 'stun:turn.sycsq.top:3478'
+        },
+        {
+          urls: [
+            'turn:turn.sycsq.top:3478?transport=udp',
+            'turn:turn.sycsq.top:3478?transport=tcp'
+          ],
+          username: 'todesk',
+          credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe'
+        }
       ]
     });
 

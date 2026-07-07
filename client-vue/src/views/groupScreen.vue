@@ -490,7 +490,17 @@ async function broadcastStream() {
 function createPeerConnection(member: RemoteMember) {
   const pc = new RTCPeerConnection({
     iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: 'stun:turn.sycsq.top:3478'
+      },
+      {
+        urls: [
+          'turn:turn.sycsq.top:3478?transport=udp',
+          'turn:turn.sycsq.top:3478?transport=tcp'
+        ],
+        username: 'todesk',
+        credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe'
+      }
     ],
   });
 
