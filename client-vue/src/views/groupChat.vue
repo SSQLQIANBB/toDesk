@@ -14,7 +14,7 @@
       <div class="p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white">
         <div class="flex items-center gap-3">
           <n-avatar :size="50" :src="groupInfo?.avatar || undefined">
-            {{ groupInfo?.name?.charAt(0) || '?' }}
+            <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) || '?' }}</span>
           </n-avatar>
           <div class="flex-1">
             <div class="font-bold text-base">{{ groupInfo?.name || '加载中...' }}</div>
@@ -34,7 +34,7 @@
           class="flex items-center gap-3 p-3 rounded-lg bg-white border border-gray-200"
         >
           <n-avatar :size="40" :src="member.avatar || undefined">
-            {{ member.nickname?.charAt(0) || member.username?.charAt(0) }}
+            <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username?.charAt(0) }}</span>
           </n-avatar>
           <div class="flex-1">
             <div class="font-semibold text-sm">{{ member.nickname || member.username }}</div>
@@ -85,7 +85,7 @@
         <header class="min-h-16 shadow-sm flex items-center gap-2 px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
           <div class="flex items-center gap-3 flex-1 min-w-0">
             <n-avatar :size="40" :src="groupInfo?.avatar || undefined">
-              {{ groupInfo?.name?.charAt(0) }}
+              <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
             </n-avatar>
             <div class="min-w-0">
               <div class="font-bold text-base truncate">{{ groupInfo?.name }}</div>
@@ -111,7 +111,7 @@
             >
               <div class="flex items-end gap-2 max-w-[88%] sm:max-w-[70%]" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
                 <n-avatar :size="32" :src="msg.user?.avatar || undefined">
-                  {{ msg.user?.nickname?.charAt(0) || msg.user?.username?.charAt(0) || '?' }}
+                  <span v-if="!msg.user?.avatar">{{ msg.user?.nickname?.charAt(0) || msg.user?.username?.charAt(0) || '?' }}</span>
                 </n-avatar>
                 <div>
                   <div class="flex items-center gap-2 mb-1" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
@@ -175,7 +175,7 @@
             <!-- 群组信息 -->
             <div class="text-center">
               <n-avatar :size="80" :src="groupInfo?.avatar || undefined">
-                {{ groupInfo?.name?.charAt(0) }}
+                <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
               </n-avatar>
               <h3 class="text-xl font-bold mt-3">{{ groupInfo?.name }}</h3>
               <p class="text-sm text-gray-500 mt-1">{{ groupInfo?.description }}</p>

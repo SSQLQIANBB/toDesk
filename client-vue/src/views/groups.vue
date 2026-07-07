@@ -37,7 +37,7 @@
           >
             <div class="flex items-start gap-4">
               <n-avatar :size="60" :src="group.avatar || undefined" class="flex-shrink-0">
-                {{ group.name.charAt(0) }}
+                <span v-if="!group.avatar">{{ group.name.charAt(0) }}</span>
               </n-avatar>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between">
@@ -137,7 +137,7 @@
               <div class="space-y-4">
                 <div class="flex items-center gap-4">
                   <n-avatar :size="80" :src="groupDetail?.group.avatar || undefined">
-                    {{ groupDetail?.group.name.charAt(0) }}
+                    <span v-if="!groupDetail?.group.avatar">{{ groupDetail?.group.name.charAt(0) }}</span>
                   </n-avatar>
                   <div>
                     <h3 class="text-xl font-bold">{{ groupDetail?.group.name }}</h3>
@@ -192,7 +192,7 @@
                 >
                   <div class="flex items-center gap-3">
                     <n-avatar :size="40" :src="member.avatar || undefined">
-                      {{ member.nickname?.charAt(0) || member.username.charAt(0) }}
+                      <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username.charAt(0) }}</span>
                     </n-avatar>
                     <div>
                       <div class="font-semibold">{{ member.nickname || member.username }}</div>

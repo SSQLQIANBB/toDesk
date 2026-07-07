@@ -4,7 +4,7 @@
     <header class="min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
       <div class="flex items-center gap-2 sm:gap-4 min-w-0">
         <n-avatar :size="40" :src="groupInfo?.avatar || undefined" class="ring-2 ring-white">
-          {{ groupInfo?.name?.charAt(0) }}
+          <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
         </n-avatar>
         <div class="text-white min-w-0">
           <div class="font-bold truncate">{{ groupInfo?.name }}</div>
@@ -93,7 +93,7 @@
           </div>
           <div v-if="isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
             <n-avatar :size="80" :src="currentUser?.avatar || undefined">
-              {{ currentUser?.nickname?.charAt(0) || currentUser?.username?.charAt(0) }}
+              <span v-if="!currentUser?.avatar">{{ currentUser?.nickname?.charAt(0) || currentUser?.username?.charAt(0) }}</span>
             </n-avatar>
           </div>
           <div v-if="isMicMuted" class="absolute top-3 right-3 bg-red-500 p-2 rounded-full">
@@ -115,7 +115,7 @@
           </div>
           <div v-if="peer.isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
             <n-avatar :size="80" :src="peer.user?.avatar || undefined">
-              {{ peer.user?.nickname?.charAt(0) || peer.user?.username?.charAt(0) }}
+              <span v-if="!peer.user?.avatar">{{ peer.user?.nickname?.charAt(0) || peer.user?.username?.charAt(0) }}</span>
             </n-avatar>
           </div>
           <div v-if="peer.isMicMuted" class="absolute top-3 right-3 bg-red-500 p-2 rounded-full">
@@ -136,7 +136,7 @@
           >
             <div class="flex items-center gap-3">
               <n-avatar :size="40" :src="member.avatar || undefined">
-                {{ member.nickname?.charAt(0) || member.username?.charAt(0) }}
+                <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username?.charAt(0) }}</span>
               </n-avatar>
               <div>
                 <div class="font-semibold">{{ member.nickname || member.username }}</div>
