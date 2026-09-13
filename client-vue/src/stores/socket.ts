@@ -13,6 +13,7 @@ import { pinia } from '@/stores';
 
 export type PresenceStatus = 'online' | 'offline' | 'busy';
 export type OnlineUser = User & { socketId: string };
+type PresenceChange = { userId: number; user?: OnlineUser };
 
 type GroupSessionEvent = Omit<GroupSession, 'type'> & {
   type?: GroupSessionType;
@@ -75,6 +76,15 @@ export const useSocketStore = defineStore('socket', () => {
     ));
   }
 
+  function handleUserPresence(change: PresenceChange) {
+    if (!authenticated.value || !Number.isInteger(change.userId)) return;
+    const users = userList.value.filter(user => user.id !== change.userId);
+    if (change.user && change.user.id === change.userId && change.user.id !== credentials?.user.id) {
+      users.push(change.user);
+    }
+    userList.value = users;
+  }
+
   function resolveSessionType(data: { type?: GroupSessionType; deviceType?: number }) {
     return data.type || (data.deviceType === 2 ? 'screen' : 'video');
   }
@@ -107,6 +117,7 @@ export const useSocketStore = defineStore('socket', () => {
     target.on('authenticated', handleAuthenticated);
     target.on('auth_error', handleAuthError);
     target.on('user_list', handleUserList);
+    target.on('user_presence', handleUserPresence);
     target.on('group_call_state', handleGroupCallState);
     target.on('group_call_started', handleGroupCallStarted);
     target.on('group_call_ended', handleGroupCallEnded);
@@ -118,19 +129,21 @@ export const useSocketStore = defineStore('socket', () => {
     target.off('authenticated', handleAuthenticated);
     target.off('auth_error', handleAuthError);
     target.off('user_list', handleUserList);
+    target.off('user_presence', handleUserPresence);
     target.off('group_call_state', handleGroupCallState);
     target.off('group_call_started', handleGroupCallStarted);
     target.off('group_call_ended', handleGroupCallEnded);
   }
 
   function connect(token: string, user: User) {
-    console.log('【socket】---------connect', token, user)
     credentials = { token, user };
 
     if (!socket.value) {
       const target = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
         path: '/meeting',
         autoConnect: false,
+        transports: ['websocket', 'polling'],
+        tryAllTransports: true,
       });
 
       socket.value = target;

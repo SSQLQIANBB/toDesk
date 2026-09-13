@@ -51,6 +51,20 @@ function getPublicUsers() {
   return [...users.values()];
 }
 
+function getPublicUser(userId: number): MeetingUser | undefined {
+  return getPublicUsers().find(user => user.id === userId);
+}
+
+function samePublicUser(left?: MeetingUser, right?: MeetingUser) {
+  if (!left || !right) return left === right;
+  return left.socketId === right.socketId
+    && left.status === right.status
+    && left.username === right.username
+    && left.nickname === right.nickname
+    && left.avatar === right.avatar
+    && left.bio === right.bio;
+}
+
 function getUserSockets(userId: number) {
   return [...socketToUserMap.entries()]
     .filter(([, mappedUserId]) => mappedUserId === userId)
@@ -71,8 +85,10 @@ const initialMeeting = (server: Server) => {
     if (socketIds.length) io.to(socketIds).emit(event, payload);
   }
 
-  function emitUserList() {
-    io.emit('user_list', getPublicUsers());
+  function emitPresenceChange(userId: number, previous?: MeetingUser) {
+    const next = getPublicUser(userId);
+    if (samePublicUser(previous, next)) return;
+    io.emit('user_presence', next ? { userId, user: next } : { userId });
   }
 
   function emitMediaPresence(session: GroupSession) {
@@ -117,6 +133,7 @@ const initialMeeting = (server: Server) => {
         const payload = verifyToken(data.token);
         const dbUser = await UserModel.findByPk(payload.userId);
         const status = (dbUser?.status || 'online') as PresenceStatus;
+        const previous = getPublicUser(payload.userId);
 
         currentUser = {
           id: payload.userId,
@@ -132,7 +149,8 @@ const initialMeeting = (server: Server) => {
         socketToUserMap.set(socketId, payload.userId);
 
         socket.emit('authenticated', currentUser);
-        emitUserList();
+        socket.emit('user_list', getPublicUsers());
+        emitPresenceChange(payload.userId, previous);
       } catch (error) {
         socket.emit('auth_error', { message: 'Authentication failed' });
         console.error('meeting authentication failed:', error);
@@ -141,16 +159,21 @@ const initialMeeting = (server: Server) => {
 
     socket.on('status_update', async (data: { status: PresenceStatus }) => {
       if (!currentUser || !['online', 'offline', 'busy'].includes(data.status)) return;
+      if (currentUser.status === data.status) return;
 
+      const publicUser = getPublicUser(currentUser.id);
+      const previous = publicUser ? { ...publicUser } : undefined;
       currentUser.status = data.status;
       userMap.set(socketId, currentUser);
       await UserModel.update({ status: data.status }, { where: { id: currentUser.id } });
-      emitUserList();
+      emitPresenceChange(currentUser.id, previous);
     });
 
     socket.on('disconnect', async () => {
+      const previous = currentUser ? getPublicUser(currentUser.id) : undefined;
       userMap.delete(socketId);
       socketToUserMap.delete(socketId);
+      if (currentUser) emitPresenceChange(currentUser.id, previous);
 
       groupRooms.forEach((members, groupId) => {
         if (members.delete(socketId)) {
@@ -185,7 +208,6 @@ const initialMeeting = (server: Server) => {
         }
       }
 
-      emitUserList();
     });
 
     socket.on('private_message', async (data: { to?: MeetingUser; message?: string }) => {

@@ -223,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type ScrollbarInst } from 'naive-ui';
 import { ArrowBackFilled, VideocamFilled, ScreenShareFilled, InfoFilled } from '@vicons/material';
@@ -274,7 +274,9 @@ async function loadGroupDetail() {
     detailLoading.value = true;
     const detail = await getGroupDetail(groupId.value);
     groupInfo.value = detail.group;
-    members.value = detail.members.map(m => ({ ...m, online: false }));
+    const onlineIds = new Set(socketStore.userList.map(user => user.id));
+    if (socketStore.authenticated && currentUser.value) onlineIds.add(currentUser.value.id);
+    members.value = detail.members.map(m => ({ ...m, online: onlineIds.has(m.id) }));
   } catch (error: any) {
     message.error('加载群组详情失败: ' + error.message);
     router.back();
@@ -325,8 +327,14 @@ function handleGroupMemberJoined(data: { groupId: number; member: any }) {
 }
 
 function handleGroupMemberLeft(_data: { socketId: string }) {
-  // 服务端当前未返回 userId，暂时无法准确更新对应成员。
+  // 在线状态由全局在线名单同步，避免同一用户的其他设备仍在线时误判为离线。
 }
+
+watch([() => socketStore.userList, () => socketStore.authenticated], ([users, ready]) => {
+  const onlineIds = new Set(users.map(user => user.id));
+  if (ready && currentUser.value) onlineIds.add(currentUser.value.id);
+  members.value.forEach(member => { member.online = onlineIds.has(member.id); });
+});
 
 function handleGroupMessage(data: any) {
   if (data.groupId !== groupId.value) return;

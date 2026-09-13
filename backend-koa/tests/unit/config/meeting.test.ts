@@ -8,13 +8,13 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock('socket.io', () => ({ Server: class {
   on(_event: string, callback: (socket: any) => void) { mock.connection = callback; }
-  emit() {}
+  emit(event: string, payload: any) { mock.broadcasts.push({ rooms: [], event, payload }); }
   to(rooms: string[]) { return { emit: (event: string, payload: any) => mock.broadcasts.push({ rooms, event, payload }) }; }
 } }));
 vi.mock('../../../src/utils/jwt', () => ({ verifyToken: (token: string) => ({ userId: Number(token), username: `user${token}` }) }));
 vi.mock('../../../src/models', () => ({
   GroupMember: { findAll: mock.members },
-  User: { findByPk: async () => ({ status: 'online' }) },
+  User: { findByPk: async () => ({ status: 'online' }), update: vi.fn() },
   GroupMessage: {}, Message: {},
 }));
 vi.mock('../../../src/services/groupSessionService', () => ({ GroupSessionService: class {
@@ -61,6 +61,43 @@ describe('群组邀请发送范围', () => {
       rooms: ['socket-1', 'socket-2'], event: 'group_call_started',
       payload: expect.objectContaining({ groupId: 7, deviceType }),
     });
-    expect(mock.broadcasts[0]!.rooms).not.toContain('socket-3');
+    expect(mock.broadcasts.find(item => item.event === 'group_call_started')!.rooms).not.toContain('socket-3');
+  });
+});
+
+describe('在线状态增量同步', () => {
+  it('只向新连接发送全量快照，后续只广播变化', async () => {
+    initialMeeting({} as any);
+    const alice = connect(101);
+    const bob = connect(102);
+    await alice.handlers.get('authenticate')!({ token: '101' });
+    await bob.handlers.get('authenticate')!({ token: '102' });
+
+    expect(bob.socket.emit).toHaveBeenCalledWith('user_list', expect.arrayContaining([
+      expect.objectContaining({ id: 101 }), expect.objectContaining({ id: 102 }),
+    ]));
+    expect(mock.broadcasts.filter(item => item.event === 'user_list')).toHaveLength(0);
+    expect(mock.broadcasts.filter(item => item.event === 'user_presence')).toHaveLength(2);
+
+    await bob.handlers.get('status_update')!({ status: 'busy' });
+    await bob.handlers.get('status_update')!({ status: 'busy' });
+    expect(mock.broadcasts.filter(item => item.event === 'user_presence' && item.payload.userId === 102)).toHaveLength(2);
+
+    await bob.handlers.get('disconnect')!();
+    expect(mock.broadcasts.at(-1)).toEqual({ rooms: [], event: 'user_presence', payload: { userId: 102 } });
+  });
+
+  it('同一用户的一个设备断开后仍显示另一个在线设备', async () => {
+    initialMeeting({} as any);
+    const first = connect(103);
+    const second = connect(104);
+    await first.handlers.get('authenticate')!({ token: '103' });
+    await second.handlers.get('authenticate')!({ token: '103' });
+    await second.handlers.get('disconnect')!();
+
+    expect(mock.broadcasts.at(-1)).toEqual({
+      rooms: [], event: 'user_presence',
+      payload: { userId: 103, user: expect.objectContaining({ socketId: 'socket-103' }) },
+    });
   });
 });
