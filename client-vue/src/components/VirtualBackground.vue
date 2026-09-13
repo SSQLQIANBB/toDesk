@@ -16,7 +16,7 @@
 
       <n-space vertical>
         <n-text strong>背景效果</n-text>
-        
+
         <!-- 无效果 -->
         <n-card
           :class="['background-option', currentEffect === 'none' && 'selected']"
@@ -116,9 +116,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue';
+import { ref, watch, onUnmounted, toRaw } from 'vue';
 import { useMessage } from 'naive-ui';
 import type { UploadFileInfo } from 'naive-ui';
+import { createSegmenter, composeBackground, stopProcessedVideo, type Segmenter } from '@/services/backgroundProcessor';
 
 interface VirtualBackgroundProps {
   stream?: MediaStream | null;
@@ -138,136 +139,97 @@ const blurAmount = ref(20);
 const backgroundColor = ref('#00AA00');
 const backgroundImage = ref<HTMLImageElement | null>(null);
 
-// Canvas
 const canvasRef = ref<HTMLCanvasElement>();
 let animationFrameId: number | null = null;
 let processedStream: MediaStream | null = null;
+let inputVideo: HTMLVideoElement | null = null;
+let segmenter: Segmenter | null = null;
+let generation = 0;
 
-// 应用效果
 async function applyEffect(effect: typeof currentEffect.value) {
   currentEffect.value = effect;
-
   if (effect === 'none') {
+    if (props.stream) emit('stream-updated', toRaw(props.stream));
     stopProcessing();
     return;
   }
-
-  if (!props.stream) {
-    message.warning('没有可用的视频流');
+  if (!props.stream) { message.warning('没有可用的视频流'); return; }
+  if (effect === 'image' && !backgroundImage.value) {
+    message.info('请上传背景图片');
     return;
   }
-
-  startProcessing();
+  // 样式变更由现有处理循环读取，避免创建多条并行捕获流。
+  if (!inputVideo) await startProcessing();
 }
 
-// 开始处理
-function startProcessing() {
-  if (!props.stream || !canvasRef.value) return;
-
+async function startProcessing() {
+  stopProcessing();
+  const source = props.stream ? toRaw(props.stream) : null;
   const canvas = canvasRef.value;
+  if (!source || !canvas) return;
+  const run = generation;
   const video = document.createElement('video');
-  video.srcObject = props.stream;
-  video.play();
-
-  video.onloadedmetadata = () => {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    processFrame(video, canvas);
-  };
+  inputVideo = video;
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = source;
+  try {
+    await video.play();
+    if (run !== generation) return;
+    const processor = await createSegmenter();
+    if (run !== generation) { await processor.close(); return; }
+    segmenter = processor;
+    processor.onResults(results => {
+      if (run !== generation || currentEffect.value === 'none') return;
+      if (canvas.width !== (video.videoWidth || 1280)) canvas.width = video.videoWidth || 1280;
+      if (canvas.height !== (video.videoHeight || 720)) canvas.height = video.videoHeight || 720;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('浏览器不支持画布处理');
+      composeBackground(ctx, results, canvas.width, canvas.height, {
+        effect: currentEffect.value, blur: blurAmount.value,
+        color: backgroundColor.value, image: backgroundImage.value,
+      });
+      if (!processedStream) {
+        processedStream = canvas.captureStream(30);
+        source.getAudioTracks().forEach(track => processedStream!.addTrack(track));
+        emit('stream-updated', processedStream);
+      }
+    });
+    const frame = async () => {
+      if (run !== generation) return;
+      try {
+        if (video.readyState >= 2) await processor.send({ image: video });
+        if (run === generation) animationFrameId = requestAnimationFrame(() => { void frame(); });
+      } catch (error) { fail(error, run); }
+    };
+    await frame();
+  } catch (error) { fail(error, run); }
 }
 
-// 停止处理
+function fail(error: unknown, run: number) {
+  if (run !== generation) return;
+  console.error('背景处理失败', error);
+  currentEffect.value = 'none';
+  if (props.stream) emit('stream-updated', toRaw(props.stream));
+  stopProcessing();
+  message.error('背景效果暂不可用，已恢复原始摄像头画面');
+}
+
 function stopProcessing() {
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-  }
-
-  if (processedStream) {
-    processedStream.getTracks().forEach(track => track.stop());
-    processedStream = null;
-  }
+  generation++;
+  if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+  animationFrameId = null;
+  if (inputVideo) { inputVideo.pause(); inputVideo.srcObject = null; }
+  inputVideo = null;
+  const previous = segmenter;
+  segmenter = null;
+  if (previous) void previous.close().catch(() => {});
+  stopProcessedVideo(processedStream);
+  processedStream = null;
 }
 
-// 处理每一帧
-function processFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  // 绘制视频帧
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  // 应用效果
-  switch (currentEffect.value) {
-    case 'blur':
-      applyBlurEffect(ctx, canvas);
-      break;
-    case 'color':
-      applyColorEffect(ctx, canvas);
-      break;
-    case 'image':
-      applyImageEffect(ctx, canvas);
-      break;
-  }
-
-  // 创建处理后的流
-  if (!processedStream) {
-    processedStream = canvas.captureStream(30);
-    emit('stream-updated', processedStream);
-  }
-
-  // 继续处理下一帧
-  animationFrameId = requestAnimationFrame(() => processFrame(video, canvas));
-}
-
-// 应用模糊效果（简化版 - 对整个画面模糊）
-function applyBlurEffect(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
-  // 简化版：对整个画面应用模糊滤镜
-  ctx.filter = `blur(${blurAmount.value}px)`;
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  ctx.putImageData(imageData, 0, 0);
-  ctx.filter = 'none';
-}
-
-// 应用纯色背景效果
-function applyColorEffect(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
-  // 简化版：在视频下方绘制纯色背景
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = backgroundColor.value;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.globalAlpha = 0.7;
-  ctx.putImageData(imageData, 0, 0);
-  ctx.globalAlpha = 1.0;
-}
-
-// 应用图片背景效果
-function applyImageEffect(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
-  if (!backgroundImage.value) return;
-
-  // 简化版：先绘制背景图片，再叠加视频
-  ctx.drawImage(backgroundImage.value, 0, 0, canvas.width, canvas.height);
-  
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  ctx.globalAlpha = 0.7;
-  ctx.putImageData(imageData, 0, 0);
-  ctx.globalAlpha = 1.0;
-}
-
-// 更新模糊强度
-function updateBlurAmount() {
-  if (currentEffect.value === 'blur') {
-    // 重新应用效果
-    applyEffect('blur');
-  }
-}
-
-// 更新背景颜色
-function updateBackgroundColor() {
-  if (currentEffect.value === 'color') {
-    // 重新应用效果
-    applyEffect('color');
-  }
-}
+function updateBlurAmount() { /* 下一帧使用当前设置 */ }
+function updateBackgroundColor() { /* 下一帧使用当前设置 */ }
 
 // 处理图片上传
 function handleImageUpload(options: { fileList: UploadFileInfo[] }) {
@@ -291,9 +253,8 @@ function handleImageUpload(options: { fileList: UploadFileInfo[] }) {
 
 // 监听流变化
 watch(() => props.stream, (newStream) => {
-  if (newStream && currentEffect.value !== 'none') {
-    startProcessing();
-  }
+  stopProcessing();
+  if (newStream && currentEffect.value !== 'none') void startProcessing();
 });
 
 // 组件卸载时清理

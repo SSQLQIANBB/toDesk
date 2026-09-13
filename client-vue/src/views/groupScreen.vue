@@ -37,6 +37,7 @@
           <template #trigger>
             <n-button
               circle
+              :aria-label="showAnnotation ? '关闭标注' : '开启标注'"
               :type="showAnnotation ? 'primary' : 'default'"
               @click="showAnnotation = !showAnnotation"
             >
@@ -100,23 +101,27 @@
       </div>
     </header>
 
+    <!-- 其他成员的音频；共享者音频由主视频播放，避免重复。 -->
+    <MediaVideo v-for="peer in peerRegistry.values().filter(item => item.id !== sharer?.id)" :key="peer.id" :stream="peer.stream" style="display: none" />
     <!-- 主内容区 -->
     <div class="flex-1 flex overflow-hidden">
       <!-- 屏幕共享主区域 -->
       <div class="flex-1 min-w-0 p-2 sm:p-4 flex items-center justify-center">
-        <div class="relative w-full h-full bg-gray-800 rounded-lg overflow-hidden shadow-2xl">
+        <div ref="screenViewport" class="relative w-full h-full bg-gray-800 rounded-lg overflow-hidden shadow-2xl">
           <!-- 共享屏幕视频 -->
           <MediaVideo
             v-if="isSharing || sharer"
             :stream="displayStream"
             :local="isSharing"
-            class="w-full h-full object-contain"
+            style="object-fit: contain"
+            @loadedmetadata="updateVideoDimensions"
+            @resize="updateVideoDimensions"
           />
 
           <!-- 标注层：共享者可编辑，其他参与者只读 -->
           <ScreenAnnotation
-            v-if="screenSession && (isSharing || annotationActions.length || annotationDrafts.length)"
-            class="absolute inset-0"
+            v-if="isSharing || (screenSession && (annotationActions.length || annotationDrafts.length))"
+            :style="annotationBounds"
             :actions="annotationActions"
             :drafts="annotationDrafts"
             :editable="isSharing && showAnnotation"
@@ -129,7 +134,7 @@
           />
 
           <!-- 无共享提示 -->
-          <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-white">
+          <div v-if="!isSharing && !sharer" class="absolute inset-0 flex flex-col items-center justify-center text-white">
             <n-icon :component="ScreenShareFilled" :size="80" class="text-gray-600 mb-4" />
             <h3 class="text-xl font-bold mb-2">等待屏幕共享</h3>
             <p class="text-gray-400">暂无成员共享屏幕</p>
@@ -174,6 +179,7 @@
             <div class="flex-1 min-w-0">
               <div class="text-white text-sm font-medium truncate">
                 {{ member.nickname || member.username }}
+                <SpeakingIndicator :stream="member.id === currentUser?.id ? localStream : peerRegistry.get(member.id)?.stream" :muted="member.id === currentUser?.id && isMicMuted" />
                 {{ member.id === currentUser?.id ? ' (我)' : '' }}
               </div>
               <div class="flex items-center gap-1">
@@ -206,7 +212,8 @@
                 <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username?.charAt(0) }}</span>
               </n-avatar>
               <div>
-                <div class="font-semibold">{{ member.nickname || member.username }}</div>
+                <div class="font-semibold">{{ member.nickname || member.username }}
+                <SpeakingIndicator :stream="member.id === currentUser?.id ? localStream : peerRegistry.get(member.id)?.stream" :muted="member.id === currentUser?.id && isMicMuted" /></div>
                 <div class="text-xs text-gray-500">
                   <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
                   <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
@@ -255,7 +262,10 @@ import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
+import SpeakingIndicator from '@/components/SpeakingIndicator.vue';
+import { containedVideoRect } from '@/services/annotationGeometry';
 import ScreenAnnotation from '@/components/ScreenAnnotation.vue';
+import { takeCapturedGroupScreen } from '@/services/screenShareLaunch';
 import { groupSessionState } from '@/services/groupSessionState';
 import {
   createMediaParticipantState,
@@ -289,6 +299,7 @@ const sharer = ref<any>(null); // 当前共享者信息
 const isMicMuted = ref(false);
 const showMemberControl = ref(false);
 const showAnnotation = ref(false); // 是否显示标注
+const pendingInitialScreen = ref<MediaStream | null>(null);
 
 const localStream = ref<MediaStream | null>(null);
 const remoteStream = ref<MediaStream | null>(null);
@@ -296,9 +307,29 @@ const peerRegistry = new RemotePeerRegistry(createPeerConnection);
 const annotationState = createScreenAnnotationState();
 const participantState = createMediaParticipantState();
 const currentQuality = ref('high'); // 当前视频质量
-const screenStream = computed(() => localStream.value); // 用于录制
+const screenStream = computed(() => isSharing.value ? localStream.value : remoteStream.value); // 用于录制
 const displayStream = computed(() => isSharing.value ? localStream.value : remoteStream.value);
 const screenSession = computed(() => groupSessionState.getSession(groupId.value, 'screen'));
+const screenViewport = ref<HTMLElement | null>(null);
+const viewportSize = ref({ width: 0, height: 0 });
+const videoSize = ref({ width: 0, height: 0 });
+const annotationBounds = computed(() => {
+  const { width, height } = containedVideoRect(viewportSize.value, videoSize.value);
+  return { width: `${width}px`, height: `${height}px`, left: `${(viewportSize.value.width - width) / 2}px`, top: `${(viewportSize.value.height - height) / 2}px` };
+});
+function updateVideoDimensions(event: Event) {
+  const video = event.target as HTMLVideoElement;
+  videoSize.value = { width: video.videoWidth, height: video.videoHeight };
+}
+let viewportObserver: ResizeObserver | null = null;
+onMounted(() => {
+  if (!screenViewport.value) return;
+  const resize = () => { viewportSize.value = { width: screenViewport.value!.clientWidth, height: screenViewport.value!.clientHeight }; };
+  resize();
+  viewportObserver = new ResizeObserver(resize);
+  viewportObserver.observe(screenViewport.value);
+});
+onUnmounted(() => viewportObserver?.disconnect());
 const annotationActions = annotationState.actions;
 const annotationDrafts = annotationState.drafts;
 const participantUserIds = computed(() => {
@@ -370,6 +401,10 @@ function initSocket() {
     authenticated,
     ready => {
       if (!ready) return;
+      if (isSharing.value) {
+        // 初次授权时 Socket 可能仍在认证；认证完成后补发邀请。
+        socket.value?.emit('group_call_start', { groupId: groupId.value, deviceType: 2 });
+      }
       const session = groupSessionState.getSession(groupId.value, 'screen');
       if (session) joinScreenCall(session.ownerUserId);
     },
@@ -416,7 +451,7 @@ async function startScreenShare() {
     const preset = qualityPresets[currentQuality.value as keyof typeof qualityPresets];
 
     // 获取屏幕共享流
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+    const screenStream = pendingInitialScreen.value || await navigator.mediaDevices.getDisplayMedia({
       video: {
         width: { ideal: preset.width },
         height: { ideal: preset.height },
@@ -425,16 +460,14 @@ async function startScreenShare() {
       audio: false,
     });
 
+    pendingInitialScreen.value = null;
     // 获取音频流 (如果需要语音)
-    const audioStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false,
-    });
+    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => null);
 
     // 合并流
     localStream.value = new MediaStream([
       ...screenStream.getVideoTracks(),
-      ...audioStream.getAudioTracks(),
+      ...(audioStream?.getAudioTracks() || []),
     ]);
 
     isSharing.value = true;
@@ -505,17 +538,20 @@ function createPeerConnection(member: RemoteMember) {
   });
 
   // 添加本地流
-  if (isSharing.value && localStream.value) {
+  if (localStream.value) {
     localStream.value.getTracks().forEach(track => {
       pc.addTrack(track, localStream.value!);
     });
   }
 
+  if (!isSharing.value) pc.addTransceiver('video', { direction: 'recvonly' });
+  if (!localStream.value?.getAudioTracks().length) pc.addTransceiver('audio', { direction: 'recvonly' });
+
   // 处理远程流
   pc.ontrack = (event) => {
     if (event.streams[0]) {
       peerRegistry.setStream(member.id, event.streams[0]);
-      remoteStream.value = event.streams[0];
+      if (event.streams[0].getVideoTracks().length) remoteStream.value = event.streams[0];
     }
   };
 
@@ -536,6 +572,7 @@ function createPeerConnection(member: RemoteMember) {
 async function createAndSendOffer(member: RemoteMember) {
   const peer = peerRegistry.upsert(member);
   const pc = peer.connection as RTCPeerConnection;
+  if (pc.signalingState !== 'stable') return;
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
@@ -594,13 +631,21 @@ function handleCallState(data: any) {
   }
 }
 
-function joinScreenCall(ownerUserId: number) {
+async function joinScreenCall(ownerUserId: number) {
   const owner = members.value.find(member => member.id === ownerUserId);
   sharer.value = owner || { id: ownerUserId, username: '共享者' };
   const session = groupSessionState.getSession(groupId.value, 'screen');
   if (session) startScreenSession(session.startedAt, session.channelId);
   if (joinedCall) return;
   joinedCall = true;
+  if (!localStream.value) {
+    try {
+      const audio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      if (!joinedCall || cleanedUp) { audio.getTracks().forEach(track => track.stop()); return; }
+      audio.getAudioTracks().forEach(track => { track.enabled = !isMicMuted.value && canSpeak.value; });
+      localStream.value = audio;
+    } catch { isMicMuted.value = true; message.warning('麦克风不可用，仍可观看屏幕共享'); }
+  }
   socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 2 });
 }
 
@@ -620,6 +665,8 @@ function handleCallEnded(data: any) {
   sharer.value = null;
   remoteStream.value = null;
   joinedCall = false;
+  localStream.value?.getTracks().forEach(track => track.stop());
+  localStream.value = null;
   showAnnotation.value = false;
   annotationState.clear();
   participantState.clear(groupId.value, 'screen');
@@ -634,7 +681,9 @@ function handleCallMembers(data: any) {
     peerRegistry.upsert(member);
     mergeMemberSocket(member);
   });
-  if (isSharing.value) void broadcastStream();
+  peerRegistry.values().forEach(member => {
+    if ((currentUser.value?.id || 0) < member.id) void createAndSendOffer(member);
+  });
 }
 
 function handleCallMemberJoined(data: any) {
@@ -642,7 +691,7 @@ function handleCallMemberJoined(data: any) {
   if (data.member.id === currentUser.value?.id) return;
   peerRegistry.upsert(data.member);
   mergeMemberSocket(data.member);
-  if (isSharing.value) void createAndSendOffer(data.member);
+  if ((currentUser.value?.id || 0) < data.member.id) void createAndSendOffer(data.member);
 }
 
 function handleCallMemberLeft(data: any) {
@@ -770,6 +819,7 @@ function handleMicPermissionChanged(data: any) {
   if (data.groupId !== groupId.value) return;
   if (!data.canSpeak) {
     isMicMuted.value = true;
+    localStream.value?.getAudioTracks().forEach(track => { track.enabled = false; });
     message.warning('您已被群主禁言');
   } else {
     message.success('您已被允许发言');
@@ -834,6 +884,8 @@ function cleanupScreenCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
 
+  pendingInitialScreen.value?.getTracks().forEach(track => track.stop());
+  pendingInitialScreen.value = null;
   localStream.value?.getTracks().forEach(track => track.stop());
   peerRegistry.clear();
   annotationState.clear();
@@ -881,7 +933,13 @@ function handleRecordingStop(blob: Blob) {
 }
 
 onMounted(async () => {
+  const captured = takeCapturedGroupScreen(groupId.value);
+  if (captured) {
+    // 回填给 startScreenShare，避免切换路由后再次请求共享权限。
+    pendingInitialScreen.value = captured;
+  }
   await loadGroupDetail();
+  if (pendingInitialScreen.value) await startScreenShare();
   initSocket();
 });
 

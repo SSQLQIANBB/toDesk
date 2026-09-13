@@ -89,6 +89,7 @@
           <div class="absolute bottom-3 left-3 bg-black bg-opacity-60 px-3 py-1 rounded-full">
             <span class="text-white text-sm font-semibold">
               {{ currentUser?.nickname || currentUser?.username }} (我)
+              <SpeakingIndicator :stream="localStream" :muted="isMicMuted" />
             </span>
           </div>
           <div v-if="isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
@@ -111,6 +112,7 @@
           <div class="absolute bottom-3 left-3 bg-black bg-opacity-60 px-3 py-1 rounded-full">
             <span class="text-white text-sm font-semibold">
               {{ peer.user?.nickname || peer.user?.username }}
+              <SpeakingIndicator :stream="peer.stream" />
             </span>
           </div>
           <div v-if="peer.isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
@@ -139,7 +141,8 @@
                 <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username?.charAt(0) }}</span>
               </n-avatar>
               <div>
-                <div class="font-semibold">{{ member.nickname || member.username }}</div>
+                <div class="font-semibold">{{ member.nickname || member.username }}
+                <SpeakingIndicator :stream="member.id === currentUser?.id ? localStream : peerRegistry.get(member.id)?.stream" :muted="member.id === currentUser?.id && isMicMuted" /></div>
                 <div class="text-xs text-gray-500">
                   <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
                   <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
@@ -188,6 +191,7 @@ import { useSocketStore } from '@/stores/socket';
 import VirtualBackground from '@/components/VirtualBackground.vue';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
+import SpeakingIndicator from '@/components/SpeakingIndicator.vue';
 import { groupSessionState } from '@/services/groupSessionState';
 import {
   createMediaParticipantState,
@@ -286,7 +290,6 @@ async function initLocalStream() {
 
 // 虚拟背景流更新
 function handleVirtualBGUpdate(processedStream: MediaStream) {
-  const previousVideoTrack = localStream.value?.getVideoTracks()[0];
   localStream.value = processedStream;
 
   const nextVideoTrack = processedStream.getVideoTracks()[0];
@@ -298,7 +301,7 @@ function handleVirtualBGUpdate(processedStream: MediaStream) {
       void sender?.replaceTrack(nextVideoTrack);
     });
   }
-  if (previousVideoTrack && previousVideoTrack !== nextVideoTrack) previousVideoTrack.stop();
+  if (nextVideoTrack) nextVideoTrack.enabled = !isCameraOff.value;
   message.success('虚拟背景已应用');
   // 可以在这里更新发送给其他对等端的流
 }
@@ -523,6 +526,7 @@ function handleMicPermissionChanged(data: any) {
   if (data.groupId !== groupId.value) return;
   if (!data.canSpeak) {
     isMicMuted.value = true;
+    localStream.value?.getAudioTracks().forEach(track => { track.enabled = false; });
     message.warning('您已被群主禁言');
   } else {
     message.success('您已被允许发言');

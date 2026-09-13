@@ -12,111 +12,69 @@
       @pointerleave="stopDrawing"
     ></canvas>
 
-    <!-- 工具栏 -->
-    <div v-if="showToolbar" class="annotation-toolbar">
-      <n-space>
-        <!-- 工具选择 -->
-        <n-button-group>
-          <n-button
-            :type="currentTool === 'pen' ? 'primary' : 'default'"
-            @click="currentTool = 'pen'"
-            size="small"
-          >
-            <template #icon>
-              <n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></n-icon>
-            </template>
-            画笔
-          </n-button>
-          <n-button
-            :type="currentTool === 'arrow' ? 'primary' : 'default'"
-            @click="currentTool = 'arrow'"
-            size="small"
-          >
-            <template #icon>
-              <n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M1.01 21.99l3.12-8.73L12 16.98l-7.72 5.01zm7.62-11.5L21.5 4 15.01 16.87l-6.38-6.38z"/></svg></n-icon>
-            </template>
-            箭头
-          </n-button>
-          <n-button
-            :type="currentTool === 'rect' ? 'primary' : 'default'"
-            @click="currentTool = 'rect'"
-            size="small"
-          >
-            <template #icon>
-              <n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/></svg></n-icon>
-            </template>
-            矩形
-          </n-button>
-          <n-button
-            :type="currentTool === 'text' ? 'primary' : 'default'"
-            @click="currentTool = 'text'"
-            size="small"
-          >
-            <template #icon>
-              <n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg></n-icon>
-            </template>
-            文字
-          </n-button>
-          <n-button
-            :type="currentTool === 'eraser' ? 'primary' : 'default'"
-            @click="currentTool = 'eraser'"
-            size="small"
-          >
-            <template #icon>
-              <n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0M4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-4.95-4.95-4.95 4.95z"/></svg></n-icon>
-            </template>
-            橡皮
-          </n-button>
-        </n-button-group>
+    <!-- 标注工具栏 -->
+    <div v-if="editable && showToolbar" ref="toolbarRef" class="annotation-toolbar" role="toolbar" aria-label="共享标注工具栏" :style="toolbarPositionStyle">
+      <div class="toolbar-header" @pointerdown="startToolbarDrag">
+        <div class="toolbar-title">
+          <span class="toolbar-title-mark" aria-hidden="true"></span>
+          <strong>屏幕标注</strong>
+          <span class="toolbar-hint">拖动这里可移动工具栏</span>
+        </div>
+        <n-button class="toolbar-close" size="tiny" quaternary @click="emit('close')" aria-label="关闭标注">完成</n-button>
+      </div>
 
-        <!-- 颜色选择 -->
-        <n-color-picker
-          v-model:value="currentColor"
-          :show-alpha="false"
-          size="small"
-          :swatches="colorSwatches"
-        />
-
-        <!-- 线宽 -->
-        <n-slider
-          v-model:value="lineWidth"
-          :min="1"
-          :max="20"
-          :step="1"
-          style="width: 100px"
-        />
-
-        <!-- 操作按钮 -->
+      <div class="toolbar-tools" aria-label="标注形状">
         <n-button
-          @click="emit('undo')"
-          :disabled="actions.length === 0"
+          v-for="tool in toolOptions"
+          :key="tool.value"
+          class="toolbar-tool"
+          :class="{ 'toolbar-tool--active': currentTool === tool.value }"
+          :type="currentTool === tool.value ? 'primary' : 'default'"
+          :aria-pressed="currentTool === tool.value"
           size="small"
+          @click="currentTool = tool.value"
         >
-          <template #icon>
-            <n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg></n-icon>
-          </template>
-          撤销
+          <span class="tool-glyph" aria-hidden="true">{{ tool.icon }}</span>{{ tool.label }}
         </n-button>
+      </div>
 
-        <n-button
-          @click="emit('clear')"
-          type="warning"
-          size="small"
-        >
-          <template #icon>
-            <n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></n-icon>
-          </template>
-          清空
-        </n-button>
-
-        <n-button
-          @click="$emit('close')"
-          type="error"
-          size="small"
-        >
-          关闭标注
-        </n-button>
-      </n-space>
+      <div class="toolbar-footer">
+        <div class="toolbar-setting toolbar-setting--color">
+          <span class="setting-label">颜色</span>
+          <n-popover trigger="click" placement="top" :show-arrow="false">
+            <template #trigger>
+              <n-button class="color-trigger" size="small" aria-label="选择标注颜色">
+                <span class="color-swatch" :style="{ backgroundColor: currentColor }" aria-hidden="true"></span>
+                <span>{{ currentColor.toUpperCase() }}</span>
+              </n-button>
+            </template>
+            <div class="color-panel">
+              <n-color-picker
+                v-model:value="currentColor"
+                :show-alpha="false"
+                :modes="['hex']"
+                :swatches="colorSwatches"
+                aria-label="标注颜色"
+              />
+            </div>
+          </n-popover>
+        </div>
+        <div class="toolbar-setting toolbar-setting--width">
+          <span class="setting-label">粗细</span>
+          <n-slider
+            v-model:value="lineWidth"
+            :min="1"
+            :max="20"
+            :step="1"
+            aria-label="标注线条粗细"
+          />
+          <span class="width-value">{{ lineWidth }} px</span>
+        </div>
+        <div class="toolbar-actions">
+          <n-button size="small" :disabled="actions.length === 0" @click="emit('undo')">撤销</n-button>
+          <n-button size="small" @click="emit('clear')">清空</n-button>
+        </div>
+      </div>
     </div>
 
     <!-- 文字输入对话框 -->
@@ -136,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   type AnnotationAction,
   type AnnotationDraft,
@@ -166,6 +124,55 @@ const emit = defineEmits<{
 // Refs
 const containerRef = ref<HTMLDivElement>();
 const canvasRef = ref<HTMLCanvasElement>();
+const toolbarRef = ref<HTMLDivElement>();
+const toolbarPosition = ref<{ left: number; top: number } | null>(null);
+const toolbarPositionStyle = computed(() => toolbarPosition.value
+  ? { left: `${toolbarPosition.value.left}px`, top: `${toolbarPosition.value.top}px`, bottom: 'auto', transform: 'none' }
+  : undefined);
+let dragOffset: { x: number; y: number } | null = null;
+
+function clampToolbarPosition(left: number, top: number) {
+  const rect = toolbarRef.value?.getBoundingClientRect();
+  const width = rect?.width || 0;
+  const height = rect?.height || 0;
+  const margin = 8;
+  return {
+    left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin)),
+    top: Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin)),
+  };
+}
+
+function moveToolbar(event: PointerEvent) {
+  if (!dragOffset) return;
+  toolbarPosition.value = clampToolbarPosition(event.clientX - dragOffset.x, event.clientY - dragOffset.y);
+}
+
+function stopToolbarDrag() {
+  dragOffset = null;
+  window.removeEventListener('pointermove', moveToolbar);
+  window.removeEventListener('pointerup', stopToolbarDrag);
+  window.removeEventListener('pointercancel', stopToolbarDrag);
+}
+
+function startToolbarDrag(event: PointerEvent) {
+  if ((event.target as HTMLElement).closest('button')) return;
+  const rect = toolbarRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  window.addEventListener('pointermove', moveToolbar);
+  window.addEventListener('pointerup', stopToolbarDrag);
+  window.addEventListener('pointercancel', stopToolbarDrag);
+  event.preventDefault();
+}
+
+function handleViewportResize() {
+  initCanvas();
+  if (toolbarPosition.value) toolbarPosition.value = clampToolbarPosition(toolbarPosition.value.left, toolbarPosition.value.top);
+}
+
+watch(() => props.showToolbar, show => {
+  if (!show) { stopToolbarDrag(); toolbarPosition.value = null; }
+});
 
 // 绘图状态
 const isDrawing = ref(false);
@@ -181,22 +188,39 @@ const textInput = ref('');
 const textPosition = ref<AnnotationPoint>({ x: 0, y: 0 });
 
 // 颜色预设
+const toolOptions: { value: AnnotationTool; label: string; icon: string }[] = [
+  { value: 'pen', label: '画笔', icon: '✎' },
+  { value: 'line', label: '直线', icon: '╱' },
+  { value: 'arrow', label: '箭头', icon: '↗' },
+  { value: 'rect', label: '矩形', icon: '□' },
+  { value: 'circle', label: '圆形', icon: '○' },
+  { value: 'text', label: '文字', icon: 'T' },
+  { value: 'eraser', label: '橡皮', icon: '⌫' },
+];
+
 const colorSwatches = [
   '#FF0000', '#00FF00', '#0000FF', '#FFFF00',
   '#FF00FF', '#00FFFF', '#FFFFFF', '#000000',
 ];
 
 let ctx: CanvasRenderingContext2D | null = null;
+let resizeObserver: ResizeObserver | null = null;
 let draftTimer: ReturnType<typeof setTimeout> | null = null;
 
 onMounted(() => {
   initCanvas();
-  window.addEventListener('resize', handleResize);
+  if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+    resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(containerRef.value);
+  }
+  window.addEventListener('resize', handleViewportResize);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize);
+  window.removeEventListener('resize', handleViewportResize);
+  stopToolbarDrag();
   clearDraftTimer();
+  resizeObserver?.disconnect();
 });
 
 function initCanvas() {
@@ -215,9 +239,7 @@ function initCanvas() {
   redraw();
 }
 
-function handleResize() {
-  initCanvas();
-}
+function handleResize() { handleViewportResize(); }
 
 function createActionId() {
   return globalThis.crypto?.randomUUID?.()
@@ -261,13 +283,16 @@ function startDrawing(event: PointerEvent) {
     return;
   }
 
+  canvasRef.value?.setPointerCapture?.(event.pointerId);
   isDrawing.value = true;
 }
 
 function draw(event: PointerEvent) {
   if (!props.editable || !isDrawing.value || !ctx) return;
   event.preventDefault();
-  currentPoints.value.push(getRelativePoint(event));
+  const point = getRelativePoint(event);
+  if (['line', 'circle', 'rect', 'arrow'].includes(currentTool.value)) currentPoints.value = [currentPoints.value[0]!, point];
+  else currentPoints.value.push(point);
   redraw();
   drawAction(getCurrentDraft());
   scheduleDraft();
@@ -391,6 +416,17 @@ function drawAction(action: AnnotationDraft | AnnotationAction) {
     case 'pen':
       drawPath(action.points);
       break;
+    case 'line':
+      drawPath([start, end]);
+      break;
+    case 'circle': {
+      const a = toCanvasPoint(start);
+      const b = toCanvasPoint(end);
+      ctx.beginPath();
+      ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
     case 'arrow':
       drawArrow(start, end);
       break;
@@ -442,9 +478,11 @@ watch(
 
 <style scoped>
 .annotation-container {
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 
 .annotation-canvas {
@@ -456,6 +494,7 @@ watch(
   cursor: crosshair;
   z-index: 10;
   touch-action: none;
+  pointer-events: auto;
 }
 
 .annotation-canvas--readonly {
@@ -464,25 +503,63 @@ watch(
 }
 
 .annotation-toolbar {
-  position: absolute;
-  top: 10px;
+  position: fixed;
+  bottom: max(12px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.95);
-  padding: 12px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 20;
-  backdrop-filter: blur(10px);
-  max-width: calc(100vw - 24px);
-  overflow-x: auto;
+  width: min(760px, calc(100vw - 20px));
+  max-height: min(240px, calc(100dvh - 16px));
+  overflow: auto;
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36);
+  color: #f8fafc;
+  z-index: 1000;
+  pointer-events: auto;
+  backdrop-filter: blur(14px);
 }
+
+.toolbar-header,
+.toolbar-title,
+.toolbar-footer,
+.toolbar-setting,
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-header { justify-content: space-between; gap: 12px; margin-bottom: 10px; cursor: grab; touch-action: none; user-select: none; }
+.toolbar-header:active { cursor: grabbing; }
+.toolbar-title { min-width: 0; gap: 8px; font-size: 13px; white-space: nowrap; }
+.toolbar-title-mark { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; }
+.toolbar-hint { color: #94a3b8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.toolbar-close { flex: none; }
+.toolbar-tools { display: flex; gap: 6px; overflow-x: auto; padding: 1px 0 8px; scrollbar-width: thin; }
+.toolbar-tool { flex: none; }
+.tool-glyph { display: inline-block; min-width: 16px; margin-right: 5px; font-size: 17px; line-height: 1; text-align: center; }
+.toolbar-footer { flex-wrap: wrap; gap: 10px 16px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.toolbar-setting { gap: 8px; min-width: 0; }
+.toolbar-setting--color { flex: none; }
+.color-trigger :deep(.n-button__content) { display: flex; align-items: center; gap: 6px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.color-swatch { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255, 255, 255, 0.85); border-radius: 4px; }
+.color-panel { width: 220px; }
+.toolbar-setting--width { flex: 1; min-width: 160px; }
+.toolbar-setting--width :deep(.n-slider) { flex: 1; min-width: 75px; }
+.setting-label, .width-value { color: #cbd5e1; font-size: 12px; white-space: nowrap; }
+.width-value { width: 33px; text-align: right; font-variant-numeric: tabular-nums; }
+.toolbar-actions { gap: 6px; margin-left: auto; }
+.annotation-toolbar :deep(.n-button:not(.n-button--primary-type)) { color: #e2e8f0; background: rgba(255, 255, 255, 0.07); }
+.annotation-toolbar :deep(.n-button:not(.n-button--primary-type):hover) { background: rgba(255, 255, 255, 0.16); }
+.annotation-toolbar :deep(.n-button:not(.n-button--primary-type)::before) { border-color: rgba(255, 255, 255, 0.14); }
+.annotation-toolbar :deep(.n-button--primary-type) { color: #fff; }
 
 @media (max-width: 640px) {
-  .annotation-toolbar {
-    top: 8px;
-    padding: 8px;
-  }
+  .annotation-toolbar { bottom: max(8px, env(safe-area-inset-bottom)); padding: 9px; border-radius: 12px; }
+  .toolbar-hint { display: none; }
+  .toolbar-footer { gap: 8px; }
+  .toolbar-setting--width { order: 2; flex-basis: 100%; }
+  .toolbar-actions { margin-left: auto; }
 }
 </style>
-

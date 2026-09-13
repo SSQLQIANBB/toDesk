@@ -5,7 +5,7 @@ export type AnnotationPoint = {
   y: number;
 };
 
-export type AnnotationTool = 'pen' | 'arrow' | 'rect' | 'text' | 'eraser';
+export type AnnotationTool = 'pen' | 'line' | 'circle' | 'arrow' | 'rect' | 'text' | 'eraser';
 
 export type AnnotationDraft = {
   actionId: string;
