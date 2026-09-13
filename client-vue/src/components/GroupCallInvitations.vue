@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router';
 import { useSocketStore } from '@/stores/socket';
 import { useAuthStore } from '@/stores/auth';
 import type { GroupSession } from '@/services/groupSessionState';
+import notificationService from '@/services/notificationService';
 
 const dialog = useDialog();
 const router = useRouter();
@@ -48,6 +49,8 @@ function handleStarted(data: GroupSession & {
     onClose: () => { pending.delete(key); },
     maskClosable: false,
   }));
+  if (document.hidden) void notificationService.showCall(data.user?.nickname || data.user?.username || '群成员', type === 'screen' ? 'screen' : 'video', undefined, () => window.focus());
+  else notificationService.playAlert('call');
 }
 
 function handleEnded(data: { groupId: number; type?: string; deviceType?: number }) {

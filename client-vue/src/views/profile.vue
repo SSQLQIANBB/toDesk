@@ -164,7 +164,8 @@
                   <div>
                     <h3 class="font-semibold text-gray-800">桌面通知</h3>
                     <p class="text-sm text-gray-500 mt-1">
-                      <span v-if="notificationPermission === 'granted'" class="text-green-600">✓ 已启用</span>
+                      <span v-if="notificationPermission === 'granted' && notificationEnabled" class="text-green-600">✓ 已启用</span>
+                      <span v-else-if="notificationPermission === 'granted'" class="text-gray-500">已关闭</span>
                       <span v-else-if="notificationPermission === 'denied'" class="text-red-600">✗ 已拒绝</span>
                       <span v-else class="text-yellow-600">⚠ 未请求</span>
                       - 接收新消息、通话等桌面通知
@@ -193,7 +194,7 @@
                 <div class="flex items-center justify-between">
                   <div>
                     <h3 class="font-semibold text-gray-800">声音提醒</h3>
-                    <p class="text-sm text-gray-500 mt-1">收到新消息时播放提示音</p>
+                    <p class="text-sm text-gray-500 mt-1">收到消息、来电或邀请时播放提示音</p>
                   </div>
                   <n-switch 
                     v-model:value="soundEnabled" 
@@ -215,7 +216,8 @@
 
               <!-- 通知类型设置 -->
               <div class="p-4 bg-gray-50 rounded-lg">
-                <h3 class="font-semibold text-gray-800 mb-3">通知类型</h3>
+                <h3 class="font-semibold text-gray-800">通知类型</h3>
+                <p class="text-xs text-gray-500 mt-1 mb-3">控制消息横幅、桌面通知和声音；来电与邀请的操作弹窗仍会显示。</p>
                 <div class="space-y-3">
                   <div class="flex items-center justify-between">
                     <span class="text-sm">私聊消息</span>
@@ -413,38 +415,23 @@ function initNotificationSettings() {
   notificationPermission.value = notificationService.getPermission();
   notificationEnabled.value = notificationService.isEnabled();
   soundEnabled.value = notificationService.isSoundEnabled();
-  
-  // 从 localStorage 加载通知类型设置
-  const savedNotifySettings = localStorage.getItem('notify_settings');
-  if (savedNotifySettings) {
-    try {
-      const settings = JSON.parse(savedNotifySettings);
-      messagePreview.value = settings.messagePreview ?? true;
-      notifyPrivateMessage.value = settings.notifyPrivateMessage ?? true;
-      notifyGroupMessage.value = settings.notifyGroupMessage ?? true;
-      notifyCall.value = settings.notifyCall ?? true;
-      notifyInvitation.value = settings.notifyInvitation ?? true;
-    } catch (error) {
-      console.error('加载通知设置失败:', error);
-    }
-  }
+  const settings = notificationService.getPreferences();
+  messagePreview.value = settings.messagePreview;
+  notifyPrivateMessage.value = settings.notifyPrivateMessage;
+  notifyGroupMessage.value = settings.notifyGroupMessage;
+  notifyCall.value = settings.notifyCall;
+  notifyInvitation.value = settings.notifyInvitation;
 }
 
-// 保存通知类型设置
-function saveNotifySettings() {
-  const settings = {
+watch(
+  [messagePreview, notifyPrivateMessage, notifyGroupMessage, notifyCall, notifyInvitation],
+  () => notificationService.updatePreferences({
     messagePreview: messagePreview.value,
     notifyPrivateMessage: notifyPrivateMessage.value,
     notifyGroupMessage: notifyGroupMessage.value,
     notifyCall: notifyCall.value,
     notifyInvitation: notifyInvitation.value,
-  };
-  localStorage.setItem('notify_settings', JSON.stringify(settings));
-}
-
-watch(
-  [messagePreview, notifyPrivateMessage, notifyGroupMessage, notifyCall, notifyInvitation],
-  saveNotifySettings
+  }),
 );
 
 // 请求通知权限
@@ -452,9 +439,12 @@ async function requestNotificationPermission() {
   const granted = await notificationService.requestPermission();
   if (granted) {
     notificationPermission.value = 'granted';
+    notificationService.enable();
     notificationEnabled.value = true;
     message.success('通知权限已授予');
   } else {
+    notificationPermission.value = notificationService.getPermission();
+    notificationEnabled.value = false;
     message.error('通知权限被拒绝');
   }
 }
@@ -483,11 +473,12 @@ function handleSoundToggle(value: boolean) {
 
 // 发送测试通知
 async function sendTestNotification() {
-  await notificationService.showSystem(
+  const sent = await notificationService.showSystem(
     '测试通知',
     '这是一条测试通知，您的通知设置已生效！'
   );
-  message.success('测试通知已发送');
+  if (sent) message.success('测试通知已发送');
+  else message.error('测试通知未发送，请检查浏览器通知权限');
 }
 
 // 加载用户信息

@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   receivePrivate: vi.fn(() => true),
   receiveGroup: vi.fn(() => true),
+  shouldNotify: vi.fn((_type: string) => true),
+  previewMessage: vi.fn((value: string) => value),
+  playAlert: vi.fn(),
 }));
 vi.mock('naive-ui', () => ({ useNotification: () => ({ create: mocks.create }) }));
 vi.mock('vue-router', async importOriginal => ({
@@ -24,12 +27,17 @@ vi.mock('@/stores/unread', () => ({ useUnreadStore: () => ({
   total: 0, activePrivateUserId: null, rememberSender: vi.fn(),
   receivePrivate: mocks.receivePrivate, receiveGroup: mocks.receiveGroup,
 }) }));
-vi.mock('@/services/notificationService', () => ({ default: { showMessage: vi.fn(), showSystem: vi.fn() } }));
+vi.mock('@/services/notificationService', () => ({ default: {
+  showMessage: vi.fn(), showGroupMessage: vi.fn(), playAlert: mocks.playAlert,
+  shouldNotify: mocks.shouldNotify, previewMessage: mocks.previewMessage,
+} }));
 import GlobalMessages from './GlobalMessages.vue';
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
+  mocks.shouldNotify.mockImplementation(() => true);
+  mocks.previewMessage.mockImplementation((value: string) => value);
 });
 
 describe('全局消息提示', () => {
@@ -55,6 +63,20 @@ describe('全局消息提示', () => {
     groupContent.props.onClick();
     expect(mocks.push).toHaveBeenCalledWith({ path: '/remote', query: { tab: 'users', contact: '2' } });
     expect(mocks.push).toHaveBeenCalledWith('/group-chat/7');
+    wrapper.unmount();
+  });
+
+  it('关闭群消息提醒只保留未读计数，关闭预览时隐藏私聊正文', () => {
+    mocks.shouldNotify.mockImplementation(type => type !== 'group');
+    mocks.previewMessage.mockReturnValue('收到一条私聊消息');
+    const wrapper = mount(GlobalMessages);
+    mocks.handlers.get('private_message')!({ id: 21, fromUserId: 2, sender: { nickname: '小明' }, message: '秘密' });
+    mocks.handlers.get('group_message')!({ id: 22, groupId: 7, user: { nickname: '小红' }, message: '群内秘密' });
+
+    expect(mocks.receiveGroup).toHaveBeenCalledWith(22, 7, false);
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.create.mock.calls[0]![0].content().children).toBe('内容：收到一条私聊消息');
+    expect(mocks.playAlert).toHaveBeenCalledWith('private');
     wrapper.unmount();
   });
 });

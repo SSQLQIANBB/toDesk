@@ -80,6 +80,7 @@ import { Video16Filled } from '@vicons/fluent'
 import { nextTick, ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useSocketStore } from '@/stores/socket';
 import { usePrivateCallStore } from '@/stores/privateCall';
+import notificationService from '@/services/notificationService';
 import { cameraConstraints, screenRecordConstraints } from '@/views/remoteShare/components/config';
 import { useMessage, NModal, NButton, NIcon } from 'naive-ui';
 
@@ -469,6 +470,8 @@ function handleIncomingCall(data: { from: string; deviceType: DEVICE_TYPE; user?
   incomingCallFrom.value = contactUserName.value;
   incomingCallType.value = data.deviceType;
   incomingCallShow.value = true;
+  if (document.hidden) void notificationService.showCall(incomingCallFrom.value, data.deviceType === DEVICE_TYPE.SCREEN ? 'screen' : 'video', data.user?.avatar, () => window.focus());
+  else notificationService.playAlert('call');
 }
 
 // 接听来电

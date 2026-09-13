@@ -233,7 +233,6 @@ import { storeToRefs } from 'pinia';
 import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
-import notificationService from '@/services/notificationService';
 import { getGroupMessages } from '@/api/message';
 import { groupSessionState } from '@/services/groupSessionState';
 
@@ -306,7 +305,6 @@ function initSocket() {
   socket.value?.on('group_member_joined', handleGroupMemberJoined);
   socket.value?.on('group_member_left', handleGroupMemberLeft);
   socket.value?.on('group_message', handleGroupMessage);
-  socket.value?.on('group_call_started', handleGroupCallStarted);
 }
 
 function handleGroupMembers(data: { groupId: number; members: any[] }) {
@@ -340,23 +338,6 @@ function handleGroupMessage(data: any) {
     isMine: false,
   });
   scrollToBottom();
-
-  if (document.hidden && data.user?.id !== currentUser.value?.id) {
-    notificationService.showGroupMessage(
-      groupInfo.value?.name || '群组',
-      data.user?.nickname || data.user?.username || '群成员',
-      data.message,
-      data.user?.avatar,
-      () => window.focus(),
-    );
-  }
-}
-
-function handleGroupCallStarted(data: any) {
-  if (data.groupId === groupId.value) {
-    const callType = data.deviceType === 2 ? '屏幕共享' : '视频通话';
-    message.info(`${data.user?.nickname || data.user?.username} 发起了${callType}`);
-  }
 }
 
 // 发送消息
@@ -429,9 +410,6 @@ function clearVisibleUnread() {
 onMounted(async () => {
   unread.readGroup(groupId.value);
   document.addEventListener('visibilitychange', clearVisibleUnread);
-  // 请求通知权限
-  await notificationService.requestPermission();
-
   await loadGroupDetail();
   await loadGroupHistory();
   initSocket();
@@ -443,7 +421,6 @@ onUnmounted(() => {
   socket.value?.off('group_member_joined', handleGroupMemberJoined);
   socket.value?.off('group_member_left', handleGroupMemberLeft);
   socket.value?.off('group_message', handleGroupMessage);
-  socket.value?.off('group_call_started', handleGroupCallStarted);
   socketStore.leaveGroup(groupId.value);
 });
 </script>

@@ -38,7 +38,7 @@ async function subscribeGroups() {
       unread.rememberSender(item.sender);
       if (unread.receivePrivate(item.id, item.fromUserId, false)) newCount++;
     });
-    if (newCount && currentPath.value !== '/remote') notification.create({
+    if (newCount && currentPath.value !== '/remote' && notificationService.shouldNotify('private')) notification.create({
       title: notificationTitle('未读消息'),
       content: () => h('span', { class: 'global-message-text', style: { color: '#dbeafe' } }, `内容：您有 ${newCount} 条未读私信`),
       closable: false,
@@ -56,11 +56,13 @@ function handlePrivate(data: any) {
   if (active && data.id) void markMessagesAsRead([Number(data.id)]);
   if (!unread.receivePrivate(Number(data.id), senderId, active) || active) return;
   const sender = data.sender || socketStore.userList.find(user => user.id === senderId);
+  if (!notificationService.shouldNotify('private')) return;
   if (document.hidden) void notificationService.showMessage(sender?.nickname || sender?.username || '联系人', data.message, sender?.avatar,
     () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); });
+  else notificationService.playAlert('private');
   notification.create({
     title: notificationTitle(`${sender?.nickname || sender?.username || '联系人'}：消息`),
-    content: () => h('button', { type: 'button', class: 'global-message-link', style: { color: '#dbeafe' }, onClick: () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); } }, `内容：${data.message ?? ''}`),
+    content: () => h('button', { type: 'button', class: 'global-message-link', style: { color: '#dbeafe' }, onClick: () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); } }, `内容：${notificationService.previewMessage(data.message ?? '', 'private')}`),
     closable: false,
     duration: 5000,
   });
@@ -71,11 +73,13 @@ function handleGroup(data: any) {
   if (!groupId) return;
   const active = router.currentRoute.value.path === `/group-chat/${groupId}` && !document.hidden;
   if (!unread.receiveGroup(Number(data.id), groupId, active) || active) return;
-  if (document.hidden) void notificationService.showSystem('群组新消息', data.message,
+  if (!notificationService.shouldNotify('group')) return;
+  if (document.hidden) void notificationService.showGroupMessage('群组消息', data.user?.nickname || data.user?.username || '群成员', data.message, data.user?.avatar,
     () => { void router.push(`/group-chat/${groupId}`); });
+  else notificationService.playAlert('group');
   notification.create({
     title: notificationTitle(`${data.user?.nickname || data.user?.username || '群成员'}：消息`),
-    content: () => h('button', { type: 'button', class: 'global-message-link', style: { color: '#dbeafe' }, onClick: () => { void router.push(`/group-chat/${groupId}`); } }, `内容：${data.message ?? ''}`),
+    content: () => h('button', { type: 'button', class: 'global-message-link', style: { color: '#dbeafe' }, onClick: () => { void router.push(`/group-chat/${groupId}`); } }, `内容：${notificationService.previewMessage(data.message ?? '', 'group')}`),
     closable: false,
     duration: 5000,
   });

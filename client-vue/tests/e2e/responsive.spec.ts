@@ -105,6 +105,64 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe('响应式布局', () => {
+  test('个人中心通知设置保存后控制消息横幅与测试通知', async ({ page }) => {
+    await preparePage(page);
+    await page.addInitScript(() => {
+      (window as any).__desktopNotifications = [];
+      Object.defineProperty(window, 'Notification', { configurable: true, value: class {
+        static permission = 'granted';
+        static requestPermission = async () => 'granted';
+        constructor(title: string, options: NotificationOptions) {
+          (window as any).__desktopNotifications.push({ title, body: options.body });
+        }
+        close() {}
+      } });
+    });
+    await page.goto('/profile');
+    await page.getByText('通知设置', { exact: true }).click();
+    const switches = page.locator('.n-tab-pane:visible .n-switch');
+    await expect(switches).toHaveCount(7);
+    await switches.nth(2).click(); // 隐藏消息预览
+    await switches.nth(3).click(); // 关闭私聊提醒
+    await switches.nth(5).click(); // 关闭来电提醒
+    await switches.nth(6).click(); // 关闭邀请提醒
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('notify_settings') || '{}'))).toMatchObject({
+      messagePreview: false, notifyPrivateMessage: false, notifyCall: false, notifyInvitation: false,
+    });
+
+    await page.goto('/groups');
+    await page.evaluate(async () => {
+      const { useSocketStore } = await import('/src/stores/socket.ts' as string);
+      useSocketStore().socket?.listeners('private_message').forEach((listener: Function) => listener({
+        id: 911, fromUserId: 2, sender: { id: 2, nickname: '小明' }, message: '秘密内容',
+      }));
+    });
+    await expect(page.locator('.n-notification')).toHaveCount(0);
+    await expect(page.locator('.global-unread-shortcut__badge')).toHaveText('1');
+
+    await page.goto('/profile');
+    await page.getByText('通知设置', { exact: true }).click();
+    await page.locator('.n-tab-pane:visible .n-switch').nth(3).click();
+    await page.goto('/groups');
+    await page.evaluate(async () => {
+      const { useSocketStore } = await import('/src/stores/socket.ts' as string);
+      useSocketStore().socket?.listeners('private_message').forEach((listener: Function) => listener({
+        id: 912, fromUserId: 2, sender: { id: 2, nickname: '小明' }, message: '秘密内容',
+      }));
+    });
+    await expect(page.locator('.n-notification .global-message-link')).toHaveText('内容：收到一条私聊消息');
+
+    await page.goto('/profile');
+    await page.getByText('通知设置', { exact: true }).click();
+    await page.locator('.n-tab-pane:visible .n-switch').nth(0).click();
+    await expect(page.getByRole('button', { name: '发送测试' })).toBeDisabled();
+    await page.locator('.n-tab-pane:visible .n-switch').nth(0).click();
+    await page.getByRole('button', { name: '发送测试' }).click();
+    expect(await page.evaluate(() => (window as any).__desktopNotifications)).toContainEqual({
+      title: '测试通知', body: '这是一条测试通知，您的通知设置已生效！',
+    });
+  });
+
   test('新消息提示文字清晰可见，联系人未读徽标靠右', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await preparePage(page);

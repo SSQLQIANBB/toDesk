@@ -413,19 +413,19 @@ async function loadPendingInvitations() {
     pendingInvitations.value = res.invitations || [];
     
     if (pendingInvitations.value.length > 0) {
-      // 显示桌面通知
-      pendingInvitations.value.forEach(inv => {
-        notificationService.showInvitation(
-          inv.group.name,
-          inv.inviter.nickname || inv.inviter.username,
-          inv.inviter.avatar,
-          () => {
-            window.focus();
-            showInvitationsDialog();
-          }
-        );
-      });
-      
+      if (document.hidden) {
+        pendingInvitations.value.forEach(inv => {
+          void notificationService.showInvitation(
+            inv.group.name,
+            inv.inviter.nickname || inv.inviter.username,
+            inv.inviter.avatar,
+            () => { window.focus(); showInvitationsDialog(); },
+          );
+        });
+      } else {
+        notificationService.playAlert('invitation');
+      }
+
       // 显示邀请对话框
       showInvitationsDialog();
     }
@@ -532,10 +532,7 @@ const handleVisible = () => {
 }
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisible);
-  
-  // 请求通知权限
-  await notificationService.requestPermission();
-  
+
   if (authUser.value && token.value) {
     await Promise.all([
       loadMyGroups(),
