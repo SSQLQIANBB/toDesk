@@ -1,0 +1,111 @@
+<template>
+  <button v-if="unread.total > 0 && currentPath !== '/remote'" type="button" class="global-unread-shortcut"
+    aria-label="打开未读消息" @click="router.push('/remote')">
+    消息 <span class="global-unread-shortcut__badge">{{ unread.total > 99 ? '99+' : unread.total }}</span>
+  </button>
+</template>
+<script setup lang="ts">
+import { computed, h, onBeforeUnmount, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { useNotification } from 'naive-ui';
+import { useSocketStore } from '@/stores/socket';
+import { useUnreadStore } from '@/stores/unread';
+import { getMyGroups } from '@/api/group';
+import { getOfflineMessages, markMessagesAsRead } from '@/api/message';
+import notificationService from '@/services/notificationService';
+
+const socketStore = useSocketStore();
+const unread = useUnreadStore();
+const router = useRouter();
+const currentPath = computed(() => router.currentRoute.value.path);
+const notification = useNotification();
+let loadGeneration = 0;
+
+async function subscribeGroups() {
+  const generation = ++loadGeneration;
+  try {
+    const [groups, offline] = await Promise.allSettled([getMyGroups(), getOfflineMessages()]);
+    if (generation !== loadGeneration) return;
+    if (groups.status === 'fulfilled') socketStore.setSubscribedGroups(groups.value.groups.map(group => group.id));
+    else console.error('订阅群组失败:', groups.reason);
+    if (offline.status === 'rejected') { console.error('加载未读消息失败:', offline.reason); return; }
+    let newCount = 0;
+    offline.value.messages.forEach(item => {
+      unread.rememberSender(item.sender);
+      if (unread.receivePrivate(item.id, item.fromUserId, false)) newCount++;
+    });
+    if (newCount) notification.create({ title: '未读消息', content: `内容：您有 ${newCount} 条未读私信`, closable: false, duration: 5000 });
+  } catch (error) { console.error('加载全局消息订阅失败:', error); }
+}
+
+function handlePrivate(data: any) {
+  const senderId = Number(data.fromUserId);
+  if (!senderId) return;
+  const active = router.currentRoute.value.path === '/remote'
+    && unread.activePrivateUserId === senderId && !document.hidden;
+  unread.rememberSender(data.sender);
+  if (active && data.id) void markMessagesAsRead([Number(data.id)]);
+  if (!unread.receivePrivate(Number(data.id), senderId, active) || active) return;
+  const sender = data.sender || socketStore.userList.find(user => user.id === senderId);
+  if (document.hidden) void notificationService.showMessage(sender?.nickname || sender?.username || '联系人', data.message, sender?.avatar,
+    () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); });
+  notification.create({
+    title: `${sender?.nickname || sender?.username || '联系人'}：消息`,
+    content: () => h('button', { type: 'button', class: 'global-message-link', onClick: () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); } }, `内容：${data.message ?? ''}`),
+    closable: false,
+    duration: 5000,
+  });
+}
+
+function handleGroup(data: any) {
+  const groupId = Number(data.groupId);
+  if (!groupId) return;
+  const active = router.currentRoute.value.path === `/group-chat/${groupId}` && !document.hidden;
+  if (!unread.receiveGroup(Number(data.id), groupId, active) || active) return;
+  if (document.hidden) void notificationService.showSystem('群组新消息', data.message,
+    () => { void router.push(`/group-chat/${groupId}`); });
+  notification.create({
+    title: `${data.user?.nickname || data.user?.username || '群成员'}：消息`,
+    content: () => h('button', { type: 'button', class: 'global-message-link', onClick: () => { void router.push(`/group-chat/${groupId}`); } }, `内容：${data.message ?? ''}`),
+    closable: false,
+    duration: 5000,
+  });
+}
+
+watch(() => socketStore.socket, (current, previous) => {
+  previous?.off('private_message', handlePrivate);
+  previous?.off('group_message', handleGroup);
+  current?.on('private_message', handlePrivate);
+  current?.on('group_message', handleGroup);
+}, { immediate: true });
+watch(() => socketStore.authenticated, ready => {
+  if (ready) void subscribeGroups();
+  else { loadGeneration++; socketStore.setSubscribedGroups([]); }
+}, { immediate: true });
+onBeforeUnmount(() => {
+  socketStore.socket?.off('private_message', handlePrivate);
+  socketStore.socket?.off('group_message', handleGroup);
+});
+</script>
+
+<style>
+.global-message-link { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; line-height: 16px; }
+.global-message-link:hover { text-decoration: underline; }
+.n-notification-container .n-notification {
+  width: min(260px, calc(100vw - 24px));
+  padding: 0 10px;
+  border: 1px solid #334155;
+  border-radius: 13px;
+  background: #172033;
+  color: #dbeafe;
+  box-shadow: 0 14px 36px #02061755;
+  --n-color: #172033;
+  --n-title-text-color: #f8fafc;
+  --n-text-color: #dbeafe;
+}
+.n-notification-container .n-notification .n-notification-main { width: 100%; min-width: 0; margin-left: 0; padding-block: 8px; }
+.n-notification-container .n-notification .n-notification-main__header { color: #f8fafc; font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.n-notification-container .n-notification .n-notification-main__content { min-width: 0; margin-top: 2px; color: #dbeafe; overflow: hidden; }
+.global-unread-shortcut { position: fixed; left: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 2500; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid #bfdbfe; border-radius: 24px; background: #eff6ff; color: #1d4ed8; font-weight: 600; box-shadow: 0 6px 20px #0002; cursor: pointer; }
+.global-unread-shortcut__badge { min-width: 22px; padding: 2px 5px; border-radius: 11px; background: #ef4444; color: white; font-size: 12px; }
+</style>

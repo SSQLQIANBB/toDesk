@@ -9,8 +9,15 @@ async function prepareGroups(
   let deleted = false;
   let deleteRequests = 0;
 
+  await page.route(/\/meeting(?:\/|\?|$)/, route => route.abort());
+  await page.route(/\/api\/auth\/me$/, route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ user: { id: 1, username: 'owner', nickname: '测试用户', status: 'online' } }),
+  }));
+
   await page.addInitScript(() => {
     localStorage.setItem('token', 'group-delete-token');
+    localStorage.setItem('__STORAGE_PERSIST_AUTH_', JSON.stringify({ token: 'group-delete-token', refreshToken: 'group-delete-refresh-token' }));
     localStorage.setItem('user', JSON.stringify({
       id: 1,
       username: 'owner',

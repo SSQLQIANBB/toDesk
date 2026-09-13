@@ -25,6 +25,7 @@ export const useSocketStore = defineStore('socket', () => {
   const authenticated = ref(false);
   const userList = ref<OnlineUser[]>([]);
   const joinedGroupIds = new Set<number>();
+  const subscribedGroupIds = new Set<number>();
 
   let credentials: { token: string; user: User } | null = null;
 
@@ -157,6 +158,7 @@ export const useSocketStore = defineStore('socket', () => {
     authenticated.value = false;
     userList.value = [];
     joinedGroupIds.clear();
+    subscribedGroupIds.clear();
   }
 
   function joinGroup(groupId: number) {
@@ -165,8 +167,26 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function leaveGroup(groupId: number) {
+    if (subscribedGroupIds.has(groupId)) return;
     joinedGroupIds.delete(groupId);
     if (authenticated.value) socket.value?.emit('leave_group', { groupId });
+  }
+
+  function setSubscribedGroups(groupIds: number[]) {
+    const next = new Set(groupIds);
+    for (const id of subscribedGroupIds) {
+      if (!next.has(id)) {
+        subscribedGroupIds.delete(id);
+        joinedGroupIds.delete(id);
+        if (authenticated.value) socket.value?.emit('leave_group', { groupId: id });
+      }
+    }
+    for (const id of next) {
+      if (!subscribedGroupIds.has(id)) {
+        subscribedGroupIds.add(id);
+        joinGroup(id);
+      }
+    }
   }
 
   function updateStatus(status: PresenceStatus) {
@@ -182,6 +202,7 @@ export const useSocketStore = defineStore('socket', () => {
     disconnect,
     joinGroup,
     leaveGroup,
+    setSubscribedGroups,
     updateStatus,
   };
 });

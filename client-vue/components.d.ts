@@ -11,6 +11,9 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    GlobalMessages: typeof import('./src/components/GlobalMessages.vue')['default']
+    GlobalPrivateCall: typeof import('./src/components/GlobalPrivateCall.vue')['default']
+    GroupCallInvitations: typeof import('./src/components/GroupCallInvitations.vue')['default']
     MediaRecorder: typeof import('./src/components/MediaRecorder.vue')['default']
     MediaVideo: typeof import('./src/components/MediaVideo.vue')['default']
     NAlert: typeof import('naive-ui')['NAlert']
@@ -30,13 +33,13 @@ declare module 'vue' {
     NForm: typeof import('naive-ui')['NForm']
     NFormItem: typeof import('naive-ui')['NFormItem']
     NIcon: typeof import('naive-ui')['NIcon']
-    NImage: typeof import('naive-ui')['NImage']
     NInput: typeof import('naive-ui')['NInput']
     NLayout: typeof import('naive-ui')['NLayout']
     NLayoutContent: typeof import('naive-ui')['NLayoutContent']
     NLayoutSider: typeof import('naive-ui')['NLayoutSider']
     NMessageProvider: typeof import('naive-ui')['NMessageProvider']
     NModal: typeof import('naive-ui')['NModal']
+    NNotificationProvider: typeof import('naive-ui')['NNotificationProvider']
     NPopover: typeof import('naive-ui')['NPopover']
     NScrollbar: typeof import('naive-ui')['NScrollbar']
     NSelect: typeof import('naive-ui')['NSelect']
@@ -55,6 +58,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     ScreenAnnotation: typeof import('./src/components/ScreenAnnotation.vue')['default']
     ScreenCameraRecorder: typeof import('./src/components/ScreenCameraRecorder.vue')['default']
+    SpeakingIndicator: typeof import('./src/components/SpeakingIndicator.vue')['default']
     TextMsg: typeof import('./src/components/TextMsg.vue')['default']
     VirtualBackground: typeof import('./src/components/VirtualBackground.vue')['default']
   }

@@ -1,9 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function prepareRemote(page: Page) {
+  await page.route(/\/meeting(?:\/|\?|$)/, route => route.abort());
   await page.addInitScript(() => {
     localStorage.setItem('token', 'remote-state-token');
     localStorage.setItem('refreshToken', 'remote-state-refresh-token');
+    localStorage.setItem('__STORAGE_PERSIST_AUTH_', JSON.stringify({ token: 'remote-state-token', refreshToken: 'remote-state-refresh-token' }));
     localStorage.setItem('user', JSON.stringify({
       id: 1,
       username: 'owner',
@@ -16,7 +18,9 @@ async function prepareRemote(page: Page) {
     const url = route.request().url();
     let body: Record<string, unknown> = {};
 
-    if (url.includes('/api/groups/my')) {
+    if (url.includes('/api/auth/me')) {
+      body = { user: { id: 1, username: 'owner', nickname: '测试用户', status: 'online' } };
+    } else if (url.includes('/api/groups/my')) {
       body = {
         groups: [{
           id: 7,
@@ -68,22 +72,22 @@ test.describe('Remote Tab 路由状态', () => {
 
   test('从在线用户进入个人中心，返回后仍停留在线用户', async ({ page }) => {
     await page.goto('/remote?tab=users');
-    await expect(page.getByText(/在线用户 \(/)).toBeVisible();
+    await expect(page.getByText(/联系人 \(/)).toBeVisible();
 
     await page.getByRole('button', { name: '个人中心' }).click();
     await expect(page).toHaveURL(/\/profile$/);
 
     await page.goBack();
     await expect(page).toHaveURL(/\/remote\?tab=users$/);
-    await expect(page.getByText(/在线用户 \(/)).toBeVisible();
+    await expect(page.getByText(/联系人 \(/)).toBeVisible();
   });
 
   test('直接访问使用默认 Tab，非法 Tab 也回退在线用户', async ({ page }) => {
     await page.goto('/remote');
-    await expect(page.getByText(/在线用户 \(/)).toBeVisible();
+    await expect(page.getByText(/联系人 \(/)).toBeVisible();
 
     await page.goto('/remote?tab=invalid');
-    await expect(page.getByText(/在线用户 \(/)).toBeVisible();
+    await expect(page.getByText(/联系人 \(/)).toBeVisible();
   });
 
   test('连续多次进入群组和返回时保持我的群组', async ({ page }) => {

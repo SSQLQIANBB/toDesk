@@ -12,8 +12,10 @@ const authenticatedRoutes = [
 const publicRoutes = ['/login', '/chat', '/socket', '/share'];
 
 async function preparePage(page: Page, userId = 1) {
+  await page.route(/\/meeting(?:\/|\?|$)/, route => route.abort());
   await page.addInitScript(({ authenticatedUserId }) => {
     localStorage.setItem('token', 'layout-test-token');
+    localStorage.setItem('__STORAGE_PERSIST_AUTH_', JSON.stringify({ token: 'layout-test-token', refreshToken: 'layout-refresh-token' }));
     localStorage.setItem('user', JSON.stringify({
       id: authenticatedUserId,
       username: authenticatedUserId === 1 ? 'owner' : 'member',
@@ -26,7 +28,10 @@ async function preparePage(page: Page, userId = 1) {
       configurable: true,
       value: {
         getUserMedia: async () => stream,
-        getDisplayMedia: async () => stream,
+        getDisplayMedia: async () => {
+          (window as any).__screenCaptureCount = ((window as any).__screenCaptureCount || 0) + 1;
+          return stream;
+        },
       },
     });
 
@@ -49,7 +54,9 @@ async function preparePage(page: Page, userId = 1) {
     const url = route.request().url();
     let body: Record<string, unknown> = {};
 
-    if (url.includes('/api/groups/my')) {
+    if (url.includes('/api/auth/me')) {
+      body = { user: { id: userId, username: userId === 1 ? 'owner' : 'member', nickname: userId === 1 ? '测试用户' : '成员二', status: 'online' } };
+    } else if (url.includes('/api/groups/my')) {
       body = {
         groups: [{
           id: 7,
@@ -98,6 +105,54 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe('响应式布局', () => {
+  test('标注工具栏默认贴近视口底部，可拖动到不遮挡画面的位置', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await preparePage(page);
+    await page.goto('/groups');
+    await page.getByRole('button', { name: '发起屏幕共享' }).click();
+    await page.getByRole('button', { name: '开启标注' }).click();
+    const toolbar = page.getByRole('toolbar', { name: '共享标注工具栏' });
+    await expect(toolbar).toBeVisible();
+    const initial = await toolbar.boundingBox();
+    expect(initial).not.toBeNull();
+    expect(initial!.y + initial!.height).toBeGreaterThan(780);
+    const handle = await toolbar.locator('.toolbar-title').boundingBox();
+    expect(handle).not.toBeNull();
+    await page.mouse.move(handle!.x + 35, handle!.y + handle!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle!.x + 65, handle!.y - 100, { steps: 4 });
+    await page.mouse.up();
+    const moved = await toolbar.boundingBox();
+    expect(moved!.y).toBeLessThan(initial!.y - 50);
+    expect(moved!.x).toBeGreaterThanOrEqual(0);
+  });
+
+  test('群列表点击发起共享后立即申请屏幕并进入共享状态', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await preparePage(page);
+    await page.goto('/groups');
+    await page.getByRole('button', { name: '发起屏幕共享' }).click();
+    await expect(page).toHaveURL(/\/group-screen\/7$/);
+    await expect(page.getByRole('button', { name: '停止共享' })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__screenCaptureCount)).toBe(1);
+  });
+
+  test('手机聊天区可打开并关闭联系人和群成员侧栏', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await preparePage(page);
+    await page.goto('/remote');
+    await page.getByRole('button', { name: '打开联系人列表' }).click();
+    await expect(page.locator('.remote-sidebar')).toHaveClass(/mobile-open/);
+    await page.getByRole('button', { name: '关闭列表' }).click();
+    await expect(page.locator('.remote-sidebar')).not.toHaveClass(/mobile-open/);
+
+    await page.goto('/group-chat/7');
+    await page.getByRole('button', { name: '打开群成员列表' }).click();
+    await expect(page.locator('.group-chat-sider')).toHaveClass(/mobile-open/);
+    await page.getByRole('button', { name: '关闭成员列表' }).click();
+    await expect(page.locator('.group-chat-sider')).not.toHaveClass(/mobile-open/);
+  });
+
   test('普通成员在手机端也能查看视频和共享的完整人员列表', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await preparePage(page, 2);

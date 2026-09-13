@@ -2,13 +2,15 @@
   <n-layout has-sider class="h-full w-full bg-gradient-to-br from-slate-50 to-slate-100">
     <n-layout-sider
       class="remote-sidebar"
+      :class="{ 'mobile-open': mobileSidebarOpen }"
       bordered
       :width="280"
       :collapsed-width="0"
       collapse-mode="transform"
-      show-trigger="bar"
+      :show-trigger="false"
       content-class="flex flex-col bg-white shadow-lg"
     >
+      <n-button class="mobile-sidebar-close" secondary @click="mobileSidebarOpen = false">关闭列表</n-button>
       <!-- 用户信息卡片 -->
       <div class="p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white">
         <div class="flex items-center gap-3 mb-3">
@@ -47,10 +49,10 @@
 
       <!-- Tab 切换 -->
       <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="flex-1 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
-        <!-- 在线用户 -->
-        <n-tab-pane name="users" tab="在线用户" display-directive="show:lazy" class="flex flex-col h-full pt-0">
+        <!-- 联系人 -->
+        <n-tab-pane name="users" :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'" display-directive="show:lazy" class="flex flex-col h-full pt-0">
           <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50">
-            在线用户 ({{ userList.length }})
+            <n-badge :value="unread.privateTotal" :max="99" :show="unread.privateTotal > 0">联系人</n-badge> ({{ displayUsers.length }})
           </div>
           <n-scrollbar style="flex: 1; max-height: calc(100vh - 280px);">
             <ul class="p-3 space-y-2">
@@ -60,7 +62,7 @@
                 :value="unReadMessageCount[user.id] || 0"
                 :max="99"
                 :show="!!unReadMessageCount[user.id]"
-                v-for="user in userList" 
+                v-for="user in displayUsers"
                 :key="user.id"
               >
                 <li 
@@ -80,9 +82,9 @@
               </n-badge>
 
               <n-empty 
-                v-if="!userList.length" 
+                v-if="!displayUsers.length"
                 class="h-full flex items-center justify-center py-12" 
-                description="暂无在线用户" 
+                description="暂无联系人"
                 size="small"
               >
                 <template #icon>
@@ -94,7 +96,7 @@
         </n-tab-pane>
 
         <!-- 我的群组 -->
-        <n-tab-pane name="groups" tab="我的群组" display-directive="show:lazy" class="flex flex-col h-full pt-0">
+        <n-tab-pane name="groups" :tab="unread.groupTotal ? `我的群组 (${unread.groupTotal})` : '我的群组'" display-directive="show:lazy" class="flex flex-col h-full pt-0">
           <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between">
             <span>我的群组 ({{ myGroups.length }})</span>
             <n-button size="tiny" @click="goToGroups">管理</n-button>
@@ -115,10 +117,11 @@
                   <n-avatar :size="40" :src="group.avatar || undefined">
                     <span v-if="!group.avatar">{{ group.name?.charAt(0) || 'G' }}</span>
                   </n-avatar>
-                  <div class="flex-1">
-                    <div class="font-semibold text-sm">{{ group.name }}</div>
+                  <div class="flex-1 min-w-0">
+                    <div class="font-semibold text-sm truncate">{{ group.name }}</div>
                     <div class="text-xs text-gray-500">成员: {{ group.memberCount || 0 }}</div>
                   </div>
+                  <n-badge :value="unread.groupCounts[group.id] || 0" :max="99" :show="!!unread.groupCounts[group.id]" />
                 </div>
               </div>
               
@@ -144,6 +147,7 @@
       <div v-if="contactUser" class="h-full w-full flex flex-col bg-white">
         <!-- 聊天头部 -->
         <header class="min-h-16 shadow-sm flex items-center px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
+          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开联系人列表" @click="mobileSidebarOpen = true">☰</n-button>
           <div class="flex items-center gap-3 w-0 flex-grow overflow-hidden">
             <n-avatar :size="40" :src="contactUser.avatar || undefined" class="flex-shrink-0">
               <span v-if="!contactUser.avatar">{{ contactUser.nickname?.charAt(0) || contactUser.username?.charAt(0) || '?' }}</span>
@@ -166,13 +170,14 @@
           </ul>
         </n-scrollbar>
         
-        <ToolBar ref="toolBarRef" :socket="socket" :contact-user="contactUser" />
+        <ToolBar :contact-user="contactUser" />
 
         <div class="h-32 border-t bg-white">
           <TextMsg @send="sendMsg" />
         </div>
       </div>
-      <div class="h-full w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100" v-else>
+      <div class="h-full w-full flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-50 to-slate-100" v-else>
+        <n-button class="mobile-sidebar-toggle" secondary @click="mobileSidebarOpen = true">打开联系人列表</n-button>
         <n-empty description="请从左侧选择一个联系人开始聊天" size="large">
           <template #icon>
             <n-icon size="50" color="#b0b0b0" :component="ChatboxEllipsesOutline" />
@@ -196,6 +201,7 @@ import { storeToRefs } from 'pinia';
 import { useMessage, useDialog } from 'naive-ui';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore, type OnlineUser } from '@/stores/socket';
+import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups, type Group } from '@/api/group';
 import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type OfflineMessage } from '@/api/message';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
@@ -214,8 +220,10 @@ const route = useRoute();
 const authStore = useAuthStore();
 const { currentUser: authUser, token } = storeToRefs(authStore);
 const socketStore = useSocketStore();
+const unread = useUnreadStore();
 const { socket, authenticated: online, userList } = storeToRefs(socketStore);
 const activeTab = ref<RemoteTab>(parseRemoteTab(route.query.tab));
+const mobileSidebarOpen = ref(false);
 
 type User = OnlineUser;
 
@@ -268,12 +276,17 @@ const privateMessageMap = new Map<
   MessageInfo[]
 >();
 
-const unReadMessageCount = ref<Record<number, number>>({});
+const unReadMessageCount = computed(() => unread.privateCounts);
+const displayUsers = computed<User[]>(() => {
+  const merged = new Map<number, User>();
+  Object.values(unread.privateContacts).forEach(user => merged.set(user.id, { ...user, socketId: '', status: 'offline' }));
+  userList.value.forEach(user => merged.set(user.id, user));
+  return [...merged.values()];
+});
 const currentMessageList = ref<MessageInfo[]>([]);
 
 // refs
 const scrollbarRef = ref();
-const toolBarRef = ref();
 
 // 退出登录
 async function handleLogout() {
@@ -293,68 +306,13 @@ function handlePrivateMessage(data: any) {
     time: data.time || new Date().toLocaleString(),
   });
 
-  const count = unReadMessageCount.value[senderId] || 0;
-  unReadMessageCount.value[senderId] = count + 1;
 
   if (senderId === contactUser.value?.id) {
     currentMessageList.value = privateMessageMap.get(senderId) || [];
     scrollToBottom();
   }
 
-  // 如果窗口未聚焦或不是当前联系人，显示桌面通知
-  if (document.hidden || senderId !== contactUser.value?.id) {
-    const sender = userList.value.find(u => u.id === senderId) || data.sender;
-    const senderName = sender?.nickname || sender?.username || '未知用户';
-    notificationService.showMessage(
-      senderName,
-      data.message,
-      sender?.avatar,
-      () => {
-        // 点击通知时聚焦窗口并选择该联系人
-        window.focus();
-        if (sender) {
-          selectContact(sender);
-        }
-      }
-    );
-  }
-}
 
-// WebRTC信令监听
-function handleWebrtcOffer(data: any) {
-  console.log('收到offer:', data);
-  toolBarRef.value?.handleOffer(data.offer);
-}
-
-function handleWebrtcAnswer(data: any) {
-  console.log('收到answer:', data);
-  toolBarRef.value?.handleAnswer(data.answer);
-}
-
-function handleWebrtcIce(data: any) {
-  console.log('收到ice candidate:', data);
-  toolBarRef.value?.handleIceCandidate(data.candidate);
-}
-
-function handleCallRequest(data: any) {
-  console.log('收到呼叫请求:', data);
-  toolBarRef.value?.handleIncomingCall(data);
-
-  // 显示来电通知
-  const caller = userList.value.find(u => u.socketId === data.from);
-  const callerName = caller?.nickname || caller?.username || '未知用户';
-  const callType = data.deviceType === 'camera' ? 'video' : data.deviceType === 'screen' ? 'screen' : 'audio';
-  notificationService.showCall(callerName, callType, caller?.avatar);
-}
-
-function handleCallResponse(data: any) {
-  console.log('收到呼叫响应:', data);
-  toolBarRef.value?.handleCallResponse(data);
-}
-
-function handleWebrtcHangup() {
-  console.log('对方挂断');
-  toolBarRef.value?.handleHangup();
 }
 
 function setMessage(id: number, data: MessageInfo) {
@@ -365,30 +323,20 @@ function setMessage(id: number, data: MessageInfo) {
 
 function bindPageSocketEvents(target: Socket) {
   target.on('private_message', handlePrivateMessage);
-  target.on('webrtc_offer', handleWebrtcOffer);
-  target.on('webrtc_answer', handleWebrtcAnswer);
-  target.on('webrtc_ice', handleWebrtcIce);
-  target.on('webrtc_call_request', handleCallRequest);
-  target.on('webrtc_call_response', handleCallResponse);
-  target.on('webrtc_hangup', handleWebrtcHangup);
 }
 
 function unbindPageSocketEvents(target: Socket | null | undefined) {
   target?.off('private_message', handlePrivateMessage);
-  target?.off('webrtc_offer', handleWebrtcOffer);
-  target?.off('webrtc_answer', handleWebrtcAnswer);
-  target?.off('webrtc_ice', handleWebrtcIce);
-  target?.off('webrtc_call_request', handleCallRequest);
-  target?.off('webrtc_call_response', handleCallResponse);
-  target?.off('webrtc_hangup', handleWebrtcHangup);
 }
 
 
 async function selectContact(user: User) {
+  mobileSidebarOpen.value = false;
   contactUser.value = user;
+  unread.activePrivateUserId = user.id;
 
   if (unReadMessageCount.value[user.id]) {
-    unReadMessageCount.value[user.id] = 0
+    unread.readPrivate(user.id)
   }
 
   try {
@@ -401,6 +349,8 @@ async function selectContact(user: User) {
     }));
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
+    const ids = res.messages.filter(msg => msg.fromUserId === user.id && !msg.isRead).map(msg => msg.id);
+    if (ids.length) await markMessagesAsRead(ids);
   } catch (error: any) {
     message.error('加载聊天记录失败: ' + error.message);
     currentMessageList.value = privateMessageMap.get(user.id) || []
@@ -440,6 +390,7 @@ async function loadMyGroups() {
   try {
     const res = await getMyGroups();
     myGroups.value = res.groups || [];
+    socketStore.setSubscribedGroups(myGroups.value.map(group => group.id));
   } catch (error: any) {
     console.error('加载群组列表失败:', error);
   }
@@ -512,6 +463,7 @@ function showOfflineMessagesDialog() {
       const messageIds = offlineMessages.value.map(msg => msg.id);
       try {
         await markMessagesAsRead(messageIds);
+        offlineMessages.value.forEach(msg => unread.readPrivate(msg.fromUserId));
         offlineMessages.value = [];
         message.success('消息已标记为已读');
       } catch (error: any) {
@@ -588,11 +540,17 @@ watch(() => currentMessageList.value.length, () => {
 });
 
 watch(activeTab, (tab) => {
+  if (route.query.tab === tab) return;
   void router.replace({
     path: '/remote',
     query: getRemoteTabQuery(tab),
   });
 });
+
+watch([displayUsers, () => route.query.contact], ([users, contact]) => {
+  const user = users.find(item => item.id === Number(contact));
+  if (user && contactUser.value?.id !== user.id) void selectContact(user);
+}, { immediate: true });
 
 watch(() => route.query.tab, (tab) => {
   activeTab.value = parseRemoteTab(tab);
@@ -607,7 +565,7 @@ const handleVisible = () => {
   console.log('--', document.visibilityState)
   if (document.visibilityState === 'visible') {
     if (contactUser.value && unReadMessageCount.value[contactUser.value.id]) {
-      unReadMessageCount.value[contactUser.value.id] = 0
+      void selectContact(contactUser.value);
     }
   }
 }
@@ -628,6 +586,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   unbindPageSocketEvents(socket.value);
+  unread.activePrivateUserId = null;
   document.removeEventListener('visibilitychange', handleVisible);
 });
 </script>
@@ -639,8 +598,14 @@ onUnmounted(() => {
     inset: 0 auto 0 0;
     z-index: 20;
     max-width: calc(100vw - 44px);
+    transform: translateX(-100%);
+    transition: transform .2s ease;
   }
+  :deep(.remote-sidebar.mobile-open) { transform: translateX(0); }
 }
+.mobile-sidebar-toggle { display: none; }
+.mobile-sidebar-close { display: none; }
+@media (max-width: 767px) { .mobile-sidebar-toggle, .mobile-sidebar-close { display: inline-flex; } }
 .n-tabs.n-tabs--top .n-tab-pane {
   padding-top: 0px;
 }

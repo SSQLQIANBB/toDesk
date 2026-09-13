@@ -42,6 +42,7 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between">
                   <h3 class="font-bold text-lg truncate">{{ group.name }}</h3>
+                  <n-badge :value="unread.groupCounts[group.id] || 0" :max="99" :show="!!unread.groupCounts[group.id]" />
                   <n-tag v-if="group.role === 'owner'" type="warning" size="small">群主</n-tag>
                   <n-tag v-else-if="group.role === 'admin'" type="info" size="small">管理员</n-tag>
                 </div>
@@ -300,12 +301,15 @@ import {
 } from '@/api/group';
 import { getUserList } from '@/api/auth';
 import { useSocketStore } from '@/stores/socket';
+import { useUnreadStore } from '@/stores/unread';
+import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
 import { groupSessionState } from '@/services/groupSessionState';
 
 const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
 const socketStore = useSocketStore();
+const unread = useUnreadStore();
 
 const loading = ref(false);
 const createLoading = ref(false);
@@ -363,7 +367,7 @@ async function loadGroups() {
     loading.value = true;
     const { groups: list } = await getMyGroups();
     groups.value = list;
-    list.forEach(group => socketStore.joinGroup(group.id));
+    socketStore.setSubscribedGroups(list.map(group => group.id));
   } catch (error: any) {
     message.error('加载群组列表失败: ' + error.message);
   } finally {
@@ -527,8 +531,19 @@ function handleVideoCall(group: Group) {
 }
 
 // 群组屏幕共享
-function handleScreenShare(group: Group) {
-  router.push(`/group-screen/${group.id}`);
+async function handleScreenShare(group: Group) {
+  if (groupSessionState.getSession(group.id, 'screen')) {
+    await router.push(`/group-screen/${group.id}`);
+    return;
+  }
+  try {
+    await captureGroupScreen(group.id);
+    if (socketStore.authenticated) socketStore.socket?.emit('group_call_start', { groupId: group.id, deviceType: 2 });
+    await router.push(`/group-screen/${group.id}`);
+  } catch (error: any) {
+    discardCapturedGroupScreen(group.id);
+    if (error?.name !== 'NotAllowedError') message.error('无法开始屏幕共享: ' + error.message);
+  }
 }
 
 // 编辑群组

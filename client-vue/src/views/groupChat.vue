@@ -3,13 +3,15 @@
     <!-- 侧边栏 -->
     <n-layout-sider
       class="group-chat-sider"
+      :class="{ 'mobile-open': mobileSidebarOpen }"
       bordered
       :width="280"
       :collapsed-width="0"
       collapse-mode="transform"
-      show-trigger="bar"
+      :show-trigger="false"
       content-class="flex flex-col bg-white shadow-lg"
     >
+      <n-button class="mobile-sidebar-close" secondary @click="mobileSidebarOpen = false">关闭成员列表</n-button>
       <!-- 群组信息卡片 -->
       <div class="p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white">
         <div class="flex items-center gap-3">
@@ -83,6 +85,7 @@
       <div class="h-full w-full flex flex-col bg-white">
         <!-- 聊天头部 -->
         <header class="min-h-16 shadow-sm flex items-center gap-2 px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
+          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开群成员列表" @click="mobileSidebarOpen = true">☰</n-button>
           <div class="flex items-center gap-3 flex-1 min-w-0">
             <n-avatar :size="40" :src="groupInfo?.avatar || undefined">
               <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
@@ -228,6 +231,8 @@ import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuthStore } from '@/stores/auth';
 import { storeToRefs } from 'pinia';
 import { useSocketStore } from '@/stores/socket';
+import { useUnreadStore } from '@/stores/unread';
+import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
 import notificationService from '@/services/notificationService';
 import { getGroupMessages } from '@/api/message';
 import { groupSessionState } from '@/services/groupSessionState';
@@ -238,8 +243,10 @@ const message = useMessage();
 const authStore = useAuthStore();
 const { currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
+const unread = useUnreadStore();
 const { socket } = storeToRefs(socketStore);
 
+const mobileSidebarOpen = ref(false);
 const groupId = ref(parseInt(route.params.id as string));
 const scrollbarRef = ref<ScrollbarInst | null>(null);
 
@@ -395,8 +402,19 @@ function handleVideoCall() {
 }
 
 // 发起屏幕共享
-function handleScreenShare() {
-  router.push(`/group-screen/${groupId.value}`);
+async function handleScreenShare() {
+  if (groupSessionState.getSession(groupId.value, 'screen')) {
+    await router.push(`/group-screen/${groupId.value}`);
+    return;
+  }
+  try {
+    await captureGroupScreen(groupId.value);
+    if (socketStore.authenticated) socket.value?.emit('group_call_start', { groupId: groupId.value, deviceType: 2 });
+    await router.push(`/group-screen/${groupId.value}`);
+  } catch (error: any) {
+    discardCapturedGroupScreen(groupId.value);
+    if (error?.name !== 'NotAllowedError') message.error('无法开始屏幕共享: ' + error.message);
+  }
 }
 
 // 返回
@@ -404,7 +422,13 @@ function goBack() {
   router.back();
 }
 
+function clearVisibleUnread() {
+  if (!document.hidden) unread.readGroup(groupId.value);
+}
+
 onMounted(async () => {
+  unread.readGroup(groupId.value);
+  document.addEventListener('visibilitychange', clearVisibleUnread);
   // 请求通知权限
   await notificationService.requestPermission();
 
@@ -414,6 +438,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', clearVisibleUnread);
   socket.value?.off('group_members', handleGroupMembers);
   socket.value?.off('group_member_joined', handleGroupMemberJoined);
   socket.value?.off('group_member_left', handleGroupMemberLeft);
@@ -424,13 +449,18 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.mobile-sidebar-toggle { display: none; }
+.mobile-sidebar-close { display: none; }
+@media (max-width: 767px) { .mobile-sidebar-toggle, .mobile-sidebar-close { display: inline-flex; } }
 @media (max-width: 767px) {
   :deep(.group-chat-sider) {
     position: absolute;
     inset: 0 auto 0 0;
     z-index: 20;
     max-width: calc(100vw - 44px);
+    transform: translateX(-100%);
+    transition: transform .2s ease;
   }
+  :deep(.group-chat-sider.mobile-open) { transform: translateX(0); }
 }
 </style>
-
