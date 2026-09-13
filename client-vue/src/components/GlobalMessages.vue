@@ -38,7 +38,7 @@ async function subscribeGroups() {
       unread.rememberSender(item.sender);
       if (unread.receivePrivate(item.id, item.fromUserId, false)) newCount++;
     });
-    if (newCount) notification.create({
+    if (newCount && currentPath.value !== '/remote') notification.create({
       title: notificationTitle('未读消息'),
       content: () => h('span', { class: 'global-message-text', style: { color: '#dbeafe' } }, `内容：您有 ${newCount} 条未读私信`),
       closable: false,

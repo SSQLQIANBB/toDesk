@@ -58,6 +58,27 @@ test.describe('Remote Tab 路由状态', () => {
     await prepareRemote(page);
   });
 
+  test('离线私信在联系人列表显示未读徽标，打开会话后才标记已读', async ({ page }) => {
+    const unreadMessage = {
+      id: 11, fromUserId: 2, toUserId: 1, message: '干嘛呢', isRead: false,
+      createdAt: '2026-09-13T08:00:00.000Z',
+      sender: { id: 2, username: 'liming', nickname: '黎明', status: 'offline' },
+    };
+    await page.route('**/api/messages/offline', route => route.fulfill({ json: { messages: [unreadMessage] } }));
+    await page.route('**/api/messages/private?*', route => route.fulfill({ json: { messages: [unreadMessage], hasMore: false } }));
+    await page.route('**/api/messages/mark-read', route => route.fulfill({ json: { message: 'ok' } }));
+
+    await page.goto('/remote');
+    await expect(page.locator('.contact-unread-badge')).toHaveText('1');
+    await expect(page.locator('.n-notification')).toHaveCount(0);
+    await expect(page.locator('.n-dialog')).toHaveCount(0);
+
+    const marked = page.waitForRequest(request => request.url().includes('/api/messages/mark-read'));
+    await page.getByText('黎明', { exact: true }).click();
+    expect((await marked).postDataJSON()).toEqual({ messageIds: [11] });
+    await expect(page.locator('.contact-unread-badge')).toHaveCount(0);
+  });
+
   test('从我的群组进入群聊，返回后仍停留在我的群组', async ({ page }) => {
     await page.goto('/remote?tab=groups');
     await expect(page.getByText('+ 创建/管理群组')).toBeVisible();

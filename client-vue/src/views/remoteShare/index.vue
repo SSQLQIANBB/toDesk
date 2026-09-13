@@ -204,7 +204,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups, type Group } from '@/api/group';
-import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type OfflineMessage } from '@/api/message';
+import { getOfflineMessages, getPrivateMessages, markMessagesAsRead } from '@/api/message';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
@@ -242,7 +242,6 @@ const dialog = useDialog();
 const contactUser = ref<User | null>(null);
 
 const myGroups = ref<Group[]>([]);
-const offlineMessages = ref<OfflineMessage[]>([]);
 const pendingInvitations = ref<GroupInvitation[]>([]);
 
 // 计算用户状态（基于Socket连接状态）
@@ -336,10 +335,6 @@ async function selectContact(user: User) {
   contactUser.value = user;
   unread.activePrivateUserId = user.id;
 
-  if (unReadMessageCount.value[user.id]) {
-    unread.readPrivate(user.id)
-  }
-
   try {
     const res = await getPrivateMessages(user.id);
     const history = res.messages.map((msg) => ({
@@ -352,6 +347,7 @@ async function selectContact(user: User) {
     currentMessageList.value = history;
     const ids = res.messages.filter(msg => msg.fromUserId === user.id && !msg.isRead).map(msg => msg.id);
     if (ids.length) await markMessagesAsRead(ids);
+    unread.readPrivate(user.id);
   } catch (error: any) {
     message.error('加载聊天记录失败: ' + error.message);
     currentMessageList.value = privateMessageMap.get(user.id) || []
@@ -397,27 +393,15 @@ async function loadMyGroups() {
   }
 }
 
-// 加载离线消息
+// 将离线私信纳入未读列表，不再打断当前页面
 async function loadOfflineMessages() {
   try {
     const res = await getOfflineMessages();
-    offlineMessages.value = res.messages || [];
-    
-    if (offlineMessages.value.length > 0) {
-      // 显示桌面通知
-      notificationService.showSystem(
-        '离线消息',
-        `您有 ${offlineMessages.value.length} 条新消息`,
-        () => {
-          window.focus();
-          showOfflineMessagesDialog();
-        }
-      );
-      
-      // 显示离线消息对话框
-      showOfflineMessagesDialog();
-    }
-  } catch (error: any) {
+    res.messages?.forEach(item => {
+      unread.rememberSender(item.sender);
+      unread.receivePrivate(item.id, item.fromUserId, false);
+    });
+  } catch (error) {
     console.error('加载离线消息失败:', error);
   }
 }
@@ -448,30 +432,6 @@ async function loadPendingInvitations() {
   } catch (error: any) {
     console.error('加载群组邀请失败:', error);
   }
-}
-
-// 显示离线消息对话框
-function showOfflineMessagesDialog() {
-  const messageList = offlineMessages.value.map(msg => 
-    `${msg.sender.nickname || msg.sender.username}: ${msg.message}`
-  ).join('\n\n');
-  
-  dialog.info({
-    title: `您有 ${offlineMessages.value.length} 条离线消息`,
-    content: messageList,
-    positiveText: '已读',
-    onPositiveClick: async () => {
-      const messageIds = offlineMessages.value.map(msg => msg.id);
-      try {
-        await markMessagesAsRead(messageIds);
-        offlineMessages.value.forEach(msg => unread.readPrivate(msg.fromUserId));
-        offlineMessages.value = [];
-        message.success('消息已标记为已读');
-      } catch (error: any) {
-        message.error('标记失败: ' + error.message);
-      }
-    }
-  });
 }
 
 // 显示群组邀请对话框
