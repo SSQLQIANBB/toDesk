@@ -27,5 +27,5 @@
       "module": "CommonJS"
     }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/unit/**/*.ts"]
 }

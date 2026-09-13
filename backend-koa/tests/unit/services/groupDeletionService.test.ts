@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   GroupDeletionService,
   type GroupDeletionDependencies,
-} from './groupDeletionService';
+} from '../../../src/services/groupDeletionService';
 
 function createDependencies(role: 'owner' | 'admin' | 'member' | null = 'owner') {
   const calls: string[] = [];

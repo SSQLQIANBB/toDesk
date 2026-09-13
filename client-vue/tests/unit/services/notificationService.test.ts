@@ -29,7 +29,7 @@ beforeEach(() => {
 
 describe('通知设置', () => {
   it('通知类型、消息预览和声音设置控制实际发送结果', async () => {
-    const { default: service } = await import('./notificationService');
+    const { default: service } = await import('../../../src/services/notificationService');
     expect(atob(sounds[0]!.src.split(',')[1]!).slice(0, 4)).toBe('RIFF');
     service.updatePreferences({ notifyPrivateMessage: false, messagePreview: false });
     expect(await service.showMessage('小明', '秘密内容')).toBe(false);
@@ -61,7 +61,7 @@ describe('通知设置', () => {
   it('未授权时不自动请求权限，测试通知只在真正创建后返回成功', async () => {
     BrowserNotification.permission = 'default';
     askPermission.mockImplementation(async () => { BrowserNotification.permission = 'granted'; return 'granted'; });
-    const { default: service } = await import('./notificationService');
+    const { default: service } = await import('../../../src/services/notificationService');
     expect(await service.showSystem('测试通知', '检查通知')).toBe(false);
     expect(askPermission).not.toHaveBeenCalled();
     expect(await service.requestPermission()).toBe(true);

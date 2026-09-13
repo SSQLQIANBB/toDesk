@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { GroupSession } from './groupSessionService';
+import type { GroupSession } from '../../../src/services/groupSessionService';
 import {
   ScreenAnnotationService,
   type AnnotationAction,
   type ScreenAnnotationStore,
-} from './screenAnnotationService';
+} from '../../../src/services/screenAnnotationService';
 
 class MemoryAnnotationStore implements ScreenAnnotationStore {
   readonly records = new Map<string, AnnotationAction[]>();

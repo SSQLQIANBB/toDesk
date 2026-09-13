@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '@/stores/auth';
 import { pinia } from '@/stores';
-import { request } from './request';
+import { request } from '../../../src/utils/request';
 
 const routerMocks = vi.hoisted(() => ({
   replace: vi.fn(),

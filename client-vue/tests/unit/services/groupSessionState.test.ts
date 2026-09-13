@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createGroupSessionState,
   type GroupSession,
-} from './groupSessionState';
+} from '../../../src/services/groupSessionState';
 
 const videoSession: GroupSession = {
   groupId: 7,

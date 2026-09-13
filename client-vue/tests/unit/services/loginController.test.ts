@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLoginController } from './loginController';
+import { createLoginController } from '../../../src/services/loginController';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

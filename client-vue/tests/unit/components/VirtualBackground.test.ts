@@ -10,7 +10,7 @@ vi.mock('@/services/backgroundProcessor', () => ({
   stopProcessedVideo: (stream: MediaStream | null) => stream?.getVideoTracks().forEach(track => track.stop()),
 }));
 vi.mock('naive-ui', () => ({ useMessage: () => ({ info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn() }) }));
-import VirtualBackground from './VirtualBackground.vue';
+import VirtualBackground from '../../../src/components/VirtualBackground.vue';
 const camera = { kind: 'video', stop: mocks.cameraStop };
 const audio = { kind: 'audio', stop: mocks.audioStop };
 const raw = { getVideoTracks: () => [camera], getAudioTracks: () => [audio] } as unknown as MediaStream;

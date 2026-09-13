@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { useUnreadStore } from './unread';
+import { useUnreadStore } from '../../../src/stores/unread';
 
 beforeEach(() => setActivePinia(createPinia()));
 

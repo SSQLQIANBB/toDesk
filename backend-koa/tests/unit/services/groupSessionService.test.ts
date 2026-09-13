@@ -3,7 +3,7 @@ import {
   GroupSessionService,
   type GroupSession,
   type GroupSessionStore,
-} from './groupSessionService';
+} from '../../../src/services/groupSessionService';
 
 class MemorySessionStore implements GroupSessionStore {
   private readonly sessions = new Map<string, GroupSession>();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRemoteTabQuery, parseRemoteTab } from './remoteTabState';
+import { getRemoteTabQuery, parseRemoteTab } from '../../../src/services/remoteTabState';
 
 describe('remoteTabState', () => {
   it('直接访问 Remote 页面时使用在线用户默认 Tab', () => {

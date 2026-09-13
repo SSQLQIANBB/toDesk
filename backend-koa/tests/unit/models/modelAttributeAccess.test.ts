@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import Group from './Group';
-import GroupMember from './GroupMember';
-import User from './User';
+import Group from '../../../src/models/Group';
+import GroupMember from '../../../src/models/GroupMember';
+import User from '../../../src/models/User';
 
 describe('Sequelize model attribute access', () => {
   it.each([

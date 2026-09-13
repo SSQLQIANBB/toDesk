@@ -6,9 +6,9 @@ const redis = vi.hoisted(() => ({
   del: vi.fn(),
 }));
 
-vi.mock('../config/redis', () => ({ default: redis }));
+vi.mock('../../../src/config/redis', () => ({ default: redis }));
 
-import { RedisScreenAnnotationStore } from './redisScreenAnnotationStore';
+import { RedisScreenAnnotationStore } from '../../../src/services/redisScreenAnnotationStore';
 
 const action = {
   actionId: 'action-1',

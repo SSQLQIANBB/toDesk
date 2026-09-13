@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MediaRoomRegistry } from './mediaRoomRegistry';
+import { MediaRoomRegistry } from '../../../src/services/mediaRoomRegistry';
 
 describe('MediaRoomRegistry', () => {
   it('按 userId 去重并返回参与者快照', () => {

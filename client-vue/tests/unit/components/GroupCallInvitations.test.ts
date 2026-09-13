@@ -17,7 +17,7 @@ vi.mock('@/stores/socket', () => ({ useSocketStore: () => ({ socket: {
   off: (event: string) => mocks.handlers.delete(event),
 } }) }));
 vi.mock('@/services/notificationService', () => ({ default: { showCall: vi.fn(), playAlert: vi.fn() } }));
-import GroupCallInvitations from './GroupCallInvitations.vue';
+import GroupCallInvitations from '../../../src/components/GroupCallInvitations.vue';
 
 const session = { groupId: 7, ownerUserId: 1, startedAt: '2026-09-12', user: { nickname: 'Alice' } };
 

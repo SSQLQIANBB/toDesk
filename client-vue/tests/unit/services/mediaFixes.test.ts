@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isVoiceActive } from './speakingDetector';
-import { containedVideoRect } from './annotationGeometry';
+import { isVoiceActive } from '../../../src/services/speakingDetector';
+import { containedVideoRect } from '../../../src/services/annotationGeometry';
 
 describe('发言检测', () => {
   it('静音和微弱噪声不亮标记，明显音量亮标记', () => {

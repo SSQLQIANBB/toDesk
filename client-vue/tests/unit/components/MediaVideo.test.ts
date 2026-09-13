@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { nextTick } from 'vue';
-import MediaVideo from './MediaVideo.vue';
+import MediaVideo from '../../../src/components/MediaVideo.vue';
 
 describe('MediaVideo', () => {
   it('两名成员进入同一群组视频时，本地和远端画面都绑定且符合自动播放策略', async () => {

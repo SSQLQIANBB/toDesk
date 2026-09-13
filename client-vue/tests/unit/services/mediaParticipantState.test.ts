@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMediaParticipantState } from './mediaParticipantState';
+import { createMediaParticipantState } from '../../../src/services/mediaParticipantState';
 
 describe('mediaParticipantState', () => {
   it('按视频和共享频道分别保存参与用户', () => {

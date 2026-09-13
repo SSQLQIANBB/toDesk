@@ -31,7 +31,7 @@ vi.mock('@/services/notificationService', () => ({ default: {
   showMessage: vi.fn(), showGroupMessage: vi.fn(), playAlert: mocks.playAlert,
   shouldNotify: mocks.shouldNotify, previewMessage: mocks.previewMessage,
 } }));
-import GlobalMessages from './GlobalMessages.vue';
+import GlobalMessages from '../../../src/components/GlobalMessages.vue';
 
 beforeEach(() => {
   vi.clearAllMocks();

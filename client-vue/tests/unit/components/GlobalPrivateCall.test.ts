@@ -22,7 +22,7 @@ vi.mock('naive-ui', async importOriginal => ({
   useMessage: () => ({ info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn() }),
 }));
 vi.mock('@/services/notificationService', () => ({ default: { showCall: vi.fn(), playAlert: vi.fn() } }));
-import GlobalPrivateCall from './GlobalPrivateCall.vue';
+import GlobalPrivateCall from '../../../src/components/GlobalPrivateCall.vue';
 const Modal = defineComponent({
   name: 'NModal', props: ['show'], emits: ['positive-click', 'negative-click', 'close'],
   template: '<div v-if="show"><slot /></div>',

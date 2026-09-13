@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RemotePeerRegistry } from './remotePeerRegistry';
+import { RemotePeerRegistry } from '../../../src/services/remotePeerRegistry';
 
 function member(socketId = 'socket-a') {
   return { id: 2, socketId, username: 'member-2', nickname: '成员二' };

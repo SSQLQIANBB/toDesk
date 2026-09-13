@@ -11,19 +11,19 @@ vi.mock('socket.io', () => ({ Server: class {
   emit() {}
   to(rooms: string[]) { return { emit: (event: string, payload: any) => mock.broadcasts.push({ rooms, event, payload }) }; }
 } }));
-vi.mock('../utils/jwt', () => ({ verifyToken: (token: string) => ({ userId: Number(token), username: `user${token}` }) }));
-vi.mock('../models', () => ({
+vi.mock('../../../src/utils/jwt', () => ({ verifyToken: (token: string) => ({ userId: Number(token), username: `user${token}` }) }));
+vi.mock('../../../src/models', () => ({
   GroupMember: { findAll: mock.members },
   User: { findByPk: async () => ({ status: 'online' }) },
   GroupMessage: {}, Message: {},
 }));
-vi.mock('../services/groupSessionService', () => ({ GroupSessionService: class {
+vi.mock('../../../src/services/groupSessionService', () => ({ GroupSessionService: class {
   start = mock.start;
   async getGroupState() { return { video: null, screen: null }; }
 } }));
-vi.mock('../services/redisGroupSessionStore', () => ({ RedisGroupSessionStore: class {} }));
-vi.mock('../services/redisScreenAnnotationStore', () => ({ RedisScreenAnnotationStore: class {} }));
-import initialMeeting from './meeting';
+vi.mock('../../../src/services/redisGroupSessionStore', () => ({ RedisGroupSessionStore: class {} }));
+vi.mock('../../../src/services/redisScreenAnnotationStore', () => ({ RedisScreenAnnotationStore: class {} }));
+import initialMeeting from '../../../src/config/meeting';
 
 function connect(id: number) {
   const handlers = new Map<string, Function>();

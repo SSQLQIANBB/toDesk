@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createScreenAnnotationState,
   type AnnotationAction,
-} from './screenAnnotationState';
+} from '../../../src/services/screenAnnotationState';
 
 const startedAt = '2026-07-05T10:00:00.000Z';
 const action: AnnotationAction = {

@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ScreenAnnotation from './ScreenAnnotation.vue';
+import ScreenAnnotation from '../../../src/components/ScreenAnnotation.vue';
 
 const context = {
   beginPath: vi.fn(),

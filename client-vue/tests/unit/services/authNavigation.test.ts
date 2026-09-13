@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getAuthRedirect,
   resolvePostLoginPath,
-} from './authNavigation';
+} from '../../../src/services/authNavigation';
 
 describe('authNavigation', () => {
   it('保留安全的站内完整路径', () => {
