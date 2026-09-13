@@ -470,13 +470,14 @@ function handleIncomingCall(data: { from: string; deviceType: DEVICE_TYPE; user?
   incomingCallFrom.value = contactUserName.value;
   incomingCallType.value = data.deviceType;
   incomingCallShow.value = true;
+  notificationService.startCallRingtone(`private:${data.from}`);
   if (document.hidden) void notificationService.showCall(incomingCallFrom.value, data.deviceType === DEVICE_TYPE.SCREEN ? 'screen' : 'video', data.user?.avatar, () => window.focus());
-  else notificationService.playAlert('call');
 }
 
 // 接听来电
 async function acceptCall() {
   try {
+    notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
     incomingCallShow.value = false;
     isConnecting.value = true;
     connectionStatus.value = 'connecting';
@@ -510,6 +511,7 @@ async function acceptCall() {
 
 // 拒绝来电
 function rejectCall() {
+  notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
   incomingCallShow.value = false;
   socket.value?.emit('webrtc_call_response', {
     to: { socketId: incomingCallFromSocketId.value },
@@ -547,6 +549,8 @@ function hangup() {
 
 function cleanup() {
   generation++;
+  if (incomingCallFromSocketId.value) notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
+  incomingCallFromSocketId.value = '';
   stopFloatingDrag();
   pendingIce = [];
   incomingCallShow.value = false;

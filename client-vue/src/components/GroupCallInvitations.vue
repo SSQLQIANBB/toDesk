@@ -14,11 +14,26 @@ const router = useRouter();
 const socketStore = useSocketStore();
 const authStore = useAuthStore();
 const pending = new Map<string, DialogReactive>();
+const ringtoneKeys = new Map<string, string>();
 const seen = new Set<string>();
+
+function stopRingtone(key: string, eventId?: string) {
+  const activeId = ringtoneKeys.get(key);
+  if (!activeId || (eventId && activeId !== eventId)) return;
+  notificationService.stopCallRingtone(`group:${activeId}`);
+  ringtoneKeys.delete(key);
+}
+
+function finishInvitation(key: string, eventId: string) {
+  if (ringtoneKeys.get(key) !== eventId) return;
+  pending.delete(key);
+  stopRingtone(key, eventId);
+}
 
 function dismissAll() {
   pending.forEach(item => item.destroy());
   pending.clear();
+  ringtoneKeys.forEach((eventId, key) => stopRingtone(key, eventId));
   seen.clear();
 }
 
@@ -35,28 +50,31 @@ function handleStarted(data: GroupSession & {
   if (seen.has(eventId)) return;
   seen.add(eventId);
   pending.get(key)?.destroy();
+  stopRingtone(key);
   const label = type === 'screen' ? '屏幕共享' : '视频通话';
+  ringtoneKeys.set(key, eventId);
   pending.set(key, dialog.info({
     title: `群组${label}邀请`,
     content: `${data.user?.nickname || data.user?.username || '群成员'} 邀请你加入群组 ${data.groupId} 的${label}`,
     positiveText: '接受邀请',
     negativeText: '暂不加入',
     onPositiveClick: () => {
-      pending.delete(key);
+      finishInvitation(key, eventId);
       void router.push(path);
     },
-    onNegativeClick: () => { pending.delete(key); },
-    onClose: () => { pending.delete(key); },
+    onNegativeClick: () => { finishInvitation(key, eventId); },
+    onClose: () => { finishInvitation(key, eventId); },
     maskClosable: false,
   }));
+  notificationService.startCallRingtone(`group:${eventId}`);
   if (document.hidden) void notificationService.showCall(data.user?.nickname || data.user?.username || '群成员', type === 'screen' ? 'screen' : 'video', undefined, () => window.focus());
-  else notificationService.playAlert('call');
 }
 
 function handleEnded(data: { groupId: number; type?: string; deviceType?: number }) {
   const key = `${data.groupId}:${data.type || (data.deviceType === 2 ? 'screen' : 'video')}`;
   pending.get(key)?.destroy();
   pending.delete(key);
+  stopRingtone(key);
 }
 
 watch(() => socketStore.socket, (socket, previous) => {

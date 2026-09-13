@@ -34,6 +34,8 @@ class NotificationService {
   private enabled: boolean = true;
   private soundEnabled: boolean = true;
   private notificationSound: HTMLAudioElement | null = null;
+  private callRingtone: HTMLAudioElement | null = null;
+  private activeCallRingtones = new Set<string>();
   private preferences: NotificationPreferences = { ...defaultPreferences };
 
   constructor() {
@@ -70,6 +72,46 @@ class NotificationService {
 
     // 初始化音频
     this.initAudio();
+    this.initCallRingtone();
+  }
+
+  /** 在浏览器内生成原创的短旋律，循环播放时无需额外下载音频文件。 */
+  private initCallRingtone() {
+    try {
+      const sampleRate = 8000;
+      const sampleCount = sampleRate * 4;
+      const bytes = new Uint8Array(44 + sampleCount * 2);
+      const view = new DataView(bytes.buffer);
+      const label = (offset: number, value: string) => {
+        for (let index = 0; index < value.length; index++) bytes[offset + index] = value.charCodeAt(index);
+      };
+      label(0, 'RIFF'); view.setUint32(4, bytes.length - 8, true);
+      label(8, 'WAVE'); label(12, 'fmt ');
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+      label(36, 'data'); view.setUint32(40, sampleCount * 2, true);
+      const notes = [392, 587, 494, 659, 440, 659, 523, 784];
+      const noteLength = 0.43;
+      for (let index = 0; index < sampleCount; index++) {
+        const seconds = index / sampleRate;
+        const noteIndex = Math.floor(seconds / noteLength);
+        const frequency = notes[noteIndex];
+        if (!frequency) continue;
+        const elapsed = seconds - noteIndex * noteLength;
+        const envelope = Math.min(1, elapsed * 30, (noteLength - elapsed) * 25) * Math.exp(-elapsed * 2);
+        const tone = Math.sin(2 * Math.PI * frequency * elapsed)
+          + 0.18 * Math.sin(4 * Math.PI * frequency * elapsed);
+        view.setInt16(44 + index * 2, Math.round(tone * envelope * 10500), true);
+      }
+      this.callRingtone = new Audio();
+      this.callRingtone.src = `data:audio/wav;base64,${btoa(String.fromCharCode(...bytes))}`;
+      this.callRingtone.volume = 0.55;
+      this.callRingtone.loop = true;
+    } catch (error) {
+      console.warn('来电音初始化失败:', error);
+    }
   }
 
   /** 创建可播放的短提示音；原来的固定 data URL 并不是完整的 WAV 文件。 */
@@ -168,6 +210,7 @@ class NotificationService {
   updatePreferences(value: Partial<NotificationPreferences>) {
     this.preferences = { ...this.preferences, ...value };
     localStorage.setItem('notify_settings', JSON.stringify(this.preferences));
+    if (!this.preferences.notifyCall) this.stopAllCallRingtones();
   }
 
   shouldNotify(type: NotificationType): boolean {
@@ -185,6 +228,32 @@ class NotificationService {
 
   playAlert(type: NotificationType, silent = false) {
     if (!silent && this.shouldNotify(type)) this.playSound(type);
+  }
+
+  startCallRingtone(key: string) {
+    if (!this.soundEnabled || !this.shouldNotify('call') || !this.callRingtone) return;
+    if (this.activeCallRingtones.has(key)) return;
+    const alreadyPlaying = this.activeCallRingtones.size > 0;
+    this.activeCallRingtones.add(key);
+    if (alreadyPlaying) return;
+    this.callRingtone.currentTime = 0;
+    void this.callRingtone.play().catch(error => {
+      console.warn('播放来电音失败:', error);
+    });
+  }
+
+  stopCallRingtone(key: string) {
+    this.activeCallRingtones.delete(key);
+    if (this.activeCallRingtones.size === 0) {
+      this.callRingtone?.pause();
+      if (this.callRingtone) this.callRingtone.currentTime = 0;
+    }
+  }
+
+  private stopAllCallRingtones() {
+    this.activeCallRingtones.clear();
+    this.callRingtone?.pause();
+    if (this.callRingtone) this.callRingtone.currentTime = 0;
   }
 
   /**
@@ -263,7 +332,7 @@ class NotificationService {
       tag: `call-${from}`,
       type: 'call',
       onClick,
-      silent: false, // 通话通知不静音
+      silent: true, // 来电旋律由邀请弹窗控制，避免桌面通知再次播放短提示音
     });
   }
 
@@ -324,6 +393,7 @@ class NotificationService {
   disableSound() {
     this.soundEnabled = false;
     localStorage.setItem('notification_sound_enabled', 'false');
+    this.stopAllCallRingtones();
   }
 
   /**

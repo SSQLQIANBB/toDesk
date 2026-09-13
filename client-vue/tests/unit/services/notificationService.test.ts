@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const created: { title: string; options: NotificationOptions }[] = [];
-const sounds: { src: string }[] = [];
+const sounds: { src: string; loop: boolean; currentTime: number; pause: () => void }[] = [];
 const play = vi.fn().mockResolvedValue(undefined);
+const pause = vi.fn();
 const askPermission = vi.fn();
 
 class BrowserNotification {
@@ -22,12 +23,31 @@ beforeEach(() => {
   BrowserNotification.permission = 'granted';
   vi.stubGlobal('Notification', BrowserNotification);
   vi.stubGlobal('Audio', class {
-    src = ''; volume = 0; currentTime = 0; play = play;
+    src = ''; volume = 0; currentTime = 0; loop = false; play = play; pause = pause;
     constructor() { sounds.push(this); }
   });
 });
 
 describe('通知设置', () => {
+  it('来电旋律循环播放，同期邀请共用音频，全部结束或静音后停止', async () => {
+    const { default: service } = await import('../../../src/services/notificationService');
+    expect(atob(sounds[1]!.src.split(',')[1]!).slice(0, 4)).toBe('RIFF');
+    expect(sounds[1]!.loop).toBe(true);
+    service.startCallRingtone('private:alice');
+    service.startCallRingtone('group:7:video');
+    expect(play).toHaveBeenCalledOnce();
+    service.stopCallRingtone('private:alice');
+    expect(pause).not.toHaveBeenCalled();
+    service.stopCallRingtone('group:7:video');
+    expect(pause).toHaveBeenCalledOnce();
+    service.startCallRingtone('private:bob');
+    expect(play).toHaveBeenCalledTimes(2);
+    service.disableSound();
+    expect(pause).toHaveBeenCalledTimes(2);
+    service.startCallRingtone('private:carol');
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
   it('通知类型、消息预览和声音设置控制实际发送结果', async () => {
     const { default: service } = await import('../../../src/services/notificationService');
     expect(atob(sounds[0]!.src.split(',')[1]!).slice(0, 4)).toBe('RIFF');

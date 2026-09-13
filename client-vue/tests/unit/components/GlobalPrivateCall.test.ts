@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   stop: vi.fn(), peerInstance: null as any,
   audioTrack: { enabled: true, stop: vi.fn() },
   videoTrack: { enabled: true, stop: vi.fn() },
+  startRingtone: vi.fn(), stopRingtone: vi.fn(),
 }));
 vi.mock('@/stores/socket', () => ({ useSocketStore: () => ({
   userList: [], socket: {
@@ -21,7 +22,9 @@ vi.mock('naive-ui', async importOriginal => ({
   ...await importOriginal<typeof import('naive-ui')>(),
   useMessage: () => ({ info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn() }),
 }));
-vi.mock('@/services/notificationService', () => ({ default: { showCall: vi.fn(), playAlert: vi.fn() } }));
+vi.mock('@/services/notificationService', () => ({ default: {
+  showCall: vi.fn(), startCallRingtone: mocks.startRingtone, stopCallRingtone: mocks.stopRingtone,
+} }));
 import GlobalPrivateCall from '../../../src/components/GlobalPrivateCall.vue';
 const Modal = defineComponent({
   name: 'NModal', props: ['show'], emits: ['positive-click', 'negative-click', 'close'],
@@ -130,8 +133,10 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     await nextTick();
     expect(wrapper.text()).toContain('Alice');
     expect(wrapper.findAllComponents(Modal)[0]!.props('show')).toBe(true);
+    expect(mocks.startRingtone).toHaveBeenCalledWith('private:alice');
     wrapper.findAllComponents(Modal)[0]!.vm.$emit('positive-click');
     await flushPromises();
+    expect(mocks.stopRingtone).toHaveBeenCalledWith('private:alice');
     expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', { to: { socketId: 'alice' }, accepted: true });
     expect(mocks.getDisplayMedia).not.toHaveBeenCalled();
     expect(mocks.getUserMedia).toHaveBeenCalledTimes(type === 0 ? 1 : 0);

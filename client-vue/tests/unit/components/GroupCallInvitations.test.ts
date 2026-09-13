@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   info: vi.fn(),
   push: vi.fn(),
   destroy: vi.fn(),
+  startRingtone: vi.fn(), stopRingtone: vi.fn(),
 }));
 vi.mock('naive-ui', () => ({ useDialog: () => ({ info: mocks.info }) }));
 vi.mock('vue-router', () => ({ useRouter: () => ({
@@ -16,7 +17,9 @@ vi.mock('@/stores/socket', () => ({ useSocketStore: () => ({ socket: {
   on: (event: string, handler: Function) => mocks.handlers.set(event, handler),
   off: (event: string) => mocks.handlers.delete(event),
 } }) }));
-vi.mock('@/services/notificationService', () => ({ default: { showCall: vi.fn(), playAlert: vi.fn() } }));
+vi.mock('@/services/notificationService', () => ({ default: {
+  showCall: vi.fn(), startCallRingtone: mocks.startRingtone, stopCallRingtone: mocks.stopRingtone,
+} }));
 import GroupCallInvitations from '../../../src/components/GroupCallInvitations.vue';
 
 const session = { groupId: 7, ownerUserId: 1, startedAt: '2026-09-12', user: { nickname: 'Alice' } };
@@ -34,8 +37,10 @@ describe('群组通话全局邀请', () => {
     expect(mocks.info).toHaveBeenCalledOnce();
     const options = mocks.info.mock.calls[0]![0];
     expect(options.content).toContain('Alice');
+    expect(mocks.startRingtone).toHaveBeenCalledWith(`group:7:${type}:2026-09-12`);
     expect(mocks.push).not.toHaveBeenCalled();
     options.onPositiveClick();
+    expect(mocks.stopRingtone).toHaveBeenCalledWith(`group:7:${type}:2026-09-12`);
     expect(mocks.push).toHaveBeenCalledWith(`/group-${type}/7`);
     wrapper.unmount();
   });
@@ -58,6 +63,7 @@ describe('群组通话全局邀请', () => {
     mocks.handlers.get('group_call_started')!({ ...session, type: 'screen' });
     mocks.handlers.get('group_call_ended')!({ groupId: 7, type: 'screen' });
     expect(mocks.destroy).toHaveBeenCalledOnce();
+    expect(mocks.stopRingtone).toHaveBeenCalledWith('group:7:screen:2026-09-12');
     wrapper.unmount();
     expect(mocks.handlers.size).toBe(0);
   });
