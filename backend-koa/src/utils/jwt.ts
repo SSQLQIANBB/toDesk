@@ -8,6 +8,7 @@ const REFRESH_TOKEN_EXPIRES_IN = '24h'; // refresh token有效期24小时
 export interface JwtPayload {
   userId: number;
   username: string;
+  authVersion?: string | null;
   type?: 'access' | 'refresh';
 }
 

@@ -3,6 +3,8 @@ import Group from './Group';
 import GroupMember from './GroupMember';
 import Message from './Message';
 import GroupMessage from './GroupMessage';
+import UserEmail from './UserEmail';
+import MessageReceipt from './MessageReceipt';
 import GroupInvitation from './GroupInvitation';
 import RefreshToken from './RefreshToken';
 import File from './File';
@@ -55,5 +57,5 @@ File.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 User.hasMany(File, { foreignKey: 'userId', as: 'files' });
 Group.hasMany(File, { foreignKey: 'groupId', as: 'files' });
 
-export { User, Group, GroupMember, Message, GroupMessage, GroupInvitation, RefreshToken, File };
+export { User, UserEmail, MessageReceipt, Group, GroupMember, Message, GroupMessage, GroupInvitation, RefreshToken, File };
 

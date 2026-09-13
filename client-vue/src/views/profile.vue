@@ -64,11 +64,12 @@
               </n-form-item>
 
               <!-- 邮箱 -->
-              <n-form-item label="邮箱" path="email">
-                <n-input 
-                  v-model:value="formData.email" 
-                  placeholder="请输入邮箱"
+              <n-form-item label="已验证邮箱">
+                <n-input
+                  v-model:value="formData.email"
+                  placeholder="尚未绑定邮箱，请到账户安全中绑定"
                   type="email"
+                  disabled
                 />
               </n-form-item>
 
@@ -114,6 +115,19 @@
           <!-- 账户安全 -->
           <n-tab-pane name="security" tab="账户安全">
             <div class="space-y-6">
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <h3 class="font-semibold text-gray-800">邮箱绑定</h3>
+                <p v-if="verifiedEmail" class="text-sm text-green-700 mt-1">已验证：{{ verifiedEmail }}</p>
+                <div v-else class="mt-3 space-y-3">
+                  <p class="text-sm text-gray-500">绑定并验证邮箱后，可找回或修改密码。</p>
+                  <n-input v-model:value="bindEmailForm.email" type="email" placeholder="请输入邮箱" />
+                  <div class="flex flex-wrap gap-2">
+                    <n-input v-model:value="bindEmailForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-[120px] flex-1" />
+                    <n-button :loading="emailCodeLoading" @click="sendBindEmailCode">发送验证码</n-button>
+                    <n-button type="primary" :loading="bindLoading" @click="handleBindEmail">绑定邮箱</n-button>
+                  </div>
+                </div>
+              </div>
               <!-- 修改密码 -->
               <div class="p-4 bg-gray-50 rounded-lg">
                 <div class="flex items-center justify-between">
@@ -283,6 +297,13 @@
               placeholder="请再次输入新密码"
             />
           </n-form-item>
+          <n-form-item label="邮箱验证码" path="emailCode">
+            <div class="flex w-full gap-2">
+              <n-input v-model:value="passwordForm.emailCode" maxlength="6" placeholder="6 位验证码" />
+              <n-button :disabled="!verifiedEmail" :loading="emailCodeLoading" @click="sendPasswordEmailCode">发送验证码</n-button>
+            </div>
+          </n-form-item>
+          <p v-if="!verifiedEmail" class="text-sm text-amber-700">请先在账户安全中绑定并验证邮箱。</p>
         </n-form>
         <template #footer>
           <div class="flex justify-end gap-3">
@@ -302,7 +323,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules, type UploadCustomRequestOptions } from 'naive-ui';
 import { ArrowBackFilled } from '@vicons/material';
-import { getCurrentUser, updateUser } from '@/api/auth';
+import { bindEmail, changePassword, getCurrentUser, getVerifiedEmail, sendEmailCode, updateUser } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
@@ -318,6 +339,10 @@ const passwordFormRef = ref<FormInst | null>(null);
 const loading = ref(false);
 const passwordLoading = ref(false);
 const showPasswordModal = ref(false);
+const verifiedEmail = ref<string | null>(null);
+const emailCodeLoading = ref(false);
+const bindLoading = ref(false);
+const bindEmailForm = reactive({ email: '', code: '' });
 
 // 表单数据
 const formData = reactive({
@@ -335,6 +360,7 @@ const passwordForm = reactive({
   oldPassword: '',
   newPassword: '',
   confirmPassword: '',
+  emailCode: '',
 });
 
 // 表单验证规则
@@ -368,7 +394,42 @@ const passwordRules: FormRules = {
       trigger: 'blur',
     },
   ],
+  emailCode: [{ required: true, pattern: /^\d{6}$/, message: '请输入 6 位邮箱验证码', trigger: 'blur' }],
 };
+
+async function sendBindEmailCode() {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bindEmailForm.email.trim())) {
+    message.error('请输入有效邮箱'); return;
+  }
+  emailCodeLoading.value = true;
+  try {
+    message.success((await sendEmailCode('bind', bindEmailForm.email)).message);
+  } catch (error: any) { message.error(error.message || '发送失败'); }
+  finally { emailCodeLoading.value = false; }
+}
+
+async function handleBindEmail() {
+  if (bindLoading.value) return;
+  bindLoading.value = true;
+  try {
+    const result = await bindEmail(bindEmailForm.email, bindEmailForm.code);
+    verifiedEmail.value = result.email;
+    formData.email = result.email;
+    authStore.updateUserInfo({ email: result.email });
+    bindEmailForm.code = '';
+    message.success('邮箱绑定成功');
+  } catch (error: any) { message.error(error.message || '绑定失败'); }
+  finally { bindLoading.value = false; }
+}
+
+async function sendPasswordEmailCode() {
+  if (!verifiedEmail.value) { message.error('请先绑定邮箱'); return; }
+  emailCodeLoading.value = true;
+  try {
+    message.success((await sendEmailCode('change-password', verifiedEmail.value)).message);
+  } catch (error: any) { message.error(error.message || '发送失败'); }
+  finally { emailCodeLoading.value = false; }
+}
 
 // 状态选项
 const statusOptions = [
@@ -486,6 +547,8 @@ async function loadUserInfo() {
   try {
     const { user } = await getCurrentUser();
     Object.assign(formData, user);
+    verifiedEmail.value = (await getVerifiedEmail()).email;
+    formData.email = verifiedEmail.value || '';
   } catch (error: any) {
     message.error('加载用户信息失败: ' + error.message);
   }
@@ -533,7 +596,6 @@ async function handleSubmit() {
 
     const { user } = await updateUser({
       nickname: formData.nickname,
-      email: formData.email,
       phone: formData.phone,
       avatar: formData.avatar,
       bio: formData.bio,
@@ -563,8 +625,7 @@ async function handleChangePassword() {
     await passwordFormRef.value?.validate();
     passwordLoading.value = true;
 
-    const { changePassword } = await import('@/api/auth');
-    await changePassword(passwordForm.oldPassword, passwordForm.newPassword);
+    await changePassword(passwordForm.oldPassword, passwordForm.newPassword, passwordForm.emailCode);
     
     message.success('密码修改成功，请重新登录');
     showPasswordModal.value = false;
@@ -573,6 +634,7 @@ async function handleChangePassword() {
     passwordForm.oldPassword = '';
     passwordForm.newPassword = '';
     passwordForm.confirmPassword = '';
+    passwordForm.emailCode = '';
     
     // 延迟后登出
     setTimeout(async () => {

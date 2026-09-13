@@ -1,5 +1,6 @@
 import { Context, Next } from 'koa';
 import { verifyToken } from '../utils/jwt';
+import { isTokenVersionCurrent } from '../services/tokenVersionService';
 
 export interface AuthState {
   user?: {
@@ -22,6 +23,7 @@ export async function authMiddleware(ctx: Context, next: Next) {
 
   try {
     const payload = verifyToken(token);
+    if (!await isTokenVersionCurrent(payload.userId, payload.authVersion)) throw new Error('token 已失效');
     ctx.state.user = payload;
     await next();
   } catch (error) {
@@ -39,6 +41,7 @@ export async function optionalAuthMiddleware(ctx: Context, next: Next) {
   if (token) {
     try {
       const payload = verifyToken(token);
+      if (!await isTokenVersionCurrent(payload.userId, payload.authVersion)) throw new Error('token 已失效');
       ctx.state.user = payload;
     } catch (error) {
       // token无效，但不拦截请求

@@ -74,6 +74,7 @@
               >
                 登录
               </n-button>
+              <n-button text type="primary" class="mt-3" @click="activeTab = 'forgot'">忘记密码？</n-button>
             </n-form>
           </n-tab-pane>
 
@@ -124,6 +125,16 @@
                 />
               </n-form-item>
 
+              <n-form-item path="email" label="邮箱">
+                <n-input v-model:value="registerForm.email" type="email" placeholder="用于找回密码" />
+              </n-form-item>
+              <n-form-item path="emailCode" label="邮箱验证码">
+                <div class="flex w-full gap-2">
+                  <n-input v-model:value="registerForm.emailCode" maxlength="6" placeholder="6 位验证码" />
+                  <n-button :loading="codeSending" @click="sendRegisterCode">发送验证码</n-button>
+                </div>
+              </n-form-item>
+
               <n-button 
                 type="primary" 
                 block 
@@ -137,6 +148,26 @@
               </n-button>
             </n-form>
           </n-tab-pane>
+          <n-tab-pane name="forgot" tab="找回密码">
+            <n-form ref="resetFormRef" :model="resetForm" :rules="resetRules" class="mt-4">
+              <n-form-item path="email" label="已绑定邮箱">
+                <n-input v-model:value="resetForm.email" type="email" placeholder="请输入已绑定邮箱" />
+              </n-form-item>
+              <n-form-item path="code" label="邮箱验证码">
+                <div class="flex w-full gap-2">
+                  <n-input v-model:value="resetForm.code" maxlength="6" placeholder="6 位验证码" />
+                  <n-button :loading="codeSending" @click="sendResetCode">发送验证码</n-button>
+                </div>
+              </n-form-item>
+              <n-form-item path="newPassword" label="新密码">
+                <n-input v-model:value="resetForm.newPassword" type="password" show-password-on="click" placeholder="至少 6 位" />
+              </n-form-item>
+              <n-form-item path="confirmPassword" label="确认新密码">
+                <n-input v-model:value="resetForm.confirmPassword" type="password" show-password-on="click" />
+              </n-form-item>
+              <n-button type="primary" block size="large" :loading="resetLoading" @click="handleResetPassword">重置密码</n-button>
+            </n-form>
+          </n-tab-pane>
         </n-tabs>
       </n-card>
     </div>
@@ -148,7 +179,7 @@ import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
 import { PersonFilled, LockFilled } from '@vicons/material';
-import { register, type LoginParams, type User } from '@/api/auth';
+import { register, resetPassword, sendEmailCode, type LoginParams, type User } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { createLoginController } from '@/services/loginController';
 
@@ -157,8 +188,10 @@ const route = useRoute();
 const message = useMessage();
 const authStore = useAuthStore();
 
-const activeTab = ref<'login' | 'register'>('login');
+const activeTab = ref<'login' | 'register' | 'forgot'>('login');
 const registerLoading = ref(false);
+const resetLoading = ref(false);
+const codeSending = ref(false);
 const loginController = createLoginController({
   login: (credentials: LoginParams) => authStore.login(credentials) as Promise<{
     accessToken: string;
@@ -195,6 +228,8 @@ const registerForm = ref({
   password: '',
   confirmPassword: '',
   nickname: '',
+  email: '',
+  emailCode: '',
 });
 
 const registerRules: FormRules = {
@@ -216,7 +251,57 @@ const registerRules: FormRules = {
       trigger: 'blur',
     },
   ],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+  ],
+  emailCode: [
+    { required: true, message: '请输入邮箱验证码', trigger: 'blur' },
+    { pattern: /^\d{6}$/, message: '验证码为 6 位数字', trigger: 'blur' },
+  ],
 };
+
+const resetFormRef = ref<FormInst | null>(null);
+const resetForm = ref({ email: '', code: '', newPassword: '', confirmPassword: '' });
+const resetRules: FormRules = {
+  email: [{ required: true, type: 'email', message: '请输入有效邮箱', trigger: 'blur' }],
+  code: [{ required: true, pattern: /^\d{6}$/, message: '请输入 6 位验证码', trigger: 'blur' }],
+  newPassword: [{ required: true, min: 6, message: '密码至少 6 位', trigger: 'blur' }],
+  confirmPassword: [{
+    validator: (_rule, value) => value === resetForm.value.newPassword,
+    message: '两次输入的密码不一致', trigger: 'blur',
+  }],
+};
+
+async function sendCode(purpose: 'register' | 'reset', email: string) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    message.error('请输入有效邮箱'); return;
+  }
+  codeSending.value = true;
+  try {
+    const result = await sendEmailCode(purpose, email);
+    message.success(result.message);
+  } catch (error: any) {
+    message.error(error.message || '验证码发送失败');
+  } finally { codeSending.value = false; }
+}
+
+const sendRegisterCode = () => sendCode('register', registerForm.value.email);
+const sendResetCode = () => sendCode('reset', resetForm.value.email);
+
+async function handleResetPassword() {
+  if (resetLoading.value) return;
+  try {
+    await resetFormRef.value?.validate();
+    resetLoading.value = true;
+    await resetPassword(resetForm.value.email, resetForm.value.code, resetForm.value.newPassword);
+    message.success('密码已重置，请登录');
+    resetForm.value = { email: '', code: '', newPassword: '', confirmPassword: '' };
+    activeTab.value = 'login';
+  } catch (error: any) {
+    message.error(error.message || '密码重置失败');
+  } finally { resetLoading.value = false; }
+}
 
 // 登录
 async function handleLogin() {
@@ -241,6 +326,8 @@ async function handleRegister() {
       username: registerForm.value.username,
       password: registerForm.value.password,
       nickname: registerForm.value.nickname || undefined,
+      email: registerForm.value.email,
+      emailCode: registerForm.value.emailCode,
     });
 
     authStore.setAuth(res.user, res.accessToken, res.refreshToken);

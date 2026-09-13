@@ -20,7 +20,8 @@ export interface RegisterParams {
   username: string;
   password: string;
   nickname?: string;
-  email?: string;
+  email: string;
+  emailCode: string;
   phone?: string;
 }
 
@@ -54,6 +55,24 @@ export function getCurrentUser(options?: { skipAuthRedirect?: boolean }) {
   });
 }
 
+export type EmailCodePurpose = 'register' | 'reset' | 'bind' | 'change-password';
+
+export function sendEmailCode(purpose: EmailCodePurpose, email: string) {
+  return http.post<{ message: string }>(`/api/auth/email-code/${purpose}`, { email });
+}
+
+export function resetPassword(email: string, code: string, newPassword: string) {
+  return http.post<{ message: string }>('/api/auth/reset-password', { email, code, newPassword });
+}
+
+export function getVerifiedEmail() {
+  return http.get<{ email: string | null }>('/api/auth/email');
+}
+
+export function bindEmail(email: string, code: string) {
+  return http.post<{ email: string; message: string }>('/api/auth/bind-email', { email, code });
+}
+
 /**
  * 更新用户信息
  */
@@ -78,7 +97,7 @@ export function logout() {
 /**
  * 修改密码
  */
-export function changePassword(oldPassword: string, newPassword: string) {
-  return http.post<{ message: string }>('/api/auth/change-password', { oldPassword, newPassword });
+export function changePassword(oldPassword: string, newPassword: string, emailCode: string) {
+  return http.post<{ message: string }>('/api/auth/change-password', { oldPassword, newPassword, emailCode });
 }
 
