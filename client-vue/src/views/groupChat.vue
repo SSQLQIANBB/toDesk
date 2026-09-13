@@ -123,7 +123,7 @@
                     </span>
                     <span class="text-xs text-gray-400">{{ msg.time }}</span>
                   </div>
-                  <div 
+                  <div
                     class="p-3 rounded-lg shadow-sm break-words"
                     :class="msg.isMine 
                       ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-br-none' 
@@ -131,6 +131,9 @@
                   >
                     {{ msg.message }}
                   </div>
+                  <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="text-xs mt-1 text-gray-500" @click="msg.sendStatus === 'failed' && retryGroupMessage(msg)">
+                    {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
+                  </button>
                 </div>
               </div>
             </li>
@@ -234,6 +237,7 @@ import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
 import { getGroupMessages } from '@/api/message';
+import { sendReliableMessage } from '@/services/reliableMessage';
 import { groupSessionState } from '@/services/groupSessionState';
 
 const route = useRoute();
@@ -338,8 +342,10 @@ watch([() => socketStore.userList, () => socketStore.authenticated], ([users, re
 
 function handleGroupMessage(data: any) {
   if (data.groupId !== groupId.value) return;
+  if (data.id && messages.value.some(msg => msg.id === data.id)) return;
 
   messages.value.push({
+    id: data.id,
     message: data.message,
     time: data.time,
     user: data.user,
@@ -357,6 +363,7 @@ function handleSend() {
   }
 
   const msg = {
+    clientMessageId: crypto.randomUUID(),
     message: inputMessage.value,
     time: new Date().toLocaleString(),
     user: {
@@ -366,13 +373,11 @@ function handleSend() {
       avatar: currentUser.value?.avatar,
     },
     isMine: true,
+    sendStatus: 'pending',
   };
 
   messages.value.push(msg);
-  socket.value?.emit('group_message', {
-    groupId: groupId.value,
-    message: inputMessage.value,
-  });
+  void retryGroupMessage(msg);
 
   inputMessage.value = '';
   scrollToBottom();
@@ -409,6 +414,15 @@ async function handleScreenShare() {
 // 返回
 function goBack() {
   router.back();
+}
+
+async function retryGroupMessage(msg: any) {
+  msg.sendStatus = 'pending';
+  const result = await sendReliableMessage(socket.value, 'group_message', {
+    groupId: groupId.value, message: msg.message, clientMessageId: msg.clientMessageId,
+  });
+  if (result.ok) { msg.id = result.id; msg.sendStatus = 'sent'; }
+  else msg.sendStatus = 'failed';
 }
 
 function clearVisibleUnread() {

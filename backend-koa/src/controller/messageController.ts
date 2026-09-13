@@ -1,6 +1,6 @@
 import { Context } from 'koa';
-import { Op } from 'sequelize';
-import { GroupMessage, Message, User } from '../models';
+import { Op, fn, col } from 'sequelize';
+import { GroupMember, GroupMessage, Message, User } from '../models';
 
 const MESSAGE_CACHE_DAYS = 30;
 
@@ -136,12 +136,21 @@ export async function getPrivateMessages(ctx: Context) {
 export async function getGroupMessages(ctx: Context) {
   try {
     const { groupId } = ctx.params;
-    const { limit = 50, offset = 0, search } = ctx.query;
+    const { limit = 50, offset = 0, search, afterId } = ctx.query;
+    const parsedGroupId = Number(groupId);
+    const parsedLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+    const parsedOffset = Math.max(0, Number(offset) || 0);
+    if (!Number.isInteger(parsedGroupId) || parsedGroupId < 1 || (afterId !== undefined && (!Number.isSafeInteger(Number(afterId)) || Number(afterId) < 0))) {
+      ctx.status = 400; ctx.body = { error: '群组或游标无效' }; return;
+    }
+    const member = await GroupMember.findOne({ where: { groupId: parsedGroupId, userId: ctx.state.user.userId } });
+    if (!member) { ctx.status = 403; ctx.body = { error: '不是群组成员' }; return; }
 
     const whereClause: any = {
-      groupId: Number(groupId),
-      createdAt: { [Op.gte]: getMessageCacheStartDate() },
+      groupId: parsedGroupId,
     };
+    if (afterId !== undefined) whereClause.id = { [Op.gt]: Number(afterId) };
+    else whereClause.createdAt = { [Op.gte]: getMessageCacheStartDate() };
 
     if (search) {
       whereClause.message = {
@@ -158,19 +167,40 @@ export async function getGroupMessages(ctx: Context) {
           attributes: ['id', 'username', 'nickname', 'avatar'],
         },
       ],
-      order: [['createdAt', 'DESC']],
-      limit: Number(limit),
-      offset: Number(offset),
+      order: afterId !== undefined ? [['id', 'ASC']] : [['id', 'DESC']],
+      limit: parsedLimit + 1,
+      offset: afterId !== undefined ? 0 : parsedOffset,
     });
 
+    const hasMore = messages.length > parsedLimit;
+    const page = messages.slice(0, parsedLimit);
     ctx.body = {
-      messages: messages.reverse(),
-      hasMore: messages.length === Number(limit),
+      messages: afterId !== undefined ? page : page.reverse(),
+      hasMore,
     };
   } catch (error: any) {
     console.error('get group messages failed:', error);
     ctx.status = 500;
     ctx.body = { error: `Get group messages failed: ${error.message}` };
+  }
+}
+
+export async function getGroupCursors(ctx: Context) {
+  try {
+    const memberships = await GroupMember.findAll({ where: { userId: ctx.state.user.userId }, attributes: ['groupId'] });
+    const groupIds = memberships.map(member => member.groupId);
+    if (!groupIds.length) { ctx.body = { cursors: {} }; return; }
+    const rows = await GroupMessage.findAll({
+      attributes: ['groupId', [fn('MAX', col('id')), 'latestId']],
+      where: { groupId: { [Op.in]: groupIds } },
+      group: ['groupId'], raw: true,
+    });
+    const cursors: Record<number, number> = {};
+    for (const row of rows as any[]) cursors[row.groupId] = Number(row.latestId) || 0;
+    ctx.body = { cursors };
+  } catch (error) {
+    console.error('get group cursors failed:', error);
+    ctx.status = 500; ctx.body = { error: '获取群消息游标失败' };
   }
 }
 

@@ -8,6 +8,7 @@ const router = new Router({ prefix: '/api/messages' });
 router.get('/offline', authMiddleware, messageController.getOfflineMessages);
 router.post('/mark-read', authMiddleware, messageController.markMessagesAsRead);
 router.get('/unread-count', authMiddleware, messageController.getUnreadCount);
+router.get('/group-cursors', authMiddleware, messageController.getGroupCursors);
 
 // 历史消息
 router.get('/private', authMiddleware, messageController.getPrivateMessages);

@@ -9,17 +9,22 @@ import { computed, h, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNotification } from 'naive-ui';
 import { useSocketStore } from '@/stores/socket';
+import { useAuthStore } from '@/stores/auth';
 import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups } from '@/api/group';
-import { getOfflineMessages, markMessagesAsRead } from '@/api/message';
+import { getOfflineMessages, markMessagesAsRead, getGroupCursors, getGroupMessagesAfter } from '@/api/message';
+import { advanceGroupCursor, initializeGroupCursor, readGroupCursors } from '@/services/groupMessageCursor';
 import notificationService from '@/services/notificationService';
 
 const socketStore = useSocketStore();
+const authStore = useAuthStore();
 const unread = useUnreadStore();
 const router = useRouter();
 const currentPath = computed(() => router.currentRoute.value.path);
 const notification = useNotification();
 let loadGeneration = 0;
+const catchingUp = new Set<number>();
+const liveDuringCatchUp = new Map<number, number>();
 
 function notificationTitle(value: string) {
   return () => h('span', { class: 'global-message-title', style: { color: '#f8fafc' } }, value);
@@ -30,7 +35,27 @@ async function subscribeGroups() {
   try {
     const [groups, offline] = await Promise.allSettled([getMyGroups(), getOfflineMessages()]);
     if (generation !== loadGeneration) return;
-    if (groups.status === 'fulfilled') socketStore.setSubscribedGroups(groups.value.groups.map(group => group.id));
+    if (groups.status === 'fulfilled') {
+      const userId = authStore.currentUser?.id;
+      const groupIds = groups.value.groups.map(group => group.id);
+      let initialCursors = userId ? readGroupCursors(userId) : {};
+      if (userId && groupIds.some(id => initialCursors[id] === undefined)) {
+        try {
+          const latest = await getGroupCursors();
+          if (generation !== loadGeneration) return;
+          for (const id of groupIds) {
+            if (initialCursors[id] === undefined) {
+              initialCursors[id] = latest.cursors[id] || 0;
+              initializeGroupCursor(userId, id, initialCursors[id]);
+            }
+          }
+        } catch (error) { console.error('获取初始群消息游标失败:', error); }
+      }
+      groupIds.forEach(id => catchingUp.add(id));
+      socketStore.setSubscribedGroups(groupIds);
+      if (userId) void catchUpGroups(userId, groupIds.filter(id => initialCursors[id] !== undefined), { ...initialCursors }, generation);
+      else catchingUp.clear();
+    }
     else console.error('订阅群组失败:', groups.reason);
     if (offline.status === 'rejected') { console.error('加载未读消息失败:', offline.reason); return; }
     let newCount = 0;
@@ -45,6 +70,36 @@ async function subscribeGroups() {
       duration: 5000,
     });
   } catch (error) { console.error('加载全局消息订阅失败:', error); }
+}
+
+async function catchUpGroups(userId: number, groupIds: number[], cursors: Record<number, number>, generation: number) {
+  for (const groupId of groupIds) {
+    let afterId = Number(cursors[groupId]) || 0;
+    let completed = false;
+    try {
+      for (let page = 0; page < 100; page++) {
+        const result = await getGroupMessagesAfter(groupId, afterId);
+        if (generation !== loadGeneration) return;
+        for (const item of result.messages) {
+          if (item.id <= afterId) continue;
+          afterId = item.id;
+          advanceGroupCursor(userId, groupId, item.id);
+          if (item.userId === userId) continue;
+          const active = currentPath.value === `/group-chat/${groupId}` && !document.hidden;
+          unread.receiveGroup(item.id, groupId, active);
+        }
+        if (!result.hasMore || !result.messages.length) { completed = true; break; }
+      }
+    } catch (error) { console.error('补齐群消息失败:', groupId, error); }
+    if (generation === loadGeneration && completed) {
+      const liveId = liveDuringCatchUp.get(groupId);
+      if (liveId) advanceGroupCursor(userId, groupId, liveId);
+    }
+    if (completed) {
+      liveDuringCatchUp.delete(groupId);
+      catchingUp.delete(groupId);
+    }
+  }
 }
 
 function handlePrivate(data: any) {
@@ -71,6 +126,10 @@ function handlePrivate(data: any) {
 function handleGroup(data: any) {
   const groupId = Number(data.groupId);
   if (!groupId) return;
+  if (authStore.currentUser?.id) {
+    if (catchingUp.has(groupId)) liveDuringCatchUp.set(groupId, Math.max(liveDuringCatchUp.get(groupId) || 0, Number(data.id) || 0));
+    else advanceGroupCursor(authStore.currentUser.id, groupId, Number(data.id));
+  }
   const active = router.currentRoute.value.path === `/group-chat/${groupId}` && !document.hidden;
   if (!unread.receiveGroup(Number(data.id), groupId, active) || active) return;
   if (!notificationService.shouldNotify('group')) return;
@@ -93,7 +152,7 @@ watch(() => socketStore.socket, (current, previous) => {
 }, { immediate: true });
 watch(() => socketStore.authenticated, ready => {
   if (ready) void subscribeGroups();
-  else { loadGeneration++; socketStore.setSubscribedGroups([]); }
+  else { loadGeneration++; catchingUp.clear(); liveDuringCatchUp.clear(); socketStore.setSubscribedGroups([]); }
 }, { immediate: true });
 onBeforeUnmount(() => {
   socketStore.socket?.off('private_message', handlePrivate);

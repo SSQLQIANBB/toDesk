@@ -55,3 +55,12 @@ export function getGroupMessages(groupId: number, limit = 50, offset = 0) {
 
   return http.get<{ messages: GroupHistoryMessage[]; hasMore: boolean }>(`/api/messages/group/${groupId}?${query}`);
 }
+
+export function getGroupMessagesAfter(groupId: number, afterId: number, limit = 100) {
+  const query = new URLSearchParams({ afterId: String(afterId), limit: String(limit) });
+  return http.get<{ messages: GroupHistoryMessage[]; hasMore: boolean }>(`/api/messages/group/${groupId}?${query}`);
+}
+
+export function getGroupCursors() {
+  return http.get<{ cursors: Record<number, number> }>('/api/messages/group-cursors');
+}

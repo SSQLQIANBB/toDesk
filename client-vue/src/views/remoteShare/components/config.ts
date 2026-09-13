@@ -2,9 +2,9 @@
 export const cameraConstraints = {
   audio: true, // 启用音频
   video: {
-    width: { ideal: 1280, max: 1920 },
-    height: { ideal: 720, max: 1080 },
-    frameRate: { ideal: 30, max: 30 }, // 帧率
+    width: { ideal: 960, max: 1280 },
+    height: { ideal: 540, max: 720 },
+    frameRate: { ideal: 24, max: 30 }, // 帧率
     facingMode: 'user' // 使用前置摄像头
   },
 }
@@ -16,7 +16,7 @@ export const screenRecordConstraints = {
     displaySurface: 'monitor', // 'monitor' | 'window' | 'browser'
     width: { ideal: 1920 },
     height: { ideal: 1080 },
-    frameRate: { ideal: 30, max: 60 }
+    frameRate: { ideal: 15, max: 24 }
   },
   audio: {
     echoCancellation: true, // 回声消除

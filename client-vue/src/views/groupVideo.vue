@@ -186,6 +186,7 @@ import {
   PeopleFilled,
 } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
+import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import VirtualBackground from '@/components/VirtualBackground.vue';
@@ -277,7 +278,7 @@ async function loadGroupDetail() {
 async function initLocalStream() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720 },
+      video: { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 24, max: 30 } },
       audio: true,
     });
 
@@ -377,7 +378,8 @@ function createPeerConnection(member: RemoteMember) {
 
   // 添加本地流
   localStream.value?.getTracks().forEach(track => {
-    pc.addTrack(track, localStream.value!);
+    const sender = pc.addTrack(track, localStream.value!);
+    if (track.kind === 'video') void limitVideoBitrate(sender, 900_000);
   });
 
   // 处理远程流

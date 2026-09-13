@@ -258,6 +258,7 @@ import {
   PeopleFilled
 } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
+import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import MediaRecorder from '@/components/MediaRecorder.vue';
@@ -540,7 +541,8 @@ function createPeerConnection(member: RemoteMember) {
   // 添加本地流
   if (localStream.value) {
     localStream.value.getTracks().forEach(track => {
-      pc.addTrack(track, localStream.value!);
+      const sender = pc.addTrack(track, localStream.value!);
+      if (track.kind === 'video') void limitVideoBitrate(sender, 1_800_000);
     });
   }
 

@@ -23,6 +23,7 @@ vi.mock('@/stores/socket', () => ({ useSocketStore: () => ({
     off: (event: string) => mocks.handlers.delete(event),
   },
 }) }));
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: null }) }));
 vi.mock('@/stores/unread', () => ({ useUnreadStore: () => ({
   total: 0, activePrivateUserId: null, rememberSender: vi.fn(),
   receivePrivate: mocks.receivePrivate, receiveGroup: mocks.receiveGroup,

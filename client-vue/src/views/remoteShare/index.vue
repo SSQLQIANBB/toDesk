@@ -167,6 +167,9 @@
                    :class="msg.fromUserId === authUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
                 {{ msg.message }}
               </div>
+              <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="text-xs text-gray-500 mt-1" @click="msg.sendStatus === 'failed' && retryPrivateMessage(msg)">
+                {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
+              </button>
             </li>
           </ul>
         </n-scrollbar>
@@ -206,6 +209,7 @@ import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups, type Group } from '@/api/group';
 import { getOfflineMessages, getPrivateMessages, markMessagesAsRead } from '@/api/message';
+import { sendReliableMessage } from '@/services/reliableMessage';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
@@ -231,6 +235,9 @@ const mobileSidebarOpen = ref(false);
 type User = OnlineUser;
 
 type MessageInfo = {
+  id?: number;
+  clientMessageId?: string;
+  sendStatus?: 'pending' | 'sent' | 'failed';
   time: string;
   from?: string;
   fromUserId: number;
@@ -366,21 +373,31 @@ function sendMsg(v: string) {
   if (!contactUser.value || !authUser.value) return;
 
   // 私信
-  socket.value?.emit('private_message', {
-    to: contactUser.value,
-    message: v,
-  })
-  
-  setMessage(contactUser.value.id, {
+  const msg: MessageInfo = {
+    clientMessageId: crypto.randomUUID(),
+    sendStatus: 'pending',
     from: socket.value?.id!,
     fromUserId: authUser.value.id,
     toUserId: contactUser.value.id,
     message: v,
     time: new Date().toLocaleString()
-  })
+  };
+  setMessage(contactUser.value.id, msg)
+  void retryPrivateMessage(msg);
 
   currentMessageList.value = privateMessageMap.get(contactUser.value.id) || []
   scrollToBottom();
+}
+
+async function retryPrivateMessage(msg: MessageInfo) {
+  if (!msg.toUserId) return;
+  msg.sendStatus = 'pending';
+  const target = contactUser.value?.id === msg.toUserId ? contactUser.value : { id: msg.toUserId };
+  const result = await sendReliableMessage(socket.value, 'private_message', {
+    to: target, message: msg.message, clientMessageId: msg.clientMessageId,
+  });
+  if (result.ok) { msg.id = result.id; msg.sendStatus = 'sent'; }
+  else msg.sendStatus = 'failed';
 }
 
 // 滚动到底部

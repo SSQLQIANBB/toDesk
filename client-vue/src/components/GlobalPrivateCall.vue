@@ -82,6 +82,7 @@ import { useSocketStore } from '@/stores/socket';
 import { usePrivateCallStore } from '@/stores/privateCall';
 import notificationService from '@/services/notificationService';
 import { cameraConstraints, screenRecordConstraints } from '@/views/remoteShare/components/config';
+import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useMessage, NModal, NButton, NIcon } from 'naive-ui';
 
 
@@ -337,7 +338,8 @@ async function initRTC(type = RTC_TYPE.CALLER) {
     // 添加本地媒体流
     if (currentStream) {
       currentStream.getTracks().forEach(track => {
-        peer?.addTrack(track, currentStream!);
+        const sender = peer?.addTrack(track, currentStream!);
+        if (sender && track.kind === 'video') void limitVideoBitrate(sender, connectionType.value === DEVICE_TYPE.CAMERA ? 900_000 : 1_800_000);
       });
     }
 

@@ -1,7 +1,9 @@
 import { type Server } from 'http';
 import { Server as Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
-import { GroupMember, GroupMessage, Message, User as UserModel } from '../models';
+import { GroupMember, User as UserModel } from '../models';
+import { saveReliableMessage } from '../services/reliableMessageService';
+import { isTokenVersionCurrent } from '../services/tokenVersionService';
 import {
   GroupSessionService,
   type GroupSession,
@@ -79,6 +81,25 @@ const initialMeeting = (server: Server) => {
     },
   });
 
+  const messageWriteMs: number[] = [];
+  let messageWriteFailures = 0;
+  const metricsTimer = setInterval(() => {
+    const transports = { websocket: 0, polling: 0 };
+    for (const client of io.sockets.sockets.values()) {
+      if (client.conn.transport.name === 'websocket') transports.websocket++;
+      else transports.polling++;
+    }
+    const latencies = messageWriteMs.splice(0).sort((a, b) => a - b);
+    const p95 = latencies.length ? latencies[Math.ceil(latencies.length * 0.95) - 1] : null;
+    console.info('realtime_metrics', JSON.stringify({
+      connections: io.engine.clientsCount, transports,
+      messageWrites: latencies.length, messageWriteP95Ms: p95,
+      messageWriteFailures,
+    }));
+    messageWriteFailures = 0;
+  }, 60_000);
+  metricsTimer.unref();
+
   async function emitGroupSessionEvent(groupId: number, event: string, payload: unknown) {
     const members = await GroupMember.findAll({ where: { groupId } });
     const socketIds = members.flatMap(member => getUserSockets(member.userId));
@@ -131,6 +152,7 @@ const initialMeeting = (server: Server) => {
     socket.on('authenticate', async (data: { token: string; nickname?: string; avatar?: string }) => {
       try {
         const payload = verifyToken(data.token);
+        if (!await isTokenVersionCurrent(payload.userId, payload.authVersion)) throw new Error('token 已失效');
         const dbUser = await UserModel.findByPk(payload.userId);
         const status = (dbUser?.status || 'online') as PresenceStatus;
         const previous = getPublicUser(payload.userId);
@@ -210,18 +232,19 @@ const initialMeeting = (server: Server) => {
 
     });
 
-    socket.on('private_message', async (data: { to?: MeetingUser; message?: string }) => {
-      if (!currentUser || !data.to?.id || !data.message?.trim()) return;
+    socket.on('private_message', async (data: { to?: MeetingUser; message?: string; clientMessageId?: string }, ack?: (result: unknown) => void) => {
+      if (!currentUser || !data.to?.id || !data.message?.trim() || data.message.length > 10000) {
+        ack?.({ ok: false, error: '消息无效' }); return;
+      }
 
       try {
+        const writeStartedAt = Date.now();
         const receiverSockets = getUserSockets(data.to.id);
-        const savedMessage = await Message.create({
-          fromUserId: currentUser.id,
-          toUserId: data.to.id,
-          message: data.message,
-          // 在线不代表用户正在查看当前会话；由客户端打开会话后显式标记已读。
-          isRead: false,
+        const { saved: savedMessage, duplicate } = await saveReliableMessage({
+          kind: 'private', userId: currentUser.id, targetId: data.to.id,
+          message: data.message, clientMessageId: data.clientMessageId,
         });
+        if (messageWriteMs.length < 10_000) messageWriteMs.push(Date.now() - writeStartedAt);
 
         const payload = {
           id: savedMessage.id,
@@ -234,11 +257,14 @@ const initialMeeting = (server: Server) => {
           sender: currentUser,
         };
 
-        receiverSockets.forEach((targetSocketId) => {
+        if (!duplicate) receiverSockets.forEach((targetSocketId) => {
           socket.to(targetSocketId).emit('private_message', payload);
         });
+        ack?.({ ok: true, id: savedMessage.id, clientMessageId: data.clientMessageId });
       } catch (error) {
+        messageWriteFailures++;
         console.error('save private message failed:', error);
+        ack?.({ ok: false, error: '发送失败' });
       }
     });
 
@@ -337,15 +363,20 @@ const initialMeeting = (server: Server) => {
       socket.to(roomName).emit('group_member_left', { socketId, userId: currentUser?.id });
     });
 
-    socket.on('group_message', async (data: { groupId: number; message?: string }) => {
-      if (!currentUser || !data.groupId || !data.message?.trim()) return;
+    socket.on('group_message', async (data: { groupId: number; message?: string; clientMessageId?: string }, ack?: (result: unknown) => void) => {
+      if (!currentUser || !Number.isInteger(data.groupId) || !data.message?.trim() || data.message.length > 10000) {
+        ack?.({ ok: false, error: '消息无效' }); return;
+      }
 
       try {
-        const groupMessage = await GroupMessage.create({
-          groupId: data.groupId,
-          userId: currentUser.id,
-          message: data.message,
+        const writeStartedAt = Date.now();
+        const member = await GroupMember.findOne({ where: { groupId: data.groupId, userId: currentUser.id } });
+        if (!member || member.canSpeak === false) { ack?.({ ok: false, error: '无发送权限' }); return; }
+        const { saved: groupMessage, duplicate } = await saveReliableMessage({
+          kind: 'group', userId: currentUser.id, targetId: data.groupId,
+          message: data.message, clientMessageId: data.clientMessageId,
         });
+        if (messageWriteMs.length < 10_000) messageWriteMs.push(Date.now() - writeStartedAt);
 
         const payload = {
           id: groupMessage.id,
@@ -359,9 +390,12 @@ const initialMeeting = (server: Server) => {
           sender: currentUser,
         };
 
-        socket.to(`group_${data.groupId}`).emit('group_message', payload);
+        if (!duplicate) socket.to(`group_${data.groupId}`).emit('group_message', payload);
+        ack?.({ ok: true, id: groupMessage.id, clientMessageId: data.clientMessageId });
       } catch (error) {
+        messageWriteFailures++;
         console.error('save group message failed:', error);
+        ack?.({ ok: false, error: '发送失败' });
       }
     });
 

@@ -12,6 +12,7 @@ vi.mock('socket.io', () => ({ Server: class {
   to(rooms: string[]) { return { emit: (event: string, payload: any) => mock.broadcasts.push({ rooms, event, payload }) }; }
 } }));
 vi.mock('../../../src/utils/jwt', () => ({ verifyToken: (token: string) => ({ userId: Number(token), username: `user${token}` }) }));
+vi.mock('../../../src/services/tokenVersionService', () => ({ isTokenVersionCurrent: async () => true }));
 vi.mock('../../../src/models', () => ({
   GroupMember: { findAll: mock.members },
   User: { findByPk: async () => ({ status: 'online' }), update: vi.fn() },
