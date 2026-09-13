@@ -34,6 +34,7 @@ export async function register(ctx: Context) {
       nickname: nickname || username,
       email,
       phone,
+      status: 'online',
     });
 
     // 生成 token 对
@@ -56,6 +57,7 @@ export async function register(ctx: Context) {
         avatar: null,
         email: email || null,
         phone: phone || null,
+        status: 'online',
       },
     };
   } catch (error: any) {

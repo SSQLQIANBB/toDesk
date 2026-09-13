@@ -95,6 +95,7 @@ export default defineConfig({
       '/meeting': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        ws: true,
         // rewrite: path => path.replace(/^\/sse/, '/'),
       },
       '/uploads': {

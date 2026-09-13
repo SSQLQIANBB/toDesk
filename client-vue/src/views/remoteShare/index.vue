@@ -201,6 +201,7 @@ import type { Socket } from 'socket.io-client';
 import { storeToRefs } from 'pinia';
 import { useMessage, useDialog } from 'naive-ui';
 import { useAuthStore } from '@/stores/auth';
+import { getUserList, type User as BasicUser } from '@/api/auth';
 import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups, type Group } from '@/api/group';
@@ -209,6 +210,7 @@ import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupIn
 import TextMsg from '@/components/TextMsg.vue';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
+import { mergeContactPresence } from '@/services/contactPresence';
 import {
   getRemoteTabQuery,
   parseRemoteTab,
@@ -240,6 +242,7 @@ const message = useMessage();
 const dialog = useDialog();
 
 const contactUser = ref<User | null>(null);
+const knownContacts = ref<BasicUser[]>([]);
 
 const myGroups = ref<Group[]>([]);
 const pendingInvitations = ref<GroupInvitation[]>([]);
@@ -278,11 +281,16 @@ const privateMessageMap = new Map<
 
 const unReadMessageCount = computed(() => unread.privateCounts);
 const displayUsers = computed<User[]>(() => {
-  const merged = new Map<number, User>();
-  Object.values(unread.privateContacts).forEach(user => merged.set(user.id, { ...user, socketId: '', status: 'offline' }));
-  userList.value.forEach(user => merged.set(user.id, user));
-  return [...merged.values()];
+  return mergeContactPresence(knownContacts.value, Object.values(unread.privateContacts), userList.value, authUser.value?.id);
 });
+
+async function loadContacts() {
+  try {
+    knownContacts.value = (await getUserList()).users;
+  } catch (error) {
+    console.error('加载联系人失败:', error);
+  }
+}
 const currentMessageList = ref<MessageInfo[]>([]);
 
 // refs
@@ -509,6 +517,8 @@ watch(activeTab, (tab) => {
 });
 
 watch([displayUsers, () => route.query.contact], ([users, contact]) => {
+  const selected = users.find(item => item.id === contactUser.value?.id);
+  if (selected && contactUser.value !== selected) contactUser.value = selected;
   const user = users.find(item => item.id === Number(contact));
   if (user && contactUser.value?.id !== user.id) void selectContact(user);
 }, { immediate: true });
@@ -535,6 +545,7 @@ onMounted(async () => {
 
   if (authUser.value && token.value) {
     await Promise.all([
+      loadContacts(),
       loadMyGroups(),
       loadOfflineMessages(),
       loadPendingInvitations(),
