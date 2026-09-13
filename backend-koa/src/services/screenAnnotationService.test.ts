@@ -113,4 +113,11 @@ describe('ScreenAnnotationService', () => {
       lineWidth: 0.005,
     })).toThrow('标注坐标无效');
   });
+
+  it.each(['circle', 'line', 'rect'] as const)('保存 %s 的颜色线宽并供后加入的成员恢复', async tool => {
+    const service = new ScreenAnnotationService(new MemoryAnnotationStore());
+    const shape = { ...action, tool, color: '#00FF00', lineWidth: 0.012 };
+    await service.complete(session, 1, shape);
+    expect(await service.getSnapshot(session)).toEqual([shape]);
+  });
 });

@@ -1,7 +1,7 @@
 import { type Server } from 'http';
 import { Server as Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
-import { GroupMessage, Message, User as UserModel } from '../models';
+import { GroupMember, GroupMessage, Message, User as UserModel } from '../models';
 import {
   GroupSessionService,
   type GroupSession,
@@ -64,6 +64,12 @@ const initialMeeting = (server: Server) => {
       origin: '*',
     },
   });
+
+  async function emitGroupSessionEvent(groupId: number, event: string, payload: unknown) {
+    const members = await GroupMember.findAll({ where: { groupId } });
+    const socketIds = members.flatMap(member => getUserSockets(member.userId));
+    if (socketIds.length) io.to(socketIds).emit(event, payload);
+  }
 
   function emitUserList() {
     io.emit('user_list', getPublicUsers());
@@ -170,7 +176,7 @@ const initialMeeting = (server: Server) => {
           }
           emitEmptyMediaPresence(session);
           mediaRooms.clear(session.channelId);
-          io.to(`group_${session.groupId}`).emit('group_call_ended', {
+          await emitGroupSessionEvent(session.groupId, 'group_call_ended', {
             from: socketId,
             groupId: session.groupId,
             type: session.type,
@@ -191,7 +197,8 @@ const initialMeeting = (server: Server) => {
           fromUserId: currentUser.id,
           toUserId: data.to.id,
           message: data.message,
-          isRead: receiverSockets.length > 0,
+          // 在线不代表用户正在查看当前会话；由客户端打开会话后显式标记已读。
+          isRead: false,
         });
 
         const payload = {
@@ -242,10 +249,11 @@ const initialMeeting = (server: Server) => {
     });
 
     socket.on('webrtc_call_request', (data) => {
-      if (data.to?.socketId) {
+      if (currentUser && data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_call_request', {
           from: socketId,
           deviceType: data.deviceType,
+          user: currentUser,
         });
       }
     });
@@ -377,7 +385,7 @@ const initialMeeting = (server: Server) => {
       const result = await groupSessionService.start(data.groupId, type, currentUser);
       if (result.created) {
         ownedSessions.set(result.session.channelId, result.session);
-        io.to(`group_${data.groupId}`).emit('group_call_started', {
+        await emitGroupSessionEvent(data.groupId, 'group_call_started', {
           from: socketId,
           ...result.session,
           deviceType: data.deviceType,
@@ -413,7 +421,7 @@ const initialMeeting = (server: Server) => {
         }
         emitEmptyMediaPresence(session);
         mediaRooms.clear(session.channelId);
-        io.to(`group_${data.groupId}`).emit('group_call_ended', {
+        await emitGroupSessionEvent(data.groupId, 'group_call_ended', {
           from: socketId,
           groupId: data.groupId,
           type,

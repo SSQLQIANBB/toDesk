@@ -5,7 +5,7 @@ export type AnnotationPoint = {
   y: number;
 };
 
-export type AnnotationTool = 'pen' | 'arrow' | 'rect' | 'text' | 'eraser';
+export type AnnotationTool = 'pen' | 'line' | 'circle' | 'arrow' | 'rect' | 'text' | 'eraser';
 
 export type AnnotationAction = {
   actionId: string;
@@ -29,7 +29,7 @@ export interface ScreenAnnotationStore {
 const MAX_ACTIONS = 1000;
 const MAX_POINTS = 5000;
 const HEX_COLOR = /^#[0-9A-F]{6}$/i;
-const TOOLS = new Set<AnnotationTool>(['pen', 'arrow', 'rect', 'text', 'eraser']);
+const TOOLS = new Set<AnnotationTool>(['pen', 'line', 'circle', 'arrow', 'rect', 'text', 'eraser']);
 
 export class ScreenAnnotationService {
   constructor(private readonly store: ScreenAnnotationStore) {}
