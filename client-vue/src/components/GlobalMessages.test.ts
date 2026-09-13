@@ -41,12 +41,16 @@ describe('全局消息提示', () => {
     expect(mocks.create).toHaveBeenCalledTimes(2);
     const privateOptions = mocks.create.mock.calls[0]![0];
     const groupOptions = mocks.create.mock.calls[1]![0];
-    expect(privateOptions).toMatchObject({ title: '小明：消息', closable: false });
-    expect(groupOptions).toMatchObject({ title: '小红：消息', closable: false });
+    expect(privateOptions.closable).toBe(false);
+    expect(groupOptions.closable).toBe(false);
+    expect(privateOptions.title().children).toBe('小明：消息');
+    expect(groupOptions.title().children).toBe('小红：消息');
+    expect(privateOptions.title().props.style.color).toBe('#f8fafc');
     const privateContent = privateOptions.content();
     const groupContent = groupOptions.content();
     expect(privateContent.children).toBe('内容：你好');
     expect(groupContent.children).toBe('内容：开会了');
+    expect(privateContent.props.style.color).toBe('#dbeafe');
     privateContent.props.onClick();
     groupContent.props.onClick();
     expect(mocks.push).toHaveBeenCalledWith({ path: '/remote', query: { tab: 'users', contact: '2' } });

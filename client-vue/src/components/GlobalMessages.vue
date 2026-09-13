@@ -21,6 +21,10 @@ const currentPath = computed(() => router.currentRoute.value.path);
 const notification = useNotification();
 let loadGeneration = 0;
 
+function notificationTitle(value: string) {
+  return () => h('span', { class: 'global-message-title', style: { color: '#f8fafc' } }, value);
+}
+
 async function subscribeGroups() {
   const generation = ++loadGeneration;
   try {
@@ -34,7 +38,12 @@ async function subscribeGroups() {
       unread.rememberSender(item.sender);
       if (unread.receivePrivate(item.id, item.fromUserId, false)) newCount++;
     });
-    if (newCount) notification.create({ title: '未读消息', content: `内容：您有 ${newCount} 条未读私信`, closable: false, duration: 5000 });
+    if (newCount) notification.create({
+      title: notificationTitle('未读消息'),
+      content: () => h('span', { class: 'global-message-text', style: { color: '#dbeafe' } }, `内容：您有 ${newCount} 条未读私信`),
+      closable: false,
+      duration: 5000,
+    });
   } catch (error) { console.error('加载全局消息订阅失败:', error); }
 }
 
@@ -50,8 +59,8 @@ function handlePrivate(data: any) {
   if (document.hidden) void notificationService.showMessage(sender?.nickname || sender?.username || '联系人', data.message, sender?.avatar,
     () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); });
   notification.create({
-    title: `${sender?.nickname || sender?.username || '联系人'}：消息`,
-    content: () => h('button', { type: 'button', class: 'global-message-link', onClick: () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); } }, `内容：${data.message ?? ''}`),
+    title: notificationTitle(`${sender?.nickname || sender?.username || '联系人'}：消息`),
+    content: () => h('button', { type: 'button', class: 'global-message-link', style: { color: '#dbeafe' }, onClick: () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); } }, `内容：${data.message ?? ''}`),
     closable: false,
     duration: 5000,
   });
@@ -65,8 +74,8 @@ function handleGroup(data: any) {
   if (document.hidden) void notificationService.showSystem('群组新消息', data.message,
     () => { void router.push(`/group-chat/${groupId}`); });
   notification.create({
-    title: `${data.user?.nickname || data.user?.username || '群成员'}：消息`,
-    content: () => h('button', { type: 'button', class: 'global-message-link', onClick: () => { void router.push(`/group-chat/${groupId}`); } }, `内容：${data.message ?? ''}`),
+    title: notificationTitle(`${data.user?.nickname || data.user?.username || '群成员'}：消息`),
+    content: () => h('button', { type: 'button', class: 'global-message-link', style: { color: '#dbeafe' }, onClick: () => { void router.push(`/group-chat/${groupId}`); } }, `内容：${data.message ?? ''}`),
     closable: false,
     duration: 5000,
   });
@@ -89,6 +98,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
+.global-message-title, .global-message-text { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .global-message-link { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; line-height: 16px; }
 .global-message-link:hover { text-decoration: underline; }
 .n-notification-container .n-notification {
@@ -105,7 +115,7 @@ onBeforeUnmount(() => {
 }
 .n-notification-container .n-notification .n-notification-main { width: 100%; min-width: 0; margin-left: 0; padding-block: 8px; }
 .n-notification-container .n-notification .n-notification-main__header { color: #f8fafc; font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.n-notification-container .n-notification .n-notification-main__content { min-width: 0; margin-top: 2px; color: #dbeafe; overflow: hidden; }
+.n-notification-container .n-notification .n-notification-main__content { min-width: 0; margin-top: 2px; color: #dbeafe; overflow: hidden; font-size: 12px; line-height: 16px; }
 .global-unread-shortcut { position: fixed; left: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 2500; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid #bfdbfe; border-radius: 24px; background: #eff6ff; color: #1d4ed8; font-weight: 600; box-shadow: 0 6px 20px #0002; cursor: pointer; }
 .global-unread-shortcut__badge { min-width: 22px; padding: 2px 5px; border-radius: 11px; background: #ef4444; color: white; font-size: 12px; }
 </style>

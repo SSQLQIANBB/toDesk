@@ -51,8 +51,9 @@
       <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="flex-1 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
         <!-- 联系人 -->
         <n-tab-pane name="users" :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'" display-directive="show:lazy" class="flex flex-col h-full pt-0">
-          <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50">
-            <n-badge :value="unread.privateTotal" :max="99" :show="unread.privateTotal > 0">联系人</n-badge> ({{ displayUsers.length }})
+          <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between gap-2">
+            <span>联系人 ({{ displayUsers.length }})</span>
+            <span v-if="unread.privateTotal > 0" class="contact-unread-badge" aria-label="未读消息">{{ unread.privateTotal > 99 ? '99+' : unread.privateTotal }}</span>
           </div>
           <n-scrollbar style="flex: 1; max-height: calc(100vh - 280px);">
             <ul class="p-3 space-y-2">
@@ -592,6 +593,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.contact-unread-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #e11d48; color: #fff; font-size: 11px; line-height: 1; }
 @media (max-width: 767px) {
   :deep(.remote-sidebar) {
     position: absolute;

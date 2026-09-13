@@ -105,6 +105,37 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe('响应式布局', () => {
+  test('新消息提示文字清晰可见，联系人未读徽标靠右', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await preparePage(page);
+    await page.goto('/remote');
+    await page.evaluate(async () => {
+      const { useSocketStore } = await import('/src/stores/socket.ts' as string);
+      const socket = useSocketStore().socket;
+      if (!socket) throw new Error('Socket 尚未初始化');
+      socket.listeners('private_message').forEach((listener: Function) => listener({
+        id: 901, fromUserId: 2, sender: { id: 2, nickname: '小明' }, message: '你好',
+      }));
+    });
+
+    const title = page.locator('.n-notification .global-message-title');
+    const content = page.locator('.n-notification .global-message-link');
+    await expect(title).toHaveText('小明：消息');
+    await expect(content).toHaveText('内容：你好');
+    expect(await title.evaluate(element => getComputedStyle(element).color)).toBe('rgb(248, 250, 252)');
+    expect(await content.evaluate(element => getComputedStyle(element).color)).toBe('rgb(219, 234, 254)');
+
+    await page.getByRole('button', { name: '打开联系人列表' }).click();
+    const badge = page.locator('.contact-unread-badge');
+    await expect(badge).toHaveText('1');
+    const header = badge.locator('xpath=..');
+    const headerBox = await header.boundingBox();
+    const badgeBox = await badge.boundingBox();
+    expect(headerBox).not.toBeNull();
+    expect(badgeBox).not.toBeNull();
+    expect(badgeBox!.x).toBeGreaterThan(headerBox!.x + headerBox!.width / 2);
+  });
+
   test('标注工具栏默认贴近视口底部，可拖动到不遮挡画面的位置', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await preparePage(page);
