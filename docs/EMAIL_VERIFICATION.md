@@ -11,3 +11,5 @@
 找回密码或修改密码成功后，服务端撤销该账号以前的访问令牌和刷新令牌；用户需要重新登录。
 
 部署后先用自己的测试邮箱验证完整流程：注册发码、绑定旧账号、忘记密码重置、登录后修改密码。不要用生产账号做破坏性测试。
+
+参考：腾讯官方 [QQ 邮箱 SMTP 授权码指引](https://hiflow.tencent.com/document/applications/qq-mail/)；[Nodemailer SMTP 连接参数](https://nodemailer.com/smtp)。
