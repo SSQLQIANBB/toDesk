@@ -603,7 +603,10 @@ async function handleRegister() {
 
 @media (max-width: 640px) {
   .login-page {
-    align-items: flex-start;
+    height: 100dvh;
+    align-items: safe center;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding-top: max(28px, env(safe-area-inset-top));
     padding-bottom: max(24px, env(safe-area-inset-bottom));
   }

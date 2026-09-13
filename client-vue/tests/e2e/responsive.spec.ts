@@ -105,6 +105,24 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe('响应式布局', () => {
+  test('手机登录卡片在视口中间，矮屏注册表单仍可滚动', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/login');
+    const card = page.locator('.login-card');
+    await expect(card).toBeVisible();
+    const box = await card.boundingBox();
+    expect(box).not.toBeNull();
+    expect(Math.abs(box!.y + box!.height / 2 - 812 / 2)).toBeLessThan(24);
+
+    await page.setViewportSize({ width: 375, height: 500 });
+    await page.getByText('注册', { exact: true }).first().click();
+    const loginPage = page.locator('.login-page');
+    expect(await loginPage.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+    const submit = page.locator('.n-tab-pane:visible .n-button').last();
+    await submit.scrollIntoViewIfNeeded();
+    await expect(submit).toBeInViewport();
+  });
+
   test('个人中心通知设置保存后控制消息横幅与测试通知', async ({ page }) => {
     await preparePage(page);
     await page.addInitScript(() => {
