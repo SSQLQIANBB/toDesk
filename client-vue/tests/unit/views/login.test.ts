@@ -137,7 +137,10 @@ describe('login button state', () => {
       message: '登录成功',
     });
     const wrapper = mountLogin();
-    const emailForm = wrapper.findAll('form')[1]!;
+    expect(wrapper.findAll('button').some(button => button.text() === '账号密码登录')).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '验证码登录')!.trigger('click');
+    const emailForm = wrapper.findAll('form')[0]!;
+    expect(emailForm.findAll('button').some(button => button.text() === '账号密码登录')).toBe(true);
     const inputs = emailForm.findAll('input');
     await inputs[0]!.setValue('alice@example.com');
     await emailForm.findAll('button')[0]!.trigger('click');
@@ -150,6 +153,8 @@ describe('login button state', () => {
     await flushPromises();
     expect(mocks.login).toHaveBeenCalledWith({ email: 'alice@example.com', code: '123456' });
     expect(mocks.replace).toHaveBeenCalledWith('/remote');
+    await emailForm.findAll('button').find(button => button.text() === '账号密码登录')!.trigger('click');
+    expect(wrapper.findAll('button').some(button => button.text() === '验证码登录')).toBe(true);
     wrapper.unmount();
   });
 });

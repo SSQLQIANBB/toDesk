@@ -36,64 +36,64 @@
         <n-tabs v-model:value="activeTab" type="segment" animated>
           <!-- 登录 -->
           <n-tab-pane name="login" tab="登录">
-            <n-tabs v-model:value="loginMethod" type="line" animated>
-              <n-tab-pane name="account" tab="账号登录">
-                <n-form ref="loginFormRef" :model="loginForm" :rules="loginRules" class="mt-4">
-                  <n-form-item path="username" label="账号">
-                    <n-input
-                      v-model:value="loginForm.username"
-                      placeholder="请输入用户名或邮箱"
-                      @keyup.enter="handleLogin"
-                    >
-                      <template #prefix>
-                        <n-icon :component="PersonFilled" />
-                      </template>
-                    </n-input>
-                  </n-form-item>
+            <n-form v-if="loginMethod === 'account'" ref="loginFormRef" :model="loginForm" :rules="loginRules" class="mt-4">
+              <n-form-item path="username" label="账号">
+                <n-input
+                  v-model:value="loginForm.username"
+                  placeholder="请输入用户名或邮箱"
+                  @keyup.enter="handleLogin"
+                >
+                  <template #prefix>
+                    <n-icon :component="PersonFilled" />
+                  </template>
+                </n-input>
+              </n-form-item>
 
-                  <n-form-item path="password" label="密码">
-                    <n-input
-                      v-model:value="loginForm.password"
-                      type="password"
-                      show-password-on="click"
-                      placeholder="请输入密码"
-                      @keyup.enter="handleLogin"
-                    >
-                      <template #prefix>
-                        <n-icon :component="LockFilled" />
-                      </template>
-                    </n-input>
-                  </n-form-item>
+              <n-form-item path="password" label="密码">
+                <n-input
+                  v-model:value="loginForm.password"
+                  type="password"
+                  show-password-on="click"
+                  placeholder="请输入密码"
+                  @keyup.enter="handleLogin"
+                >
+                  <template #prefix>
+                    <n-icon :component="LockFilled" />
+                  </template>
+                </n-input>
+              </n-form-item>
 
-                  <n-button
-                    type="primary"
-                    block
-                    size="large"
-                    :loading="loading"
-                    :disabled="loading"
-                    @click="handleLogin"
-                    class="mt-2"
-                  >
-                    登录
-                  </n-button>
-                  <n-button text type="primary" class="mt-3" @click="activeTab = 'forgot'">忘记密码？</n-button>
-                </n-form>
-              </n-tab-pane>
-              <n-tab-pane name="email" tab="验证码登录">
-                <n-form ref="emailLoginFormRef" :model="emailLoginForm" :rules="emailLoginRules" class="mt-4">
-                  <n-form-item path="email" label="已绑定邮箱">
-                    <n-input v-model:value="emailLoginForm.email" type="email" placeholder="请输入已绑定邮箱" @keyup.enter="handleEmailLogin" />
-                  </n-form-item>
-                  <n-form-item path="code" label="邮箱验证码">
-                    <div class="flex w-full gap-2">
-                      <n-input v-model:value="emailLoginForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" @keyup.enter="handleEmailLogin" />
-                      <n-button :loading="codeSending" :disabled="loginCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendLoginCode">{{ loginCooldown > 0 ? `${loginCooldown}s 后重发` : '发送验证码' }}</n-button>
-                    </div>
-                  </n-form-item>
-                  <n-button type="primary" block size="large" :loading="loading" :disabled="loading" class="mt-2" @click="handleEmailLogin">登录</n-button>
-                </n-form>
-              </n-tab-pane>
-            </n-tabs>
+              <n-button
+                type="primary"
+                block
+                size="large"
+                :loading="loading"
+                :disabled="loading"
+                @click="handleLogin"
+                class="mt-2"
+              >
+                登录
+              </n-button>
+              <div class="mt-3 flex items-center justify-between gap-3">
+                <n-button text type="primary" @click="loginMethod = 'email'">验证码登录</n-button>
+                <n-button text type="primary" @click="activeTab = 'forgot'">忘记密码？</n-button>
+              </div>
+            </n-form>
+            <n-form v-else ref="emailLoginFormRef" :model="emailLoginForm" :rules="emailLoginRules" class="mt-4">
+              <n-form-item path="email" label="已绑定邮箱">
+                <n-input v-model:value="emailLoginForm.email" type="email" placeholder="请输入已绑定邮箱" @keyup.enter="handleEmailLogin" />
+              </n-form-item>
+              <n-form-item path="code" label="邮箱验证码">
+                <div class="flex w-full gap-2">
+                  <n-input v-model:value="emailLoginForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" @keyup.enter="handleEmailLogin" />
+                  <n-button :loading="codeSending" :disabled="loginCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendLoginCode">{{ loginCooldown > 0 ? `${loginCooldown}s 后重发` : '发送验证码' }}</n-button>
+                </div>
+              </n-form-item>
+              <n-button type="primary" block size="large" :loading="loading" :disabled="loading" class="mt-2" @click="handleEmailLogin">登录</n-button>
+              <div class="mt-3 text-center">
+                <n-button text type="primary" @click="loginMethod = 'account'">账号密码登录</n-button>
+              </div>
+            </n-form>
           </n-tab-pane>
 
           <!-- 注册 -->
