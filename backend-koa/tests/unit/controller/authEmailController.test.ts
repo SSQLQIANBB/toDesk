@@ -49,6 +49,7 @@ describe('邮箱验证码登录发码', () => {
     mocks.findBinding.mockResolvedValue(null);
     await sendLoginCode(ctx);
     expect(ctx.status).toBe(200);
+    expect(ctx.body.message).toBe('验证码已发送');
     expect(mocks.issue).not.toHaveBeenCalled();
     const neutralMessage = ctx.body.message;
 

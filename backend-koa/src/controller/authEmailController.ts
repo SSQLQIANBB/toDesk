@@ -10,6 +10,8 @@ import {
   type EmailCodePurpose,
 } from '../services/emailVerificationService';
 
+const CODE_SENT_MESSAGE = '验证码已发送';
+
 async function limitRequests(ctx: Context) {
   const key = `email:ip:${ctx.ip}`;
   const count = await redis.incr(key);
@@ -49,11 +51,11 @@ async function issue(ctx: Context, purpose: EmailCodePurpose) {
         ctx.status = 429; ctx.body = { error: '请稍后再发送验证码' }; return;
       }
     }
-    ctx.body = { message: '如果邮箱可用，验证码已发送；请检查邮箱' };
+    ctx.body = { message: CODE_SENT_MESSAGE };
   } catch (error) {
     console.error('发送邮箱验证码失败:', error);
     if (purpose === 'reset' || purpose === 'login') {
-      ctx.body = { message: '如果邮箱可用，验证码已发送；请检查邮箱' };
+      ctx.body = { message: CODE_SENT_MESSAGE };
       return;
     }
     ctx.status = 502; ctx.body = { error: '邮件发送失败，请稍后重试' };
