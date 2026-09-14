@@ -131,7 +131,7 @@
               <n-form-item path="emailCode" label="邮箱验证码">
                 <div class="flex w-full gap-2">
                   <n-input v-model:value="registerForm.emailCode" maxlength="6" placeholder="6 位验证码" />
-                  <n-button :loading="codeSending" @click="sendRegisterCode">发送验证码</n-button>
+                  <n-button :loading="codeSending" :disabled="registerCooldown > 0" @click="sendRegisterCode">{{ registerCooldown > 0 ? `${registerCooldown}s 后重发` : '发送验证码' }}</n-button>
                 </div>
               </n-form-item>
 
@@ -156,7 +156,7 @@
               <n-form-item path="code" label="邮箱验证码">
                 <div class="flex w-full gap-2">
                   <n-input v-model:value="resetForm.code" maxlength="6" placeholder="6 位验证码" />
-                  <n-button :loading="codeSending" @click="sendResetCode">发送验证码</n-button>
+                  <n-button :loading="codeSending" :disabled="resetCooldown > 0" @click="sendResetCode">{{ resetCooldown > 0 ? `${resetCooldown}s 后重发` : '发送验证码' }}</n-button>
                 </div>
               </n-form-item>
               <n-form-item path="newPassword" label="新密码">
@@ -175,13 +175,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
 import { PersonFilled, LockFilled } from '@vicons/material';
 import { register, resetPassword, sendEmailCode, type LoginParams, type User } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { createLoginController } from '@/services/loginController';
+import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
 
 const router = useRouter();
 const route = useRoute();
@@ -192,6 +193,7 @@ const activeTab = ref<'login' | 'register' | 'forgot'>('login');
 const registerLoading = ref(false);
 const resetLoading = ref(false);
 const codeSending = ref(false);
+const emailCodeCooldown = useEmailCodeCooldown();
 const loginController = createLoginController({
   login: (credentials: LoginParams) => authStore.login(credentials) as Promise<{
     accessToken: string;
@@ -263,6 +265,8 @@ const registerRules: FormRules = {
 
 const resetFormRef = ref<FormInst | null>(null);
 const resetForm = ref({ email: '', code: '', newPassword: '', confirmPassword: '' });
+const registerCooldown = computed(() => emailCodeCooldown.remaining('register', registerForm.value.email));
+const resetCooldown = computed(() => emailCodeCooldown.remaining('reset', resetForm.value.email));
 const resetRules: FormRules = {
   email: [{ required: true, type: 'email', message: '请输入有效邮箱', trigger: 'blur' }],
   code: [{ required: true, pattern: /^\d{6}$/, message: '请输入 6 位验证码', trigger: 'blur' }],
@@ -274,12 +278,14 @@ const resetRules: FormRules = {
 };
 
 async function sendCode(purpose: 'register' | 'reset', email: string) {
+  if (codeSending.value || emailCodeCooldown.remaining(purpose, email) > 0) return;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     message.error('请输入有效邮箱'); return;
   }
   codeSending.value = true;
   try {
     const result = await sendEmailCode(purpose, email);
+    emailCodeCooldown.start(purpose, email);
     message.success(result.message);
   } catch (error: any) {
     message.error(error.message || '验证码发送失败');

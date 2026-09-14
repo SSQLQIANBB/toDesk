@@ -123,7 +123,7 @@
                   <n-input v-model:value="bindEmailForm.email" type="email" placeholder="请输入邮箱" />
                   <div class="flex flex-wrap gap-2">
                     <n-input v-model:value="bindEmailForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-[120px] flex-1" />
-                    <n-button :loading="emailCodeLoading" @click="sendBindEmailCode">发送验证码</n-button>
+                    <n-button :loading="emailCodeLoading" :disabled="bindCooldown > 0" @click="sendBindEmailCode">{{ bindCooldown > 0 ? `${bindCooldown}s 后重发` : '发送验证码' }}</n-button>
                     <n-button type="primary" :loading="bindLoading" @click="handleBindEmail">绑定邮箱</n-button>
                   </div>
                 </div>
@@ -300,7 +300,7 @@
           <n-form-item label="邮箱验证码" path="emailCode">
             <div class="flex w-full gap-2">
               <n-input v-model:value="passwordForm.emailCode" maxlength="6" placeholder="6 位验证码" />
-              <n-button :disabled="!verifiedEmail" :loading="emailCodeLoading" @click="sendPasswordEmailCode">发送验证码</n-button>
+              <n-button :disabled="!verifiedEmail || passwordCooldown > 0" :loading="emailCodeLoading" @click="sendPasswordEmailCode">{{ passwordCooldown > 0 ? `${passwordCooldown}s 后重发` : '发送验证码' }}</n-button>
             </div>
           </n-form-item>
           <p v-if="!verifiedEmail" class="text-sm text-amber-700">请先在账户安全中绑定并验证邮箱。</p>
@@ -328,6 +328,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
 import { uploadFile } from '@/api/common';
+import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
 
 const router = useRouter();
 const message = useMessage();
@@ -343,6 +344,9 @@ const verifiedEmail = ref<string | null>(null);
 const emailCodeLoading = ref(false);
 const bindLoading = ref(false);
 const bindEmailForm = reactive({ email: '', code: '' });
+const emailCodeCooldown = useEmailCodeCooldown();
+const bindCooldown = computed(() => emailCodeCooldown.remaining('bind', bindEmailForm.email));
+const passwordCooldown = computed(() => emailCodeCooldown.remaining('change-password', verifiedEmail.value || ''));
 
 // 表单数据
 const formData = reactive({
@@ -398,12 +402,15 @@ const passwordRules: FormRules = {
 };
 
 async function sendBindEmailCode() {
+  if (emailCodeLoading.value || bindCooldown.value > 0) return;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bindEmailForm.email.trim())) {
     message.error('请输入有效邮箱'); return;
   }
   emailCodeLoading.value = true;
   try {
-    message.success((await sendEmailCode('bind', bindEmailForm.email)).message);
+    const result = await sendEmailCode('bind', bindEmailForm.email);
+    emailCodeCooldown.start('bind', bindEmailForm.email);
+    message.success(result.message);
   } catch (error: any) { message.error(error.message || '发送失败'); }
   finally { emailCodeLoading.value = false; }
 }
@@ -423,10 +430,13 @@ async function handleBindEmail() {
 }
 
 async function sendPasswordEmailCode() {
+  if (emailCodeLoading.value || passwordCooldown.value > 0) return;
   if (!verifiedEmail.value) { message.error('请先绑定邮箱'); return; }
   emailCodeLoading.value = true;
   try {
-    message.success((await sendEmailCode('change-password', verifiedEmail.value)).message);
+    const result = await sendEmailCode('change-password', verifiedEmail.value);
+    emailCodeCooldown.start('change-password', verifiedEmail.value);
+    message.success(result.message);
   } catch (error: any) { message.error(error.message || '发送失败'); }
   finally { emailCodeLoading.value = false; }
 }
