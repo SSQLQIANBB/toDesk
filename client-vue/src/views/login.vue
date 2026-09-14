@@ -130,8 +130,8 @@
               </n-form-item>
               <n-form-item path="emailCode" label="邮箱验证码">
                 <div class="flex w-full gap-2">
-                  <n-input v-model:value="registerForm.emailCode" maxlength="6" placeholder="6 位验证码" />
-                  <n-button :loading="codeSending" :disabled="registerCooldown > 0" @click="sendRegisterCode">{{ registerCooldown > 0 ? `${registerCooldown}s 后重发` : '发送验证码' }}</n-button>
+                  <n-input v-model:value="registerForm.emailCode" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" />
+                  <n-button :loading="codeSending" :disabled="registerCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendRegisterCode">{{ registerCooldown > 0 ? `${registerCooldown}s 后重发` : '发送验证码' }}</n-button>
                 </div>
               </n-form-item>
 
@@ -155,8 +155,8 @@
               </n-form-item>
               <n-form-item path="code" label="邮箱验证码">
                 <div class="flex w-full gap-2">
-                  <n-input v-model:value="resetForm.code" maxlength="6" placeholder="6 位验证码" />
-                  <n-button :loading="codeSending" :disabled="resetCooldown > 0" @click="sendResetCode">{{ resetCooldown > 0 ? `${resetCooldown}s 后重发` : '发送验证码' }}</n-button>
+                  <n-input v-model:value="resetForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" />
+                  <n-button :loading="codeSending" :disabled="resetCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendResetCode">{{ resetCooldown > 0 ? `${resetCooldown}s 后重发` : '发送验证码' }}</n-button>
                 </div>
               </n-form-item>
               <n-form-item path="newPassword" label="新密码">

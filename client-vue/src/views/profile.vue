@@ -123,7 +123,7 @@
                   <n-input v-model:value="bindEmailForm.email" type="email" placeholder="请输入邮箱" />
                   <div class="flex flex-wrap gap-2">
                     <n-input v-model:value="bindEmailForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-[120px] flex-1" />
-                    <n-button :loading="emailCodeLoading" :disabled="bindCooldown > 0" @click="sendBindEmailCode">{{ bindCooldown > 0 ? `${bindCooldown}s 后重发` : '发送验证码' }}</n-button>
+                    <n-button :loading="emailCodeLoading" :disabled="bindCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendBindEmailCode">{{ bindCooldown > 0 ? `${bindCooldown}s 后重发` : '发送验证码' }}</n-button>
                     <n-button type="primary" :loading="bindLoading" @click="handleBindEmail">绑定邮箱</n-button>
                   </div>
                 </div>
@@ -299,8 +299,8 @@
           </n-form-item>
           <n-form-item label="邮箱验证码" path="emailCode">
             <div class="flex w-full gap-2">
-              <n-input v-model:value="passwordForm.emailCode" maxlength="6" placeholder="6 位验证码" />
-              <n-button :disabled="!verifiedEmail || passwordCooldown > 0" :loading="emailCodeLoading" @click="sendPasswordEmailCode">{{ passwordCooldown > 0 ? `${passwordCooldown}s 后重发` : '发送验证码' }}</n-button>
+              <n-input v-model:value="passwordForm.emailCode" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" />
+              <n-button :disabled="!verifiedEmail || passwordCooldown > 0" :loading="emailCodeLoading" class="w-28 shrink-0 tabular-nums" @click="sendPasswordEmailCode">{{ passwordCooldown > 0 ? `${passwordCooldown}s 后重发` : '发送验证码' }}</n-button>
             </div>
           </n-form-item>
           <p v-if="!verifiedEmail" class="text-sm text-amber-700">请先在账户安全中绑定并验证邮箱。</p>
