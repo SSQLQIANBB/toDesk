@@ -105,7 +105,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe('响应式布局', () => {
-  test('手机登录卡片在视口中间，矮屏注册表单仍可滚动', async ({ page }) => {
+  test('手机登录表单只在超出视口时滚动', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
     const card = page.locator('.login-card');
@@ -114,10 +114,19 @@ test.describe('响应式布局', () => {
     expect(box).not.toBeNull();
     expect(Math.abs(box!.y + box!.height / 2 - 812 / 2)).toBeLessThan(24);
 
-    await page.setViewportSize({ width: 375, height: 500 });
-    await page.getByText('注册', { exact: true }).first().click();
     const loginPage = page.locator('.login-page');
-    expect(await loginPage.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+    const expectNoScroll = async () => {
+      await expect.poll(() => loginPage.evaluate(element => element.scrollHeight - element.clientHeight)).toBe(0);
+      expect(await loginPage.evaluate(element => getComputedStyle(element).scrollbarWidth)).toBe('none');
+    };
+    await expectNoScroll();
+    await page.getByText('找回密码', { exact: true }).first().click();
+    await expectNoScroll();
+    await page.getByText('注册', { exact: true }).first().click();
+    await expectNoScroll();
+
+    await page.setViewportSize({ width: 375, height: 500 });
+    await expect.poll(() => loginPage.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
     const submit = page.locator('.n-tab-pane:visible .n-button').last();
     await submit.scrollIntoViewIfNeeded();
     await expect(submit).toBeInViewport();

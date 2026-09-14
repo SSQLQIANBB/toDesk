@@ -1,26 +1,28 @@
 <template>
   <div class="login-page relative min-h-[100dvh] overflow-hidden flex items-center justify-center px-4 py-6 sm:p-6">
-    <div class="cosmic-orb cosmic-orb-primary" aria-hidden="true"></div>
-    <div class="cosmic-orb cosmic-orb-secondary" aria-hidden="true"></div>
-    <div class="star-field star-field-one" aria-hidden="true">
-      <span v-for="index in 14" :key="`star-one-${index}`" class="star"></span>
-    </div>
-    <div class="star-field star-field-two" aria-hidden="true">
-      <span v-for="index in 14" :key="`star-two-${index}`" class="star"></span>
-    </div>
-    <div class="orbit-line orbit-line-one" aria-hidden="true"></div>
-    <div class="orbit-line orbit-line-two" aria-hidden="true"></div>
-    <div class="astronaut-scene" aria-hidden="true">
-      <div class="astronaut">
-        <div class="astronaut-backpack"></div>
-        <div class="astronaut-head"></div>
-        <div class="astronaut-arm astronaut-arm-left"></div>
-        <div class="astronaut-arm astronaut-arm-right"></div>
-        <div class="astronaut-body">
-          <div class="astronaut-panel"></div>
+    <div class="login-scene" aria-hidden="true">
+      <div class="cosmic-orb cosmic-orb-primary"></div>
+      <div class="cosmic-orb cosmic-orb-secondary"></div>
+      <div class="star-field star-field-one">
+        <span v-for="index in 14" :key="`star-one-${index}`" class="star"></span>
+      </div>
+      <div class="star-field star-field-two">
+        <span v-for="index in 14" :key="`star-two-${index}`" class="star"></span>
+      </div>
+      <div class="orbit-line orbit-line-one"></div>
+      <div class="orbit-line orbit-line-two"></div>
+      <div class="astronaut-scene">
+        <div class="astronaut">
+          <div class="astronaut-backpack"></div>
+          <div class="astronaut-head"></div>
+          <div class="astronaut-arm astronaut-arm-left"></div>
+          <div class="astronaut-arm astronaut-arm-right"></div>
+          <div class="astronaut-body">
+            <div class="astronaut-panel"></div>
+          </div>
+          <div class="astronaut-leg astronaut-leg-left"></div>
+          <div class="astronaut-leg astronaut-leg-right"></div>
         </div>
-        <div class="astronaut-leg astronaut-leg-left"></div>
-        <div class="astronaut-leg astronaut-leg-right"></div>
       </div>
     </div>
 
@@ -399,6 +401,13 @@ async function handleRegister() {
     linear-gradient(135deg, #07111f 0%, #101a3d 46%, #1d1442 100%);
 }
 
+.login-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .login-page::before {
   content: '';
   position: absolute;
@@ -743,8 +752,13 @@ async function handleRegister() {
     align-items: safe center;
     overflow-x: hidden;
     overflow-y: auto;
-    padding-top: max(28px, env(safe-area-inset-top));
+    scrollbar-width: none;
+    padding-top: max(24px, env(safe-area-inset-top));
     padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+
+  .login-page::-webkit-scrollbar {
+    display: none;
   }
 
   .star-field {
