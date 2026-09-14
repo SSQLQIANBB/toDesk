@@ -70,6 +70,8 @@ pnpm run server
 
 `read -s` 适用于 macOS 默认的 zsh；其他 shell 可运行 `read -s DB_PASSWORD`。后端不会自动加载 `.env.production`。如本地数据库或 Redis 使用不同端口，请修改对应环境变量。`DB_AUTO_CREATE` 和 `DB_SYNC_ALTER` 默认关闭，连接旧库时不要随意启用。
 
+本地邮件配置可写在 `backend-koa/.env.local`（该文件被 Git 忽略）。使用 Node.js 22 启动 `pnpm run server` 时，后端开发脚本会自动加载此文件；例如填写 `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。授权码只保存在本机，文件权限建议为 `600`。已有环境变量优先于文件中的同名值。
+
 后端默认监听 `http://localhost:3000`。
 
 ## 启动前端

@@ -3,6 +3,7 @@ dist
 *.log
 .env.production
 .env.infrastructure
+backend-koa/.env.local
 !.env.example
 !.env.production.example
 !.env.infrastructure.example
