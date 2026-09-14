@@ -97,7 +97,7 @@
                   v-model:value="registerForm.password" 
                   type="password"
                   show-password-on="click"
-                  placeholder="请输入密码"
+                  placeholder="至少 6 位，包含大小写字母和数字"
                 >
                   <template #prefix>
                     <n-icon :component="LockFilled" />
@@ -160,7 +160,7 @@
                 </div>
               </n-form-item>
               <n-form-item path="newPassword" label="新密码">
-                <n-input v-model:value="resetForm.newPassword" type="password" show-password-on="click" placeholder="至少 6 位" />
+                <n-input v-model:value="resetForm.newPassword" type="password" show-password-on="click" placeholder="至少 6 位，包含大小写字母和数字" />
               </n-form-item>
               <n-form-item path="confirmPassword" label="确认新密码">
                 <n-input v-model:value="resetForm.confirmPassword" type="password" show-password-on="click" />
@@ -183,6 +183,7 @@ import { register, resetPassword, sendEmailCode, type LoginParams, type User } f
 import { useAuthStore } from '@/stores/auth';
 import { createLoginController } from '@/services/loginController';
 import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
+import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '@/utils/passwordPolicy';
 
 const router = useRouter();
 const route = useRoute();
@@ -241,7 +242,7 @@ const registerRules: FormRules = {
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少6个字符', trigger: 'blur' },
+    { validator: (_rule, value) => isValidNewPassword(value), message: PASSWORD_RULE_MESSAGE, trigger: 'blur' },
   ],
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
@@ -270,7 +271,10 @@ const resetCooldown = computed(() => emailCodeCooldown.remaining('reset', resetF
 const resetRules: FormRules = {
   email: [{ required: true, type: 'email', message: '请输入有效邮箱', trigger: 'blur' }],
   code: [{ required: true, pattern: /^\d{6}$/, message: '请输入 6 位验证码', trigger: 'blur' }],
-  newPassword: [{ required: true, min: 6, message: '密码至少 6 位', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { validator: (_rule, value) => isValidNewPassword(value), message: PASSWORD_RULE_MESSAGE, trigger: 'blur' },
+  ],
   confirmPassword: [{
     validator: (_rule, value) => value === resetForm.value.newPassword,
     message: '两次输入的密码不一致', trigger: 'blur',

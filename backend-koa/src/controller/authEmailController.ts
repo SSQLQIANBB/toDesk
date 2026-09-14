@@ -3,6 +3,7 @@ import redis from '../config/redis';
 import { User, UserEmail } from '../models';
 import redisService from '../services/redisService';
 import { hashPassword } from '../utils/crypto';
+import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '../utils/passwordPolicy';
 import { invalidateUserTokens } from '../services/tokenVersionService';
 import {
   consumeEmailCode, isMailConfigured, issueEmailCode, normalizeEmail,
@@ -103,8 +104,11 @@ export async function bindEmail(ctx: Context) {
 export async function resetPassword(ctx: Context) {
   const email = normalizeEmail((ctx.request.body as any)?.email);
   const { code, newPassword } = ctx.request.body as any;
-  if (!email || typeof newPassword !== 'string' || newPassword.length < 6) {
-    ctx.status = 400; ctx.body = { error: '邮箱或新密码无效' }; return;
+  if (!email) {
+    ctx.status = 400; ctx.body = { error: '请输入有效邮箱' }; return;
+  }
+  if (!isValidNewPassword(newPassword)) {
+    ctx.status = 400; ctx.body = { error: PASSWORD_RULE_MESSAGE }; return;
   }
   const binding = await UserEmail.findOne({ where: { email } });
   if (!binding || !await consumeEmailCode('reset', email, code)) {

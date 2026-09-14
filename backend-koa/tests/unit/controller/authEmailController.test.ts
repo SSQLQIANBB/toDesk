@@ -26,10 +26,18 @@ beforeEach(() => { vi.clearAllMocks(); });
 describe('邮箱找回密码', () => {
   it('只信任验证绑定表，不能凭旧用户资料邮箱找回', async () => {
     mocks.findBinding.mockResolvedValue(null);
-    const ctx = { request: { body: { email: 'legacy@example.com', code: '123456', newPassword: 'new-password' } }, status: 200 } as any;
+    const ctx = { request: { body: { email: 'legacy@example.com', code: '123456', newPassword: 'Newpass1!' } }, status: 200 } as any;
     await resetPassword(ctx);
     expect(ctx.status).toBe(400);
     expect(mocks.findUser).not.toHaveBeenCalled();
+    expect(mocks.consume).not.toHaveBeenCalled();
+  });
+
+  it('新密码不符合规则时拒绝重置，且不消耗验证码', async () => {
+    const ctx = { request: { body: { email: 'test@example.com', code: '123456', newPassword: 'Weakpass😊1' } }, status: 200 } as any;
+    await resetPassword(ctx);
+    expect(ctx.status).toBe(400);
+    expect(mocks.findBinding).not.toHaveBeenCalled();
     expect(mocks.consume).not.toHaveBeenCalled();
   });
 });

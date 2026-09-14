@@ -287,7 +287,7 @@
             <n-input 
               v-model:value="passwordForm.newPassword" 
               type="password"
-              placeholder="请输入新密码（至少6位）"
+              placeholder="至少 6 位，包含大小写字母和数字"
             />
           </n-form-item>
           <n-form-item label="确认密码" path="confirmPassword">
@@ -329,6 +329,7 @@ import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
 import { uploadFile } from '@/api/common';
 import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
+import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '@/utils/passwordPolicy';
 
 const router = useRouter();
 const message = useMessage();
@@ -386,7 +387,7 @@ const passwordRules: FormRules = {
   ],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码至少6个字符', trigger: 'blur' },
+    { validator: (_rule, value) => isValidNewPassword(value), message: PASSWORD_RULE_MESSAGE, trigger: 'blur' },
   ],
   confirmPassword: [
     { required: true, message: '请再次输入新密码', trigger: 'blur' },

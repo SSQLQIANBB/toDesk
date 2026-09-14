@@ -5,6 +5,7 @@ import { generateTokenPair, verifyRefreshToken } from '../utils/jwt';
 import redisService from '../services/redisService';
 import { consumeEmailCode, normalizeEmail } from '../services/emailVerificationService';
 import { getTokenVersion, invalidateUserTokens } from '../services/tokenVersionService';
+import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '../utils/passwordPolicy';
 
 /**
  * 用户注册
@@ -15,9 +16,14 @@ export async function register(ctx: Context) {
     const email = normalizeEmail(rawEmail);
 
     // 验证必填字段
-    if (!username || !password || !email || typeof password !== 'string' || password.length < 6) {
+    if (!username || !email) {
       ctx.status = 400;
-      ctx.body = { error: '用户名、有效邮箱和至少 6 位密码不能为空' };
+      ctx.body = { error: '请输入用户名和有效邮箱' };
+      return;
+    }
+    if (!isValidNewPassword(password)) {
+      ctx.status = 400;
+      ctx.body = { error: PASSWORD_RULE_MESSAGE };
       return;
     }
 
@@ -371,9 +377,14 @@ export async function changePassword(ctx: Context) {
     const userId = ctx.state.user?.userId;
     const { oldPassword, newPassword, emailCode } = ctx.request.body as any;
 
-    if (!oldPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    if (!oldPassword) {
       ctx.status = 400;
-      ctx.body = { error: '旧密码和至少 6 位新密码不能为空' };
+      ctx.body = { error: '请输入当前密码' };
+      return;
+    }
+    if (!isValidNewPassword(newPassword)) {
+      ctx.status = 400;
+      ctx.body = { error: PASSWORD_RULE_MESSAGE };
       return;
     }
 
