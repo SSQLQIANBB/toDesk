@@ -41,17 +41,18 @@ async function issue(ctx: Context, purpose: EmailCodePurpose) {
         ctx.status = 400; ctx.body = { error: '请输入已绑定邮箱' }; return;
       }
     }
-    // 找回密码始终返回相同结果，不暴露邮箱是否存在。
-    if (purpose !== 'reset' || binding) {
+    // 找回密码和验证码登录始终返回相同结果，不暴露邮箱是否已绑定。
+    const anonymousPurpose = purpose === 'reset' || purpose === 'login';
+    if (!anonymousPurpose || binding) {
       const result = await issueEmailCode(purpose, email);
-      if (result === 'cooldown' && purpose !== 'reset') {
+      if (result === 'cooldown' && !anonymousPurpose) {
         ctx.status = 429; ctx.body = { error: '请稍后再发送验证码' }; return;
       }
     }
     ctx.body = { message: '如果邮箱可用，验证码已发送；请检查邮箱' };
   } catch (error) {
     console.error('发送邮箱验证码失败:', error);
-    if (purpose === 'reset') {
+    if (purpose === 'reset' || purpose === 'login') {
       ctx.body = { message: '如果邮箱可用，验证码已发送；请检查邮箱' };
       return;
     }
@@ -61,6 +62,7 @@ async function issue(ctx: Context, purpose: EmailCodePurpose) {
 
 export const sendRegistrationCode = (ctx: Context) => issue(ctx, 'register');
 export const sendResetCode = (ctx: Context) => issue(ctx, 'reset');
+export const sendLoginCode = (ctx: Context) => issue(ctx, 'login');
 export const sendBindCode = (ctx: Context) => issue(ctx, 'bind');
 export const sendPasswordChangeCode = (ctx: Context) => issue(ctx, 'change-password');
 

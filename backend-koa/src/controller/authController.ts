@@ -88,67 +88,89 @@ export async function register(ctx: Context) {
   }
 }
 
-/**
- * 用户登录
- */
+async function completeLogin(ctx: Context, user: User) {
+  const userData = user.get({ plain: true });
+  await user.update({ lastLoginAt: new Date(), status: 'online' });
+  const tokens = generateTokenPair({
+    userId: userData.id!,
+    username: userData.username,
+    authVersion: await getTokenVersion(userData.id!),
+  });
+  await redisService.setRefreshToken(userData.id!, tokens.refreshToken);
+  ctx.body = {
+    message: '登录成功',
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    user: {
+      id: userData.id,
+      username: userData.username,
+      nickname: userData.nickname,
+      avatar: userData.avatar,
+      email: (await UserEmail.findByPk(user.id))?.email || null,
+      phone: user.phone,
+      status: user.status,
+    },
+  };
+}
+
+/** 用户名或已验证邮箱 + 密码登录 */
 export async function login(ctx: Context) {
   try {
     const { username, password } = ctx.request.body as any;
-
-    // 验证必填字段
-    if (!username || !password) {
+    if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password) {
       ctx.status = 400;
-      ctx.body = { error: '用户名和密码不能为空' };
+      ctx.body = { error: '请输入账号和密码' };
       return;
     }
 
-    // 查找用户
-    const user = await User.findOne({ where: { username } });
-    if (!user) {
+    const account = username;
+    const email = normalizeEmail(account);
+    // 优先保留原有用户名的含义；找不到用户名时再用已验证邮箱定位账号。
+    let user = await User.findOne({ where: { username: account } });
+    if (!user && email) {
+      const binding = await UserEmail.findOne({ where: { email } });
+      if (binding) user = await User.findByPk(binding.userId);
+    }
+    if (!user || !verifyPassword(password, user.get({ plain: true }).password)) {
       ctx.status = 401;
-      ctx.body = { error: '用户名或密码错误' };
+      ctx.body = { error: '账号或密码错误' };
       return;
     }
-
-    // 验证密码（使用 get() 获取普通对象）
-    const userData = user.get({ plain: true });
-    if (!verifyPassword(password, userData.password)) {
-      ctx.status = 401;
-      ctx.body = { error: '用户名或密码错误' };
-      return;
-    }
-
-    // 更新最后登录时间和在线状态
-    await user.update({ lastLoginAt: new Date(), status: 'online' });
-
-    // 生成 token 对
-    const tokens = generateTokenPair({
-      userId: userData.id!,
-      username: userData.username,
-      authVersion: await getTokenVersion(userData.id!),
-    });
-
-    // 保存 refresh token 到 Redis
-    await redisService.setRefreshToken(userData.id!, tokens.refreshToken);
-
-    ctx.body = {
-      message: '登录成功',
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      user: {
-        id: userData.id,
-        username: userData.username,
-        nickname: userData.nickname,
-        avatar: userData.avatar,
-        email: (await UserEmail.findByPk(user.id))?.email || null,
-        phone: user.phone,
-        status: user.status,
-      },
-    };
+    await completeLogin(ctx, user);
   } catch (error: any) {
     console.error('登录失败:', error);
     ctx.status = 500;
     ctx.body = { error: '登录失败: ' + error.message };
+  }
+}
+
+/** 已验证邮箱 + 验证码登录 */
+export async function loginWithEmailCode(ctx: Context) {
+  try {
+    const email = normalizeEmail((ctx.request.body as any)?.email);
+    const code = (ctx.request.body as any)?.code;
+    if (!email || typeof code !== 'string') {
+      ctx.status = 400;
+      ctx.body = { error: '请输入有效邮箱和验证码' };
+      return;
+    }
+    const binding = await UserEmail.findOne({ where: { email } });
+    if (!binding || !await consumeEmailCode('login', email, code)) {
+      ctx.status = 401;
+      ctx.body = { error: '邮箱或验证码错误' };
+      return;
+    }
+    const user = await User.findByPk(binding.userId);
+    if (!user) {
+      ctx.status = 401;
+      ctx.body = { error: '邮箱或验证码错误' };
+      return;
+    }
+    await completeLogin(ctx, user);
+  } catch (error) {
+    console.error('邮箱验证码登录失败:', error);
+    ctx.status = 500;
+    ctx.body = { error: '登录失败，请稍后重试' };
   }
 }
 

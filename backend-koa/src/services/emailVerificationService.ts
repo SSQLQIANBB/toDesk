@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import redis from '../config/redis';
 
-export type EmailCodePurpose = 'register' | 'bind' | 'reset' | 'change-password';
+export type EmailCodePurpose = 'register' | 'bind' | 'reset' | 'change-password' | 'login';
 
 const CODE_TTL_SECONDS = 600;
 const COOLDOWN_SECONDS = 60;
@@ -44,7 +44,7 @@ async function sendMail(email: string, code: string, purpose: EmailCodePurpose) 
     disableUrlAccess: true,
   });
   const label: Record<EmailCodePurpose, string> = {
-    register: '注册', bind: '绑定邮箱', reset: '找回密码', 'change-password': '修改密码',
+    register: '注册', bind: '绑定邮箱', reset: '找回密码', 'change-password': '修改密码', login: '登录',
   };
   try {
     await transport.sendMail({

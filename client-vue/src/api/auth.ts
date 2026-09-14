@@ -16,6 +16,13 @@ export interface LoginParams {
   password: string;
 }
 
+export interface EmailCodeLoginParams {
+  email: string;
+  code: string;
+}
+
+export type LoginCredentials = LoginParams | EmailCodeLoginParams;
+
 export interface RegisterParams {
   username: string;
   password: string;
@@ -30,6 +37,10 @@ export interface RegisterParams {
  */
 export function login(params: LoginParams) {
   return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>('/api/auth/login', params);
+}
+
+export function loginWithEmailCode(params: EmailCodeLoginParams) {
+  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>('/api/auth/login/email-code', params);
 }
 
 /**
@@ -55,7 +66,7 @@ export function getCurrentUser(options?: { skipAuthRedirect?: boolean }) {
   });
 }
 
-export type EmailCodePurpose = 'register' | 'reset' | 'bind' | 'change-password';
+export type EmailCodePurpose = 'register' | 'reset' | 'bind' | 'change-password' | 'login';
 
 export function sendEmailCode(purpose: EmailCodePurpose, email: string) {
   return http.post<{ message: string }>(`/api/auth/email-code/${purpose}`, { email });

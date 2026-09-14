@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   findBinding: vi.fn(),
   findUser: vi.fn(),
   consume: vi.fn(),
+  issue: vi.fn(),
 }));
 vi.mock('../../../src/config/redis', () => ({ default: { incr: vi.fn(async () => 1), expire: vi.fn() } }));
 vi.mock('../../../src/models', () => ({
@@ -15,11 +16,11 @@ vi.mock('../../../src/services/emailVerificationService', () => ({
   normalizeEmail: (value: string) => value,
   consumeEmailCode: mocks.consume,
   isMailConfigured: () => true,
-  issueEmailCode: vi.fn(),
+  issueEmailCode: mocks.issue,
 }));
 vi.mock('../../../src/services/tokenVersionService', () => ({ invalidateUserTokens: vi.fn() }));
 
-import { resetPassword } from '../../../src/controller/authEmailController';
+import { resetPassword, sendLoginCode } from '../../../src/controller/authEmailController';
 
 beforeEach(() => { vi.clearAllMocks(); });
 
@@ -39,5 +40,23 @@ describe('邮箱找回密码', () => {
     expect(ctx.status).toBe(400);
     expect(mocks.findBinding).not.toHaveBeenCalled();
     expect(mocks.consume).not.toHaveBeenCalled();
+  });
+});
+
+describe('邮箱验证码登录发码', () => {
+  it('对未绑定邮箱和冷却中的邮箱返回相同提示', async () => {
+    const ctx = { request: { body: { email: 'alice@example.com' } }, ip: '127.0.0.1', status: 200 } as any;
+    mocks.findBinding.mockResolvedValue(null);
+    await sendLoginCode(ctx);
+    expect(ctx.status).toBe(200);
+    expect(mocks.issue).not.toHaveBeenCalled();
+    const neutralMessage = ctx.body.message;
+
+    mocks.findBinding.mockResolvedValue({ userId: 7 });
+    mocks.issue.mockResolvedValue('cooldown');
+    await sendLoginCode(ctx);
+    expect(ctx.status).toBe(200);
+    expect(ctx.body.message).toBe(neutralMessage);
+    expect(mocks.issue).toHaveBeenCalledWith('login', 'alice@example.com');
   });
 });

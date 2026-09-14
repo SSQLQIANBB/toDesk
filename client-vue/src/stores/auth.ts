@@ -4,8 +4,9 @@ import type { LocationQueryRaw } from 'vue-router';
 import {
   getCurrentUser,
   login as apiLogin,
+  loginWithEmailCode as apiLoginWithEmailCode,
   logout as apiLogout,
-  type LoginParams,
+  type LoginCredentials,
   type User,
 } from '@/api/auth';
 
@@ -78,9 +79,11 @@ export const useAuthStore = defineStore('auth', {
       return user;
     },
 
-    async login(credentials?: LoginParams): Promise<CredentialLoginResult | { user: User }> {
+    async login(credentials?: LoginCredentials): Promise<CredentialLoginResult | { user: User }> {
       if (credentials) {
-        const result = await apiLogin(credentials);
+        const result = 'code' in credentials
+          ? await apiLoginWithEmailCode(credentials)
+          : await apiLogin(credentials);
         this.setAuth(result.user, result.accessToken, result.refreshToken);
         return result;
       }

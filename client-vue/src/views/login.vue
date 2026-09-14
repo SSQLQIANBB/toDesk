@@ -36,46 +36,64 @@
         <n-tabs v-model:value="activeTab" type="segment" animated>
           <!-- 登录 -->
           <n-tab-pane name="login" tab="登录">
-            <n-form ref="loginFormRef" :model="loginForm" :rules="loginRules" class="mt-4">
-              <n-form-item path="username" label="用户名">
-                <n-input 
-                  v-model:value="loginForm.username" 
-                  placeholder="请输入用户名"
-                  @keyup.enter="handleLogin"
-                >
-                  <template #prefix>
-                    <n-icon :component="PersonFilled" />
-                  </template>
-                </n-input>
-              </n-form-item>
+            <n-tabs v-model:value="loginMethod" type="line" animated>
+              <n-tab-pane name="account" tab="账号登录">
+                <n-form ref="loginFormRef" :model="loginForm" :rules="loginRules" class="mt-4">
+                  <n-form-item path="username" label="账号">
+                    <n-input
+                      v-model:value="loginForm.username"
+                      placeholder="请输入用户名或邮箱"
+                      @keyup.enter="handleLogin"
+                    >
+                      <template #prefix>
+                        <n-icon :component="PersonFilled" />
+                      </template>
+                    </n-input>
+                  </n-form-item>
 
-              <n-form-item path="password" label="密码">
-                <n-input 
-                  v-model:value="loginForm.password" 
-                  type="password"
-                  show-password-on="click"
-                  placeholder="请输入密码"
-                  @keyup.enter="handleLogin"
-                >
-                  <template #prefix>
-                    <n-icon :component="LockFilled" />
-                  </template>
-                </n-input>
-              </n-form-item>
+                  <n-form-item path="password" label="密码">
+                    <n-input
+                      v-model:value="loginForm.password"
+                      type="password"
+                      show-password-on="click"
+                      placeholder="请输入密码"
+                      @keyup.enter="handleLogin"
+                    >
+                      <template #prefix>
+                        <n-icon :component="LockFilled" />
+                      </template>
+                    </n-input>
+                  </n-form-item>
 
-              <n-button 
-                type="primary" 
-                block 
-                size="large"
-                :loading="loading"
-                :disabled="loading"
-                @click="handleLogin"
-                class="mt-2"
-              >
-                登录
-              </n-button>
-              <n-button text type="primary" class="mt-3" @click="activeTab = 'forgot'">忘记密码？</n-button>
-            </n-form>
+                  <n-button
+                    type="primary"
+                    block
+                    size="large"
+                    :loading="loading"
+                    :disabled="loading"
+                    @click="handleLogin"
+                    class="mt-2"
+                  >
+                    登录
+                  </n-button>
+                  <n-button text type="primary" class="mt-3" @click="activeTab = 'forgot'">忘记密码？</n-button>
+                </n-form>
+              </n-tab-pane>
+              <n-tab-pane name="email" tab="验证码登录">
+                <n-form ref="emailLoginFormRef" :model="emailLoginForm" :rules="emailLoginRules" class="mt-4">
+                  <n-form-item path="email" label="已绑定邮箱">
+                    <n-input v-model:value="emailLoginForm.email" type="email" placeholder="请输入已绑定邮箱" @keyup.enter="handleEmailLogin" />
+                  </n-form-item>
+                  <n-form-item path="code" label="邮箱验证码">
+                    <div class="flex w-full gap-2">
+                      <n-input v-model:value="emailLoginForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" @keyup.enter="handleEmailLogin" />
+                      <n-button :loading="codeSending" :disabled="loginCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendLoginCode">{{ loginCooldown > 0 ? `${loginCooldown}s 后重发` : '发送验证码' }}</n-button>
+                    </div>
+                  </n-form-item>
+                  <n-button type="primary" block size="large" :loading="loading" :disabled="loading" class="mt-2" @click="handleEmailLogin">登录</n-button>
+                </n-form>
+              </n-tab-pane>
+            </n-tabs>
           </n-tab-pane>
 
           <!-- 注册 -->
@@ -179,7 +197,7 @@ import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
 import { PersonFilled, LockFilled } from '@vicons/material';
-import { register, resetPassword, sendEmailCode, type LoginParams, type User } from '@/api/auth';
+import { register, resetPassword, sendEmailCode, type LoginCredentials, type User } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { createLoginController } from '@/services/loginController';
 import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
@@ -191,12 +209,13 @@ const message = useMessage();
 const authStore = useAuthStore();
 
 const activeTab = ref<'login' | 'register' | 'forgot'>('login');
+const loginMethod = ref<'account' | 'email'>('account');
 const registerLoading = ref(false);
 const resetLoading = ref(false);
 const codeSending = ref(false);
 const emailCodeCooldown = useEmailCodeCooldown();
 const loginController = createLoginController({
-  login: (credentials: LoginParams) => authStore.login(credentials) as Promise<{
+  login: (credentials: LoginCredentials) => authStore.login(credentials) as Promise<{
     accessToken: string;
     refreshToken: string;
     user: User;
@@ -217,7 +236,7 @@ const loginForm = ref({
 
 const loginRules: FormRules = {
   username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { required: true, message: '请输入用户名或邮箱', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
@@ -264,6 +283,14 @@ const registerRules: FormRules = {
   ],
 };
 
+const emailLoginFormRef = ref<FormInst | null>(null);
+const emailLoginForm = ref({ email: '', code: '' });
+const emailLoginRules: FormRules = {
+  email: [{ required: true, type: 'email', message: '请输入有效邮箱', trigger: 'blur' }],
+  code: [{ required: true, pattern: /^\d{6}$/, message: '请输入 6 位验证码', trigger: 'blur' }],
+};
+const loginCooldown = computed(() => emailCodeCooldown.remaining('login', emailLoginForm.value.email));
+
 const resetFormRef = ref<FormInst | null>(null);
 const resetForm = ref({ email: '', code: '', newPassword: '', confirmPassword: '' });
 const registerCooldown = computed(() => emailCodeCooldown.remaining('register', registerForm.value.email));
@@ -281,7 +308,7 @@ const resetRules: FormRules = {
   }],
 };
 
-async function sendCode(purpose: 'register' | 'reset', email: string) {
+async function sendCode(purpose: 'register' | 'reset' | 'login', email: string) {
   if (codeSending.value || emailCodeCooldown.remaining(purpose, email) > 0) return;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     message.error('请输入有效邮箱'); return;
@@ -298,6 +325,7 @@ async function sendCode(purpose: 'register' | 'reset', email: string) {
 
 const sendRegisterCode = () => sendCode('register', registerForm.value.email);
 const sendResetCode = () => sendCode('reset', resetForm.value.email);
+const sendLoginCode = () => sendCode('login', emailLoginForm.value.email);
 
 async function handleResetPassword() {
   if (resetLoading.value) return;
@@ -320,6 +348,17 @@ async function handleLogin() {
     credentials: {
       username: loginForm.value.username,
       password: loginForm.value.password,
+    },
+    redirect: route.query.redirect,
+  });
+}
+
+async function handleEmailLogin() {
+  await loginController.submit({
+    validate: () => emailLoginFormRef.value?.validate() || Promise.resolve(),
+    credentials: {
+      email: emailLoginForm.value.email,
+      code: emailLoginForm.value.code,
     },
     redirect: route.query.redirect,
   });

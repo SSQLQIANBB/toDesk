@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { defineComponent } from 'vue';
+import { defineComponent, h } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginView from '../../../src/views/login.vue';
 
@@ -9,10 +9,12 @@ const mocks = vi.hoisted(() => ({
   setAuth: vi.fn(),
   error: vi.fn(),
   success: vi.fn(),
+  sendCode: vi.fn(),
 }));
 
 vi.mock('@/api/auth', () => ({
   register: vi.fn(),
+  sendEmailCode: mocks.sendCode,
 }));
 
 vi.mock('@/stores/auth', () => ({
@@ -55,6 +57,17 @@ const ButtonStub = defineComponent({
   `,
 });
 
+const InputStub = defineComponent({
+  props: { value: String },
+  emits: ['update:value'],
+  setup(props, { emit }) {
+    return () => h('input', {
+      value: props.value,
+      onInput: (event: Event) => emit('update:value', (event.target as HTMLInputElement).value),
+    });
+  },
+});
+
 function mountLogin() {
   return mount(LoginView, {
     global: {
@@ -64,7 +77,7 @@ function mountLogin() {
         NTabPane: { template: '<div><slot /></div>' },
         NForm: FormStub,
         NFormItem: { template: '<label><slot /></label>' },
-        NInput: { template: '<input />' },
+        NInput: InputStub,
         NButton: ButtonStub,
         NIcon: { template: '<i />' },
       },
@@ -75,6 +88,7 @@ function mountLogin() {
 describe('login button state', () => {
   beforeEach(() => {
     Object.values(mocks).forEach(mock => mock.mockReset());
+    window.localStorage.clear();
   });
 
   it('请求期间按钮 loading 且禁用，重复点击不会发送第二次请求', async () => {
@@ -112,5 +126,30 @@ describe('login button state', () => {
     expect(button.attributes('data-loading')).toBe('false');
     expect(button.attributes('disabled')).toBeUndefined();
     expect(mocks.error).toHaveBeenCalledWith('登录失败');
+  });
+
+  it('验证码登录发送专用验证码并沿用原有登录跳转', async () => {
+    mocks.sendCode.mockResolvedValue({ message: '验证码已发送' });
+    mocks.login.mockResolvedValue({
+      user: { id: 1, username: 'owner' },
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      message: '登录成功',
+    });
+    const wrapper = mountLogin();
+    const emailForm = wrapper.findAll('form')[1]!;
+    const inputs = emailForm.findAll('input');
+    await inputs[0]!.setValue('alice@example.com');
+    await emailForm.findAll('button')[0]!.trigger('click');
+    await flushPromises();
+    expect(mocks.sendCode).toHaveBeenCalledWith('login', 'alice@example.com');
+    expect(emailForm.findAll('button')[0]!.text()).toContain('后重发');
+
+    await inputs[1]!.setValue('123456');
+    await emailForm.findAll('button')[1]!.trigger('click');
+    await flushPromises();
+    expect(mocks.login).toHaveBeenCalledWith({ email: 'alice@example.com', code: '123456' });
+    expect(mocks.replace).toHaveBeenCalledWith('/remote');
+    wrapper.unmount();
   });
 });

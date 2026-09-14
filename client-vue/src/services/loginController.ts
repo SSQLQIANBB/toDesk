@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue';
 import type { LocationQueryValue } from 'vue-router';
-import type { LoginParams, User } from '@/api/auth';
+import type { LoginCredentials, User } from '@/api/auth';
 import { resolvePostLoginPath } from './authNavigation';
 
 type LoginResult = {
@@ -11,7 +11,7 @@ type LoginResult = {
 };
 
 type LoginControllerDependencies = {
-  login(credentials: LoginParams): Promise<LoginResult>;
+  login(credentials: LoginCredentials): Promise<LoginResult>;
   navigate(path: string): Promise<unknown> | unknown;
   showSuccess(message: string): void;
   showError(message: string): void;
@@ -19,7 +19,7 @@ type LoginControllerDependencies = {
 
 type LoginSubmission = {
   validate(): Promise<unknown> | unknown;
-  credentials: LoginParams;
+  credentials: LoginCredentials;
   redirect: LocationQueryValue | LocationQueryValue[] | undefined;
 };
 

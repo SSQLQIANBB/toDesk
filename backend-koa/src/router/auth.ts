@@ -8,9 +8,11 @@ const router = new Router({ prefix: '/api/auth' });
 // 公开路由
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/login/email-code', authController.loginWithEmailCode);
 router.post('/refresh-token', authController.refreshToken); // 刷新 token
 router.post('/email-code/register', emailController.sendRegistrationCode);
 router.post('/email-code/reset', emailController.sendResetCode);
+router.post('/email-code/login', emailController.sendLoginCode);
 router.post('/reset-password', emailController.resetPassword);
 
 // 需要认证的路由
