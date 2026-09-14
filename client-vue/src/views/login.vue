@@ -181,7 +181,7 @@
                 <n-input v-model:value="resetForm.newPassword" type="password" show-password-on="click" placeholder="至少 6 位，包含大小写字母和数字" />
               </n-form-item>
               <n-form-item path="confirmPassword" label="确认新密码">
-                <n-input v-model:value="resetForm.confirmPassword" type="password" show-password-on="click" />
+                <n-input v-model:value="resetForm.confirmPassword" type="password" show-password-on="click" placeholder="请再次输入新密码" />
               </n-form-item>
               <n-button type="primary" block size="large" :loading="resetLoading" @click="handleResetPassword">重置密码</n-button>
             </n-form>
