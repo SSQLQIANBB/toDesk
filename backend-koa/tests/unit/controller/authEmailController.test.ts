@@ -20,7 +20,7 @@ vi.mock('../../../src/services/emailVerificationService', () => ({
 }));
 vi.mock('../../../src/services/tokenVersionService', () => ({ invalidateUserTokens: vi.fn() }));
 
-import { resetPassword, sendLoginCode } from '../../../src/controller/authEmailController';
+import { resetPassword, sendLoginCode, sendResetCode } from '../../../src/controller/authEmailController';
 
 beforeEach(() => { vi.clearAllMocks(); });
 
@@ -43,21 +43,26 @@ describe('邮箱找回密码', () => {
   });
 });
 
-describe('邮箱验证码登录发码', () => {
-  it('对未绑定邮箱和冷却中的邮箱返回相同提示', async () => {
+describe('邮箱登录和找回密码发码', () => {
+  it.each([
+    ['邮箱验证码登录', sendLoginCode],
+    ['找回密码', sendResetCode],
+  ])('%s对未注册邮箱提示错误', async (_name, sendCode) => {
     const ctx = { request: { body: { email: 'alice@example.com' } }, ip: '127.0.0.1', status: 200 } as any;
     mocks.findBinding.mockResolvedValue(null);
-    await sendLoginCode(ctx);
-    expect(ctx.status).toBe(200);
-    expect(ctx.body.message).toBe('验证码已发送');
+    await sendCode(ctx);
+    expect(ctx.status).toBe(404);
+    expect(ctx.body.error).toBe('该邮箱未注册');
     expect(mocks.issue).not.toHaveBeenCalled();
-    const neutralMessage = ctx.body.message;
+  });
 
+  it('已注册邮箱处于冷却期时保持原有成功提示', async () => {
+    const ctx = { request: { body: { email: 'alice@example.com' } }, ip: '127.0.0.1', status: 200 } as any;
     mocks.findBinding.mockResolvedValue({ userId: 7 });
     mocks.issue.mockResolvedValue('cooldown');
     await sendLoginCode(ctx);
     expect(ctx.status).toBe(200);
-    expect(ctx.body.message).toBe(neutralMessage);
+    expect(ctx.body.message).toBe('验证码已发送');
     expect(mocks.issue).toHaveBeenCalledWith('login', 'alice@example.com');
   });
 });

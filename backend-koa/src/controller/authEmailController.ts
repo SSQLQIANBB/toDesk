@@ -27,6 +27,10 @@ async function issue(ctx: Context, purpose: EmailCodePurpose) {
 
   try {
     const binding = await UserEmail.findOne({ where: { email } });
+    const anonymousPurpose = purpose === 'reset' || purpose === 'login';
+    if (anonymousPurpose && !binding) {
+      ctx.status = 404; ctx.body = { error: '该邮箱未注册' }; return;
+    }
     if (purpose === 'register' && binding) {
       ctx.status = 409; ctx.body = { error: '该邮箱已绑定其他账号' }; return;
     }
@@ -43,13 +47,9 @@ async function issue(ctx: Context, purpose: EmailCodePurpose) {
         ctx.status = 400; ctx.body = { error: '请输入已绑定邮箱' }; return;
       }
     }
-    // 找回密码和验证码登录始终返回相同结果，不暴露邮箱是否已绑定。
-    const anonymousPurpose = purpose === 'reset' || purpose === 'login';
-    if (!anonymousPurpose || binding) {
-      const result = await issueEmailCode(purpose, email);
-      if (result === 'cooldown' && !anonymousPurpose) {
-        ctx.status = 429; ctx.body = { error: '请稍后再发送验证码' }; return;
-      }
+    const result = await issueEmailCode(purpose, email);
+    if (result === 'cooldown' && !anonymousPurpose) {
+      ctx.status = 429; ctx.body = { error: '请稍后再发送验证码' }; return;
     }
     ctx.body = { message: CODE_SENT_MESSAGE };
   } catch (error) {

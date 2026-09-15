@@ -42,7 +42,7 @@ HTTP 路由主要以 `/api/auth`、`/api/groups`、`/api/messages`、`/api/invit
 ### 2.2 登录、刷新、退出
 
 - 账号密码登录：[login.vue](../client-vue/src/views/login.vue) → [services/loginController.ts](../client-vue/src/services/loginController.ts) → [stores/auth.ts](../client-vue/src/stores/auth.ts) → `POST /api/auth/login` → [authController.ts](../backend-koa/src/controller/authController.ts)。账号可以是用户名或 [UserEmail.ts](../backend-koa/src/models/UserEmail.ts) 中的已验证邮箱；服务端用 [User.ts](../backend-koa/src/models/User.ts) 核验密码。
-- 邮箱验证码登录：同一登录页调用 [api/auth.ts](../client-vue/src/api/auth.ts) 的 `sendEmailCode('login')`，经 `POST /api/auth/email-code/login` → [authEmailController.ts](../backend-koa/src/controller/authEmailController.ts) → [emailVerificationService.ts](../backend-koa/src/services/emailVerificationService.ts) 向已绑定邮箱发码。提交验证码时调用 `POST /api/auth/login/email-code`，由 [authController.ts](../backend-koa/src/controller/authController.ts) 消费登录专用验证码。未绑定邮箱的发码结果不暴露账号是否存在。
+- 邮箱验证码登录：同一登录页调用 [api/auth.ts](../client-vue/src/api/auth.ts) 的 `sendEmailCode('login')`，经 `POST /api/auth/email-code/login` → [authEmailController.ts](../backend-koa/src/controller/authEmailController.ts) → [emailVerificationService.ts](../backend-koa/src/services/emailVerificationService.ts) 向已绑定邮箱发码。提交验证码时调用 `POST /api/auth/login/email-code`，由 [authController.ts](../backend-koa/src/controller/authController.ts) 消费登录专用验证码。未注册邮箱会直接提示错误，不会发送验证码。
 - 两种登录方式共用服务端的登录收尾流程：更新在线状态，签发 [utils/jwt.ts](../backend-koa/src/utils/jwt.ts) 的 token 对，通过 [redisService.ts](../backend-koa/src/services/redisService.ts) 保存 refresh token；前端统一保存登录状态并处理登录前页面跳转。
 - 页面刷新时，[router/index.ts](../client-vue/src/router/index.ts) 用 `GET /api/auth/me` 恢复用户；[utils/request.ts](../client-vue/src/utils/request.ts) 遇 401 调 `POST /api/auth/refresh-token` 并重试一次。服务端 [middleware/auth.ts](../backend-koa/src/middleware/auth.ts) 验证 token 和 [tokenVersionService.ts](../backend-koa/src/services/tokenVersionService.ts) 中的版本。
 - 退出由 [stores/auth.ts](../client-vue/src/stores/auth.ts) 调 `POST /api/auth/logout`，清理本地认证；[App.vue](../client-vue/src/App.vue) 断开 Socket。后端清除 refresh token 并更新用户状态。
@@ -52,7 +52,7 @@ HTTP 路由主要以 `/api/auth`、`/api/groups`、`/api/messages`、`/api/invit
 | 操作 | 前端 → 后端 → 数据/结果 |
 | --- | --- |
 | 旧账号绑定邮箱 | [profile.vue](../client-vue/src/views/profile.vue) → [api/auth.ts](../client-vue/src/api/auth.ts) `email-code/bind`、`bind-email` → [authEmailController.ts](../backend-koa/src/controller/authEmailController.ts) 消费验证码，在事务中写 [UserEmail.ts](../backend-koa/src/models/UserEmail.ts) 并更新用户资料。 |
-| 忘记密码 | [login.vue](../client-vue/src/views/login.vue) → `email-code/reset`、`reset-password` → [authEmailController.ts](../backend-koa/src/controller/authEmailController.ts) 查已验证绑定，核验验证码、更新密码并撤销旧 token。发码接口对不存在的邮箱返回相同文案。 |
+| 忘记密码 | [login.vue](../client-vue/src/views/login.vue) → `email-code/reset`、`reset-password` → [authEmailController.ts](../backend-koa/src/controller/authEmailController.ts) 查已验证绑定，核验验证码、更新密码并撤销旧 token。发码接口会直接提示未注册邮箱错误。 |
 | 登录后改密 | [profile.vue](../client-vue/src/views/profile.vue) → `email-code/change-password`、`change-password` → [authController.ts](../backend-koa/src/controller/authController.ts) 同时核验旧密码和绑定邮箱验证码，成功后要求重新登录。 |
 | 资料修改 | [profile.vue](../client-vue/src/views/profile.vue) → `GET/PUT /api/auth/me` → [authController.ts](../backend-koa/src/controller/authController.ts) 更新昵称、头像、简介、电话、状态等，并刷新 Redis 用户缓存；普通资料接口不允许直接修改邮箱。 |
 
