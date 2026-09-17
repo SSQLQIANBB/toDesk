@@ -8,6 +8,7 @@ import {
   type GroupSessionType,
 } from '@/services/groupSessionState';
 import { refreshAccessToken } from '@/utils/request';
+import { publicEnv } from '@/config/env';
 import { useAuthStore } from './auth';
 import { pinia } from '@/stores';
 
@@ -139,7 +140,7 @@ export const useSocketStore = defineStore('socket', () => {
     credentials = { token, user };
 
     if (!socket.value) {
-      const target = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
+      const target = io(publicEnv.socketUrl || window.location.origin, {
         path: '/meeting',
         autoConnect: false,
         transports: ['websocket', 'polling'],

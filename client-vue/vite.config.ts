@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv, type UserConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite';
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
@@ -6,11 +6,12 @@ import Components from 'unplugin-vue-components/vite'
 import { resolve } from 'path'
 import tailwindcss from 'tailwindcss'
 import viteCompression from 'vite-plugin-compression'
+import { createPublicEnv } from './src/config/publicEnv'
 
 const compressibleAssets = /\.(?:js|mjs|json|css|html|svg|txt|xml|wasm)$/i
 
 // https://vite.dev/config/
-export default defineConfig({
+const config = {
   plugins: [
     vue(),
      AutoImport({
@@ -104,4 +105,13 @@ export default defineConfig({
       }
     }
   }
+} satisfies UserConfig
+
+export default defineConfig(({ mode }) => {
+  const fileEnv = loadEnv(mode, process.cwd(), 'VITE_')
+  createPublicEnv({
+    VITE_API_BASE_URL: process.env.VITE_API_BASE_URL ?? fileEnv.VITE_API_BASE_URL,
+    VITE_SOCKET_URL: process.env.VITE_SOCKET_URL ?? fileEnv.VITE_SOCKET_URL
+  })
+  return config
 })

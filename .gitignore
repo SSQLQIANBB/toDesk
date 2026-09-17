@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 dist
 *.log
+.env
 .env.production
 .env.infrastructure
 backend-koa/.env.local

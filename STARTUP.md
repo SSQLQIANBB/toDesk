@@ -54,27 +54,30 @@ redis-cli -h 127.0.0.1 -p 6379 ping
 
 ## 启动后端
 
-在新的终端从仓库根目录运行，按实际实例设置连接参数：
+首次启动先从示例创建个人配置文件：
 
 ```bash
-export DB_HOST=127.0.0.1
-export DB_PORT=3306
-export DB_NAME=todesk
-export DB_USER=root
-read -s 'DB_PASSWORD?请输入本地 MySQL 密码：'
-export DB_PASSWORD
-export REDIS_HOST=127.0.0.1
-export REDIS_PORT=6379
+cp backend-koa/.env.example backend-koa/.env.local
+```
+
+根据本机 MySQL、Redis 和邮箱配置编辑 `backend-koa/.env.local`，然后从仓库根目录执行：
+
+```bash
+pnpm env:check
 pnpm run server
 ```
 
-`read -s` 适用于 macOS 默认的 zsh；其他 shell 可运行 `read -s DB_PASSWORD`。后端不会自动加载 `.env.production`。如本地数据库或 Redis 使用不同端口，请修改对应环境变量。`DB_AUTO_CREATE` 和 `DB_SYNC_ALTER` 默认关闭，连接旧库时不要随意启用。
-
-本地邮件配置可写在 `backend-koa/.env.local`（该文件被 Git 忽略）。使用 Node.js 22 启动 `pnpm run server` 时，后端开发脚本会自动加载此文件；例如填写 `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。授权码只保存在本机，文件权限建议为 `600`。已有环境变量优先于文件中的同名值。
+后端启动脚本会加载并校验 `.env.local`。连接旧库时不要随意启用 `DB_AUTO_CREATE` 和 `DB_SYNC_ALTER`。SMTP 变量只在调试邮箱验证码时填写，但必须整组填写。授权码只保存在本机，文件权限建议为 `600`。
 
 后端默认监听 `http://localhost:3000`。
 
 ## 启动前端
+
+前端默认使用 Vite 代理，不需要环境变量。需要连接其他机器上的后端时，先创建并编辑个人配置：
+
+```bash
+cp client-vue/.env.example client-vue/.env.local
+```
 
 再打开一个终端，在仓库根目录运行：
 
@@ -82,7 +85,7 @@ pnpm run server
 pnpm run client
 ```
 
-浏览器打开 `http://localhost:5173/`。Vite 将 `/api`、`/meeting` 和 `/uploads` 代理到后端的 3000 端口。修改后端端口时，还需修改 `client-vue/vite.config.ts` 的代理目标。
+浏览器打开 `http://localhost:5173/`。Vite 将 `/api`、`/meeting` 和 `/uploads` 代理到后端的 3000 端口。修改后端端口时，还需修改 `client-vue/vite.config.ts` 的代理目标。`VITE_*` 会进入浏览器代码，不能填写任何密钥。
 
 ## 检查与停止
 
@@ -93,4 +96,4 @@ curl -i http://localhost:3000/api/auth/me
 
 前端应返回 200；未登录时 `/api/auth/me` 返回 401 是正常的。前后端在各自终端按 `Ctrl+C` 停止。本地 MySQL 和 Redis 由各自的服务管理器停止。
 
-如果登录后看不到原有用户数据，请先核对 `DB_HOST`、`DB_PORT`、`DB_NAME`，再核对 MySQL 数据目录和登录账号；切换到 Docker 的新数据库通常会看到空表。生产部署另见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+如果登录后看不到原有用户数据，请先核对 `DB_HOST`、`DB_PORT`、`DB_NAME`，再核对 MySQL 数据目录和登录账号；切换到 Docker 的新数据库通常会看到空表。完整规则见 [环境变量管理规范](./docs/ENVIRONMENT_VARIABLES.md)，生产部署另见 [DEPLOYMENT.md](./DEPLOYMENT.md)。

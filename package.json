@@ -4,9 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "server": "cd backend-koa && pnpm run dev",
-    "client": "cd client-vue && pnpm run dev"
+    "test": "pnpm --filter backend-koa test && pnpm --filter client-vue test",
+    "typecheck": "pnpm --filter backend-koa typecheck && pnpm --filter client-vue typecheck",
+    "env:check": "pnpm --filter backend-koa env:check",
+    "server": "pnpm --filter backend-koa dev",
+    "client": "pnpm --filter client-vue dev"
   },
   "keywords": [],
   "author": "",

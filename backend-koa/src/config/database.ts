@@ -1,32 +1,26 @@
 import { Sequelize } from 'sequelize';
 import mysql from 'mysql2/promise';
+import { env } from './env';
 
-const DB_NAME = process.env.DB_NAME || 'todesk';
-const DB_USER = process.env.DB_USER || 'root';
-const DB_PASSWORD = process.env.DB_PASSWORD || '123456';
-const DB_HOST = process.env.DB_HOST || 'localhost';
-const DB_PORT = Number.parseInt(process.env.DB_PORT || '3306', 10);
-
-const DB_AUTO_CREATE = process.env.DB_AUTO_CREATE === 'true';
-const DB_SYNC_ALTER = process.env.DB_SYNC_ALTER === 'true';
+const { database } = env;
 
 // 创建数据库（如果不存在）
 async function createDatabaseIfNotExists() {
   const connection = await mysql.createConnection({
-    host: DB_HOST,
-    port: DB_PORT,
-    user: DB_USER,
-    password: DB_PASSWORD,
+    host: database.host,
+    port: database.port,
+    user: database.user,
+    password: database.password,
   });
 
   try {
     await connection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`
+      `CREATE DATABASE IF NOT EXISTS \`${database.name}\`
        CHARACTER SET utf8mb4
        COLLATE utf8mb4_unicode_ci;`,
     );
 
-    console.log(`✓ 数据库 "${DB_NAME}" 检查/创建完成`);
+    console.log(`✓ 数据库 "${database.name}" 检查/创建完成`);
   } finally {
     await connection.end();
   }
@@ -34,13 +28,13 @@ async function createDatabaseIfNotExists() {
 
 // 使用 MySQL 配置
 const sequelize = new Sequelize({
-  database: DB_NAME,
-  username: DB_USER,
-  password: DB_PASSWORD,
-  host: DB_HOST,
-  port: DB_PORT,
+  database: database.name,
+  username: database.user,
+  password: database.password,
+  host: database.host,
+  port: database.port,
   dialect: 'mysql',
-  logging: process.env.DB_LOGGING === 'true',
+  logging: database.logging,
   // 连接池配置
   pool: {
     max: 5,
@@ -59,7 +53,7 @@ const sequelize = new Sequelize({
 
 export async function initDatabase() {
   try {
-    if (DB_AUTO_CREATE) {
+    if (database.autoCreate) {
       // 1. 先创建数据库
       await createDatabaseIfNotExists();
     }
@@ -74,11 +68,11 @@ export async function initDatabase() {
 
     // 生产环境默认只创建缺失的表，不自动修改已有表结构
     await sequelize.sync({
-      alter: DB_SYNC_ALTER,
+      alter: database.syncAlter,
     });
 
     console.log(
-      DB_SYNC_ALTER
+      database.syncAlter
         ? '✓ 数据库表同步完成，已启用 alter'
         : '✓ 数据库表同步完成，未启用 alter',
     );
@@ -94,11 +88,11 @@ export async function initDatabase() {
     console.error('✗ 数据库初始化失败:', error.message);
 
     if (error.original?.code === 'ER_ACCESS_DENIED_ERROR') {
-      console.error(`  → MySQL 用户名或密码错误，当前用户：${DB_USER}`);
+      console.error(`  → MySQL 用户名或密码错误，当前用户：${database.user}`);
     } else if (error.original?.code === 'ECONNREFUSED') {
-      console.error(`  → 无法连接 MySQL：${DB_HOST}:${DB_PORT}`);
+      console.error(`  → 无法连接 MySQL：${database.host}:${database.port}`);
     } else if (error.original?.code === 'ER_BAD_DB_ERROR') {
-      console.error(`  → 数据库不存在：${DB_NAME}`);
+      console.error(`  → 数据库不存在：${database.name}`);
     }
 
     throw error;

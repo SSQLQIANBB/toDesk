@@ -3,10 +3,10 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${INITIAL_DB_NAME}
-      MYSQL_USER: ${INITIAL_DB_USER}
-      MYSQL_PASSWORD: ${INITIAL_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${INITIAL_DB_NAME:?INITIAL_DB_NAME is required}
+      MYSQL_USER: ${INITIAL_DB_USER:?INITIAL_DB_USER is required}
+      MYSQL_PASSWORD: ${INITIAL_DB_PASSWORD:?INITIAL_DB_PASSWORD is required}
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -26,7 +26,7 @@ services:
     image: redis:7.4-alpine
     restart: unless-stopped
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     command:
       - sh
       - -c

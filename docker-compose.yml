@@ -3,7 +3,7 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required in .env}
       MYSQL_DATABASE: ${DB_NAME:-todesk}
     command:
       - --character-set-server=utf8mb4
@@ -40,12 +40,17 @@ services:
       DB_PORT: 3306
       DB_NAME: ${DB_NAME:-todesk}
       DB_USER: root
-      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me}
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required in .env}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: 0
-      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret}
-      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-change-this-refresh-secret}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required in .env}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:?REFRESH_TOKEN_SECRET is required in .env}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     depends_on:
       mysql:
         condition: service_healthy

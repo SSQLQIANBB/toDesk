@@ -8,11 +8,11 @@ import setupRouter from './router';
 import initializeSocket from './config/initializeSocket';
 import initialMeeting from './config/meeting';
 import { initDatabase } from './config/database';
+import { env } from './config/env';
 import cors from '@/middleware/cors'
 
 const app = new Koa();
 const httpServer = http.createServer(app.callback())
-const PORT = Number(process.env.PORT || 3000);
 
 // 配置cors
 app.use(cors)
@@ -71,12 +71,12 @@ async function startServer() {
     });
 
     // 5. 启动HTTP服务器
-    httpServer.listen(PORT, () => {
+    httpServer.listen(env.app.port, () => {
       console.log(chalk.cyan.bold('========================================'));
       console.log(chalk.green.bold('✓ ToDesk 服务端启动成功！'));
       console.log(chalk.cyan.bold('========================================'));
-      console.log(chalk.blue('  服务地址: ') + chalk.green.bold(`http://localhost:${PORT}`));
-      console.log(chalk.blue('  环境: ') + chalk.yellow(process.env.NODE_ENV || 'development'));
+      console.log(chalk.blue('  服务地址: ') + chalk.green.bold(`http://localhost:${env.app.port}`));
+      console.log(chalk.blue('  环境: ') + chalk.yellow(env.app.nodeEnv));
       console.log(chalk.cyan.bold('========================================\n'));
     });
   } catch (error: any) {

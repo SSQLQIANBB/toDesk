@@ -36,10 +36,6 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.values.clear();
-  process.env.SMTP_HOST = 'smtp.example.test';
-  process.env.SMTP_USER = 'sender';
-  process.env.SMTP_PASSWORD = 'secret';
-  process.env.SMTP_FROM = 'sender@example.test';
   mocks.sendMail.mockResolvedValue({});
 });
 

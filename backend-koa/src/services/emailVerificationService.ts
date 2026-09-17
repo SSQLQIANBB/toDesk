@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import redis from '../config/redis';
+import { env } from '../config/env';
 
 export type EmailCodePurpose = 'register' | 'bind' | 'reset' | 'change-password' | 'login';
 
@@ -20,23 +21,23 @@ function key(purpose: EmailCodePurpose, email: string, type: string) {
 }
 
 function codeHash(code: string) {
-  return crypto.createHmac('sha256', process.env.JWT_SECRET || 'development-email-code-key')
+  return crypto.createHmac('sha256', env.auth.jwtSecret)
     .update(code).digest('hex');
 }
 
 export function isMailConfigured() {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD && process.env.SMTP_FROM);
+  return env.smtp !== null;
 }
 
 async function sendMail(email: string, code: string, purpose: EmailCodePurpose) {
-  if (!isMailConfigured()) throw new Error('邮件服务未配置');
-  const port = Number(process.env.SMTP_PORT || 465);
+  const smtp = env.smtp;
+  if (!smtp) throw new Error('邮件服务未配置');
   const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASSWORD! },
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.port === 465,
+    requireTLS: smtp.port !== 465,
+    auth: { user: smtp.user, pass: smtp.password },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
@@ -48,7 +49,7 @@ async function sendMail(email: string, code: string, purpose: EmailCodePurpose) 
   };
   try {
     await transport.sendMail({
-      from: process.env.SMTP_FROM,
+      from: smtp.from,
       to: email,
       subject: `ToDesk ${label[purpose]}验证码`,
       text: `您的 ToDesk ${label[purpose]}验证码为 ${code}，10 分钟内有效。若非本人操作，请忽略本邮件。`,

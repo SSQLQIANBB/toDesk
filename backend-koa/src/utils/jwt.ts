@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
+import { env } from '@/config/env';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'your-refresh-secret-key-change-in-production';
 const ACCESS_TOKEN_EXPIRES_IN = '2h'; // access token有效期2小时
 const REFRESH_TOKEN_EXPIRES_IN = '24h'; // refresh token有效期24小时
 
@@ -21,7 +20,7 @@ export interface TokenPair {
  * 生成 access token
  */
 export function generateAccessToken(payload: JwtPayload): string {
-  return jwt.sign({ ...payload, type: 'access' }, JWT_SECRET, { 
+  return jwt.sign({ ...payload, type: 'access' }, env.auth.jwtSecret, {
     expiresIn: ACCESS_TOKEN_EXPIRES_IN 
   });
 }
@@ -30,7 +29,7 @@ export function generateAccessToken(payload: JwtPayload): string {
  * 生成 refresh token
  */
 export function generateRefreshToken(payload: JwtPayload): string {
-  return jwt.sign({ ...payload, type: 'refresh' }, REFRESH_TOKEN_SECRET, { 
+  return jwt.sign({ ...payload, type: 'refresh' }, env.auth.refreshTokenSecret, {
     expiresIn: REFRESH_TOKEN_EXPIRES_IN 
   });
 }
@@ -50,7 +49,7 @@ export function generateTokenPair(payload: JwtPayload): TokenPair {
  */
 export function verifyAccessToken(token: string): JwtPayload {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    return jwt.verify(token, env.auth.jwtSecret) as JwtPayload;
   } catch (error) {
     throw new Error('无效的access token');
   }
@@ -61,7 +60,7 @@ export function verifyAccessToken(token: string): JwtPayload {
  */
 export function verifyRefreshToken(token: string): JwtPayload {
   try {
-    return jwt.verify(token, REFRESH_TOKEN_SECRET) as JwtPayload;
+    return jwt.verify(token, env.auth.refreshTokenSecret) as JwtPayload;
   } catch (error) {
     throw new Error('无效的refresh token');
   }

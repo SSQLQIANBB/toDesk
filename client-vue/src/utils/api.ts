@@ -1,6 +1,6 @@
-const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+import { publicEnv } from '@/config/env';
 
-export const API_BASE_URL = `${rawApiBaseUrl}/api`;
+export const API_BASE_URL = `${publicEnv.apiBaseUrl}/api`;
 
 /**
  * 聊天相关 API

@@ -1,5 +1,6 @@
 import { ref, onUnmounted, type Ref } from 'vue';
 import { Socket, io, type ManagerOptions, type SocketOptions } from 'socket.io-client';
+import { publicEnv } from '@/config/env';
 
 // 定义连接状态枚举
 export enum SocketStatus {
@@ -35,7 +36,7 @@ export default function useSocket(
     if (status.value === SocketStatus.Connecting || status.value === SocketStatus.Connected) return;
 
     // 合并配置（自定义配置优先级更高）
-    const url = customOptions.url || defaultOptions.url || import.meta.env.VITE_SOCKET_URL || window.location.origin;
+    const url = customOptions.url || defaultOptions.url || publicEnv.socketUrl || window.location.origin;
     const managerOptions = { ...defaultOptions.managerOptions, ...customOptions.managerOptions };
     const socketOptions = { 
       path: '/connect', // 默认路径（可被覆盖）

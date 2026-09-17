@@ -2,8 +2,9 @@ import { useAuthStore } from '@/stores/auth';
 import { pinia } from '@/stores';
 import router from '@/router';
 import { getAuthRedirect } from '@/services/authNavigation';
+import { publicEnv } from '@/config/env';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const API_BASE_URL = publicEnv.apiBaseUrl;
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
