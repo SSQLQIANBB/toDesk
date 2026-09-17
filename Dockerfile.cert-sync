@@ -1,0 +1,17 @@
+FROM python:3.13.7-alpine3.22
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apk add --no-cache ca-certificates openssl
+
+WORKDIR /app
+
+COPY deploy/requirements-cert-sync.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY deploy/qiniu_cert_sync.py ./qiniu_cert_sync.py
+
+ENTRYPOINT ["python", "/app/qiniu_cert_sync.py"]
+HEALTHCHECK --interval=1m --timeout=10s --start-period=2m --retries=3 \
+    CMD ["python", "/app/qiniu_cert_sync.py", "--healthcheck"]

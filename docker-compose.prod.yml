@@ -46,10 +46,37 @@ services:
     networks:
       - todesk-internal
 
+  cert-sync:
+    image: ${DOCKERHUB_NAMESPACE:-ssq5603151}/${CERT_SYNC_IMAGE:-todesk-cert-sync}:${IMAGE_TAG:-latest}
+    container_name: todesk-cert-sync
+    restart: unless-stopped
+    environment:
+      FILES_DOMAIN: ${FILES_DOMAIN}
+      PRIVATE_FILES_DOMAIN: ${PRIVATE_FILES_DOMAIN}
+      QINIU_ACCESS_KEY: ${QINIU_ACCESS_KEY}
+      QINIU_SECRET_KEY: ${QINIU_SECRET_KEY}
+      CERT_SYNC_INTERVAL_SECONDS: ${CERT_SYNC_INTERVAL_SECONDS:-21600}
+      CERT_SYNC_RETRY_SECONDS: ${CERT_SYNC_RETRY_SECONDS:-300}
+    depends_on:
+      - caddy
+    volumes:
+      - caddy-data:/data:ro
+      - cert-sync-state:/state
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - todesk-internal
+
 volumes:
   todesk-uploads:
   caddy-data:
   caddy-config:
+  cert-sync-state:
 
 networks:
   todesk-internal:

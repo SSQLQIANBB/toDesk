@@ -101,6 +101,10 @@ FILES_DOMAIN=files.example.com
 PRIVATE_FILES_DOMAIN=private-files.example.com
 ALIYUN_ACCESS_KEY_ID=<AliDNS RAM 用户 AccessKey ID>
 ALIYUN_ACCESS_KEY_SECRET=<AliDNS RAM 用户 AccessKey Secret>
+QINIU_ACCESS_KEY=<七牛 AccessKey>
+QINIU_SECRET_KEY=<七牛 SecretKey>
+CERT_SYNC_INTERVAL_SECONDS=21600
+CERT_SYNC_RETRY_SECONDS=300
 SHARED_SERVICES_NETWORK=shared-services
 
 DB_HOST=shared-mysql
@@ -122,13 +126,14 @@ REFRESH_TOKEN_SECRET=<另一个新的随机密钥>
 ```
 
 域名变量只填写域名，不要添加 `http://`、`https://` 或路径。
-`FILES_DOMAIN` 和 `PRIVATE_FILES_DOMAIN` 的 CNAME 继续指向七牛云，不会经过当前
+`FILES_DOMAIN` 和 `PRIVATE_FILES_DOMAIN` 的 CNAME 指向七牛 CDN，不会经过当前
 服务器；Caddy 仅通过 AliDNS DNS-01 创建临时 `_acme-challenge` TXT 记录并自动
 续期证书。AliDNS 凭据应来自仅有当前 DNS Zone 解析管理权限的 RAM 用户。
 
-Caddy 续期后，需要将 `/data` 持久卷中的新证书链和私钥重新上传并绑定到七牛云
-Kodo 源站域名。七牛云当前不提供源站域名证书自动更新 API，因此该步骤仍需手动
-完成。
+`cert-sync` 服务会读取 Caddy 新证书，调用七牛 API 上传证书并更新两个 CDN 域名，
+不再需要手动续期。七牛 AK/SK 仅保存在服务器环境文件中。首次创建 CDN 域名、
+上传初始证书、配置缓存/鉴权/CNAME 以及自动同步排查步骤见
+[`docs/QINIU_CDN_CERTIFICATE_AUTOMATION.md`](docs/QINIU_CDN_CERTIFICATE_AUTOMATION.md)。
 
 JWT 密钥可使用以下命令分别生成：
 
@@ -178,8 +183,9 @@ docker compose \
   up -d
 ```
 
-Caddy 会自动申请受浏览器信任的证书、将 HTTP 跳转到 HTTPS，并在到期前自动
-续期。证书存放在 `caddy-data` 卷中，不要删除该卷。
+Caddy 会自动申请受浏览器信任的证书、将主站 HTTP 跳转到 HTTPS，并在到期前
+自动续期。`cert-sync` 会把续期证书部署到七牛 CDN。证书存放在 `caddy-data` 卷
+中，同步状态存放在 `cert-sync-state` 卷中，不要删除这些卷。
 
 查看状态和日志：
 
@@ -193,6 +199,8 @@ docker compose \
   --env-file .env.production \
   -f docker-compose.prod.yml \
   logs -f caddy backend
+
+docker logs -f todesk-cert-sync
 
 curl -I https://desk.example.com
 ```
