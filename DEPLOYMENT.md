@@ -97,6 +97,10 @@ NODE_ENV=production
 PORT=3000
 
 DOMAIN=desk.example.com
+FILES_DOMAIN=files.example.com
+PRIVATE_FILES_DOMAIN=private-files.example.com
+ALIYUN_ACCESS_KEY_ID=<AliDNS RAM 用户 AccessKey ID>
+ALIYUN_ACCESS_KEY_SECRET=<AliDNS RAM 用户 AccessKey Secret>
 SHARED_SERVICES_NETWORK=shared-services
 
 DB_HOST=shared-mysql
@@ -117,7 +121,14 @@ JWT_SECRET=<新的随机密钥>
 REFRESH_TOKEN_SECRET=<另一个新的随机密钥>
 ```
 
-`DOMAIN` 只填写域名，不要添加 `http://`、`https://` 或路径。
+域名变量只填写域名，不要添加 `http://`、`https://` 或路径。
+`FILES_DOMAIN` 和 `PRIVATE_FILES_DOMAIN` 的 CNAME 继续指向七牛云，不会经过当前
+服务器；Caddy 仅通过 AliDNS DNS-01 创建临时 `_acme-challenge` TXT 记录并自动
+续期证书。AliDNS 凭据应来自仅有当前 DNS Zone 解析管理权限的 RAM 用户。
+
+Caddy 续期后，需要将 `/data` 持久卷中的新证书链和私钥重新上传并绑定到七牛云
+Kodo 源站域名。七牛云当前不提供源站域名证书自动更新 API，因此该步骤仍需手动
+完成。
 
 JWT 密钥可使用以下命令分别生成：
 

@@ -25,11 +25,15 @@ services:
       - todesk-internal
 
   caddy:
-    image: caddy:2-alpine
+    image: ${DOCKERHUB_NAMESPACE:-ssq5603151}/${CADDY_IMAGE:-todesk-caddy}:${IMAGE_TAG:-latest}
     container_name: todesk-caddy
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN}
+      FILES_DOMAIN: ${FILES_DOMAIN}
+      PRIVATE_FILES_DOMAIN: ${PRIVATE_FILES_DOMAIN}
+      ALIYUN_ACCESS_KEY_ID: ${ALIYUN_ACCESS_KEY_ID}
+      ALIYUN_ACCESS_KEY_SECRET: ${ALIYUN_ACCESS_KEY_SECRET}
     depends_on:
       - web
     ports:

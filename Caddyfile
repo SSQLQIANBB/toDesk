@@ -1,3 +1,14 @@
 {$DOMAIN} {
     reverse_proxy web:80
 }
+
+{$FILES_DOMAIN}, {$PRIVATE_FILES_DOMAIN} {
+    tls {
+        dns alidns {
+            access_key_id {env.ALIYUN_ACCESS_KEY_ID}
+            access_key_secret {env.ALIYUN_ACCESS_KEY_SECRET}
+        }
+    }
+
+    respond 204
+}
