@@ -256,6 +256,7 @@ import { useUnreadStore } from '@/stores/unread';
 import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
 import { getGroupMessages, type ChatMediaPayload } from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
+import { applyMessageAck } from '@/services/messageDeliveryState';
 import { groupSessionState } from '@/services/groupSessionState';
 import CallHistoryMessage from '@/components/CallHistoryMessage.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
@@ -470,6 +471,7 @@ function goBack() {
 }
 
 async function retryGroupMessage(msg: any) {
+  if (!msg.clientMessageId) return;
   msg.sendStatus = 'pending';
   const result = await sendReliableMessage(socket.value, 'group_message', {
     groupId: groupId.value,
@@ -478,8 +480,7 @@ async function retryGroupMessage(msg: any) {
     media: msg.media,
     clientMessageId: msg.clientMessageId,
   });
-  if (result.ok) { msg.id = result.id; msg.sendStatus = 'sent'; }
-  else msg.sendStatus = 'failed';
+  messages.value = applyMessageAck(messages.value, msg.clientMessageId, result);
 }
 
 function clearVisibleUnread() {

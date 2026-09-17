@@ -225,6 +225,7 @@ import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups, type Group } from '@/api/group';
 import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type CallHistoryRecord, type ChatMediaPayload } from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
+import { applyMessageAck } from '@/services/messageDeliveryState';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
 import CallHistoryMessage from '@/components/CallHistoryMessage.vue';
@@ -463,18 +464,21 @@ function sendMedia(payload: { type: 'image' | 'voice'; media: ChatMediaPayload }
 }
 
 async function retryPrivateMessage(msg: MessageInfo) {
-  if (!msg.toUserId) return;
+  if (!msg.toUserId || !msg.clientMessageId) return;
+  const toUserId = msg.toUserId;
+  const clientMessageId = msg.clientMessageId;
   msg.sendStatus = 'pending';
-  const target = contactUser.value?.id === msg.toUserId ? contactUser.value : { id: msg.toUserId };
+  const target = contactUser.value?.id === toUserId ? contactUser.value : { id: toUserId };
   const result = await sendReliableMessage(socket.value, 'private_message', {
     to: target,
     message: msg.message,
     messageType: msg.messageType,
     media: msg.media,
-    clientMessageId: msg.clientMessageId,
+    clientMessageId,
   });
-  if (result.ok) { msg.id = result.id; msg.sendStatus = 'sent'; }
-  else msg.sendStatus = 'failed';
+  const updated = applyMessageAck(privateMessageMap.get(toUserId) || [], clientMessageId, result);
+  privateMessageMap.set(toUserId, updated);
+  if (contactUser.value?.id === toUserId) currentMessageList.value = updated;
 }
 
 // 滚动到底部
