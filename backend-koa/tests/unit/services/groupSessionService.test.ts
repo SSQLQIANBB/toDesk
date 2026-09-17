@@ -36,14 +36,16 @@ describe('GroupSessionService', () => {
     expect(joined.session.ownerUserId).toBe(1);
   });
 
-  it('同时保存视频和屏幕共享状态供后进入成员恢复', async () => {
+  it('同时保存视频、语音和屏幕共享状态供后进入成员恢复', async () => {
     const service = new GroupSessionService(new MemorySessionStore());
 
     await service.start(7, 'video', { id: 1, socketId: 'socket-a' });
+    await service.start(7, 'audio', { id: 3, socketId: 'socket-c' });
     await service.start(7, 'screen', { id: 2, socketId: 'socket-b' });
 
     await expect(service.getGroupState(7)).resolves.toMatchObject({
       video: { channelId: 'group:7:video', ownerUserId: 1 },
+      audio: { channelId: 'group:7:audio', ownerUserId: 3 },
       screen: { channelId: 'group:7:screen', ownerUserId: 2 },
     });
   });
@@ -60,6 +62,7 @@ describe('GroupSessionService', () => {
     await expect(service.end(7, 'video', 1)).resolves.toBe(true);
     await expect(service.getGroupState(7)).resolves.toEqual({
       video: null,
+      audio: null,
       screen: null,
     });
   });

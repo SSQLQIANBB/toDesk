@@ -1,6 +1,7 @@
 import { Context } from 'koa';
 import { Op, fn, col } from 'sequelize';
 import { GroupMember, GroupMessage, Message, User } from '../models';
+import { serializeChatMessage } from '../services/callHistoryService';
 
 const MESSAGE_CACHE_DAYS = 30;
 
@@ -28,7 +29,7 @@ export async function getOfflineMessages(ctx: Context) {
       order: [['createdAt', 'ASC']],
     });
 
-    ctx.body = { messages };
+    ctx.body = { messages: messages.map(serializeChatMessage) };
   } catch (error: any) {
     console.error('get offline messages failed:', error);
     ctx.status = 500;
@@ -123,7 +124,7 @@ export async function getPrivateMessages(ctx: Context) {
     });
 
     ctx.body = {
-      messages: messages.reverse(),
+      messages: messages.reverse().map(serializeChatMessage),
       hasMore: messages.length === Number(limit),
     };
   } catch (error: any) {
@@ -175,7 +176,7 @@ export async function getGroupMessages(ctx: Context) {
     const hasMore = messages.length > parsedLimit;
     const page = messages.slice(0, parsedLimit);
     ctx.body = {
-      messages: afterId !== undefined ? page : page.reverse(),
+      messages: (afterId !== undefined ? page : page.reverse()).map(serializeChatMessage),
       hasMore,
     };
   } catch (error: any) {

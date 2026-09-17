@@ -1,7 +1,7 @@
 import { type Server } from 'http';
 import { Server as Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
-import { GroupMember, User as UserModel } from '../models';
+import { GroupMember, GroupMessage, Message, User as UserModel } from '../models';
 import { saveReliableMessage } from '../services/reliableMessageService';
 import { isTokenVersionCurrent } from '../services/tokenVersionService';
 import {
@@ -17,6 +17,17 @@ import {
   type AnnotationAction,
   type AnnotationDraft,
 } from '../services/screenAnnotationService';
+import {
+  createCallHistoryMessage,
+  PrivateCallTracker,
+  serializeChatMessage,
+  type CallHistoryType,
+  type PrivateCallHistoryRecord,
+} from '../services/callHistoryService';
+import {
+  createChatMediaMessage,
+  type ChatMediaMessage,
+} from '../services/chatMediaMessageService';
 
 type PresenceStatus = 'online' | 'offline' | 'busy';
 
@@ -38,7 +49,29 @@ const groupSessionService = new GroupSessionService(new RedisGroupSessionStore()
 const screenAnnotationService = new ScreenAnnotationService(new RedisScreenAnnotationStore());
 
 function getSessionType(deviceType: number): GroupSessionType {
+  if (deviceType === 3) return 'audio';
   return deviceType === 2 ? 'screen' : 'video';
+}
+
+function getSessionDeviceType(type: GroupSessionType) {
+  if (type === 'screen') return 2;
+  return type === 'audio' ? 3 : 1;
+}
+
+function getPrivateCallType(deviceType: number): CallHistoryType | null {
+  if (deviceType === 0) return 'video';
+  if (deviceType === 1) return 'screen';
+  if (deviceType === 2) return 'audio';
+  return null;
+}
+
+function getMessageContent(data: { message?: string; messageType?: string; media?: ChatMediaMessage['media'] }) {
+  if (data.messageType === 'image' || data.messageType === 'voice') {
+    return createChatMediaMessage({ type: data.messageType, media: data.media });
+  }
+  const message = data.message?.trim();
+  if (!message || message.length > 10000) throw new Error('消息无效');
+  return message;
 }
 
 function getPublicUsers() {
@@ -82,6 +115,7 @@ const initialMeeting = (server: Server) => {
   });
 
   const messageWriteMs: number[] = [];
+  const privateCallTracker = new PrivateCallTracker();
   let messageWriteFailures = 0;
   const metricsTimer = setInterval(() => {
     const transports = { websocket: 0, polling: 0 };
@@ -104,6 +138,63 @@ const initialMeeting = (server: Server) => {
     const members = await GroupMember.findAll({ where: { groupId } });
     const socketIds = members.flatMap(member => getUserSockets(member.userId));
     if (socketIds.length) io.to(socketIds).emit(event, payload);
+  }
+
+  async function savePrivateCallHistory(record: PrivateCallHistoryRecord) {
+    const saved = await Message.create({
+      fromUserId: record.callerUserId,
+      toUserId: record.calleeUserId,
+      message: createCallHistoryMessage(record),
+      isRead: true,
+    });
+    const payload = serializeChatMessage(saved);
+    const socketIds = [...new Set([
+      ...getUserSockets(record.callerUserId),
+      ...getUserSockets(record.calleeUserId),
+    ])];
+    if (socketIds.length) io.to(socketIds).emit('private_call_history', payload);
+  }
+
+  async function saveGroupCallHistory(session: GroupSession, user?: MeetingUser | null) {
+    const durationSeconds = Math.max(
+      1,
+      Math.round((Date.now() - new Date(session.startedAt).getTime()) / 1000),
+    );
+    const saved = await GroupMessage.create({
+      groupId: session.groupId,
+      userId: session.ownerUserId,
+      message: createCallHistoryMessage({
+        type: session.type,
+        status: 'completed',
+        durationSeconds,
+      }),
+      messageType: 'system',
+    });
+    io.to(`group_${session.groupId}`).emit('group_message', {
+      ...serializeChatMessage(saved),
+      groupId: session.groupId,
+      userId: session.ownerUserId,
+      user: user || getPublicUser(session.ownerUserId),
+      time: saved.createdAt?.toLocaleString() || new Date().toLocaleString(),
+      createdAt: saved.createdAt,
+    });
+  }
+
+  async function recordPrivateCall(record: PrivateCallHistoryRecord | null) {
+    if (!record) return;
+    try {
+      await savePrivateCallHistory(record);
+    } catch (error) {
+      console.error('save private call history failed:', error);
+    }
+  }
+
+  async function recordGroupCall(session: GroupSession, user?: MeetingUser | null) {
+    try {
+      await saveGroupCallHistory(session, user);
+    } catch (error) {
+      console.error('save group call history failed:', error);
+    }
   }
 
   function emitPresenceChange(userId: number, previous?: MeetingUser) {
@@ -197,6 +288,8 @@ const initialMeeting = (server: Server) => {
       socketToUserMap.delete(socketId);
       if (currentUser) emitPresenceChange(currentUser.id, previous);
 
+      await Promise.all(privateCallTracker.finishForSocket(socketId).map(recordPrivateCall));
+
       groupRooms.forEach((members, groupId) => {
         if (members.delete(socketId)) {
           socket.to(`group_${groupId}`).emit('group_member_left', { socketId, userId: currentUser?.id });
@@ -221,37 +314,38 @@ const initialMeeting = (server: Server) => {
           }
           emitEmptyMediaPresence(session);
           mediaRooms.clear(session.channelId);
+          await recordGroupCall(session, currentUser);
           await emitGroupSessionEvent(session.groupId, 'group_call_ended', {
             from: socketId,
             groupId: session.groupId,
             type: session.type,
-            deviceType: session.type === 'screen' ? 2 : 1,
+            deviceType: getSessionDeviceType(session.type),
           });
         }
       }
 
     });
 
-    socket.on('private_message', async (data: { to?: MeetingUser; message?: string; clientMessageId?: string }, ack?: (result: unknown) => void) => {
-      if (!currentUser || !data.to?.id || !data.message?.trim() || data.message.length > 10000) {
+    socket.on('private_message', async (data: { to?: MeetingUser; message?: string; messageType?: string; media?: ChatMediaMessage['media']; clientMessageId?: string }, ack?: (result: unknown) => void) => {
+      if (!currentUser || !data.to?.id) {
         ack?.({ ok: false, error: '消息无效' }); return;
       }
 
       try {
+        const messageContent = getMessageContent(data);
         const writeStartedAt = Date.now();
         const receiverSockets = getUserSockets(data.to.id);
         const { saved: savedMessage, duplicate } = await saveReliableMessage({
           kind: 'private', userId: currentUser.id, targetId: data.to.id,
-          message: data.message, clientMessageId: data.clientMessageId,
+          message: messageContent, clientMessageId: data.clientMessageId,
         });
         if (messageWriteMs.length < 10_000) messageWriteMs.push(Date.now() - writeStartedAt);
 
         const payload = {
-          id: savedMessage.id,
+          ...serializeChatMessage(savedMessage),
           from: socketId,
           fromUserId: currentUser.id,
           toUserId: data.to.id,
-          message: data.message,
           time: savedMessage.createdAt?.toLocaleString() || new Date().toLocaleString(),
           createdAt: savedMessage.createdAt,
           sender: currentUser,
@@ -297,30 +391,46 @@ const initialMeeting = (server: Server) => {
     });
 
     socket.on('webrtc_call_request', (data) => {
-      if (currentUser && data.to?.socketId) {
-        socket.to(data.to.socketId).emit('webrtc_call_request', {
-          from: socketId,
-          deviceType: data.deviceType,
-          user: currentUser,
-        });
-      }
+      const type = getPrivateCallType(data.deviceType);
+      const calleeUserId = data.to?.socketId ? socketToUserMap.get(data.to.socketId) : undefined;
+      if (!currentUser || !type || !data.to?.socketId || !calleeUserId) return;
+
+      privateCallTracker.request({
+        callerSocketId: socketId,
+        calleeSocketId: data.to.socketId,
+        callerUserId: currentUser.id,
+        calleeUserId,
+        type,
+      });
+      socket.to(data.to.socketId).emit('webrtc_call_request', {
+        from: socketId,
+        deviceType: data.deviceType,
+        user: currentUser,
+      });
     });
 
-    socket.on('webrtc_call_response', (data) => {
-      if (data.to?.socketId) {
-        socket.to(data.to.socketId).emit('webrtc_call_response', {
-          from: socketId,
-          accepted: data.accepted,
-        });
-      }
+    socket.on('webrtc_call_response', async (data) => {
+      if (!data.to?.socketId) return;
+      socket.to(data.to.socketId).emit('webrtc_call_response', {
+        from: socketId,
+        accepted: data.accepted,
+      });
+      await recordPrivateCall(
+        privateCallTracker.respond(data.to.socketId, socketId, data.accepted === true),
+      );
     });
 
-    socket.on('webrtc_hangup', (data) => {
-      if (data.to?.socketId) {
-        socket.to(data.to.socketId).emit('webrtc_hangup', {
-          from: socketId,
-        });
-      }
+    socket.on('webrtc_call_connected', (data) => {
+      if (!data.to?.socketId) return;
+      privateCallTracker.connected(socketId, data.to.socketId);
+    });
+
+    socket.on('webrtc_hangup', async (data) => {
+      if (!data.to?.socketId) return;
+      socket.to(data.to.socketId).emit('webrtc_hangup', {
+        from: socketId,
+      });
+      await recordPrivateCall(privateCallTracker.finish(socketId, data.to.socketId));
     });
 
     socket.on('join_group', async (data: { groupId: number }) => {
@@ -363,27 +473,27 @@ const initialMeeting = (server: Server) => {
       socket.to(roomName).emit('group_member_left', { socketId, userId: currentUser?.id });
     });
 
-    socket.on('group_message', async (data: { groupId: number; message?: string; clientMessageId?: string }, ack?: (result: unknown) => void) => {
-      if (!currentUser || !Number.isInteger(data.groupId) || !data.message?.trim() || data.message.length > 10000) {
+    socket.on('group_message', async (data: { groupId: number; message?: string; messageType?: string; media?: ChatMediaMessage['media']; clientMessageId?: string }, ack?: (result: unknown) => void) => {
+      if (!currentUser || !Number.isInteger(data.groupId)) {
         ack?.({ ok: false, error: '消息无效' }); return;
       }
 
       try {
+        const messageContent = getMessageContent(data);
         const writeStartedAt = Date.now();
         const member = await GroupMember.findOne({ where: { groupId: data.groupId, userId: currentUser.id } });
         if (!member || member.canSpeak === false) { ack?.({ ok: false, error: '无发送权限' }); return; }
         const { saved: groupMessage, duplicate } = await saveReliableMessage({
           kind: 'group', userId: currentUser.id, targetId: data.groupId,
-          message: data.message, clientMessageId: data.clientMessageId,
+          message: messageContent, clientMessageId: data.clientMessageId,
         });
         if (messageWriteMs.length < 10_000) messageWriteMs.push(Date.now() - writeStartedAt);
 
         const payload = {
-          id: groupMessage.id,
+          ...serializeChatMessage(groupMessage),
           from: socketId,
           groupId: data.groupId,
           userId: currentUser.id,
-          message: data.message,
           time: groupMessage.createdAt?.toLocaleString() || new Date().toLocaleString(),
           createdAt: groupMessage.createdAt,
           user: currentUser,
@@ -460,7 +570,7 @@ const initialMeeting = (server: Server) => {
         ? [data.type]
         : data.deviceType
           ? [getSessionType(data.deviceType)]
-          : ['video', 'screen'];
+          : ['video', 'audio', 'screen'];
 
       for (const type of types) {
         const session = await groupSessionService.get(data.groupId, type);
@@ -477,11 +587,12 @@ const initialMeeting = (server: Server) => {
         }
         emitEmptyMediaPresence(session);
         mediaRooms.clear(session.channelId);
+        await recordGroupCall(session, currentUser);
         await emitGroupSessionEvent(data.groupId, 'group_call_ended', {
           from: socketId,
           groupId: data.groupId,
           type,
-          deviceType: type === 'screen' ? 2 : 1,
+          deviceType: getSessionDeviceType(type),
         });
       }
     });

@@ -1,4 +1,4 @@
-export type GroupSessionType = 'video' | 'screen';
+export type GroupSessionType = 'video' | 'audio' | 'screen';
 
 export type GroupSessionOwner = {
   id: number;
@@ -16,6 +16,7 @@ export type GroupSession = {
 
 export type GroupSessionState = {
   video: GroupSession | null;
+  audio: GroupSession | null;
   screen: GroupSession | null;
 };
 
@@ -60,11 +61,12 @@ export class GroupSessionService {
   }
 
   async getGroupState(groupId: number): Promise<GroupSessionState> {
-    const [video, screen] = await Promise.all([
+    const [video, audio, screen] = await Promise.all([
       this.get(groupId, 'video'),
+      this.get(groupId, 'audio'),
       this.get(groupId, 'screen'),
     ]);
-    return { video, screen };
+    return { video, audio, screen };
   }
 
   async end(groupId: number, type: GroupSessionType, userId: number) {
