@@ -48,14 +48,14 @@
       </div>
 
       <!-- Tab 切换 -->
-      <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="flex-1 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
+      <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="flex-1 min-h-0 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
         <!-- 联系人 -->
-        <n-tab-pane name="users" :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'" display-directive="show:lazy" class="flex flex-col h-full pt-0">
+        <n-tab-pane name="users" :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'" display-directive="show:lazy" class="flex flex-col h-full min-h-0 pt-0">
           <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between gap-2">
             <span>联系人 ({{ displayUsers.length }})</span>
             <span v-if="unread.privateTotal > 0" class="contact-unread-badge" aria-label="未读消息">{{ unread.privateTotal > 99 ? '99+' : unread.privateTotal }}</span>
           </div>
-          <n-scrollbar style="flex: 1; max-height: calc(100vh - 280px);">
+          <n-scrollbar class="flex-1 min-h-0">
             <ul class="p-3 space-y-2">
               <n-badge 
                 :offset="[-8, 8]" 
@@ -97,12 +97,12 @@
         </n-tab-pane>
 
         <!-- 我的群组 -->
-        <n-tab-pane name="groups" :tab="unread.groupTotal ? `我的群组 (${unread.groupTotal})` : '我的群组'" display-directive="show:lazy" class="flex flex-col h-full pt-0">
+        <n-tab-pane name="groups" :tab="unread.groupTotal ? `我的群组 (${unread.groupTotal})` : '我的群组'" display-directive="show:lazy" class="flex flex-col h-full min-h-0 pt-0">
           <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between">
             <span>我的群组 ({{ myGroups.length }})</span>
             <n-button size="tiny" @click="goToGroups">管理</n-button>
           </div>
-          <n-scrollbar style="flex: 1; max-height: calc(100vh - 280px);">
+          <n-scrollbar class="flex-1 min-h-0">
             <div class="p-3">
               <n-button block secondary @click="goToGroups" class="mb-3">
                 + 创建/管理群组

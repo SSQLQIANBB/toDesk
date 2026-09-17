@@ -221,6 +221,25 @@ test.describe('响应式布局', () => {
     expect(badgeBox!.x).toBeGreaterThan(headerBox!.x + headerBox!.width / 2);
   });
 
+  test('桌面联系人列表滚动区填满侧栏底部', async ({ page }) => {
+    await page.setViewportSize({ width: 915, height: 629 });
+    await preparePage(page);
+    await page.goto('/remote');
+
+    const sidebar = page.locator('.remote-sidebar');
+    const scrollbar = page.locator('.n-tab-pane:visible .n-scrollbar');
+    await expect(sidebar).toBeVisible();
+    await expect(scrollbar).toBeVisible();
+
+    const sidebarBox = await sidebar.boundingBox();
+    const scrollbarBox = await scrollbar.boundingBox();
+    expect(sidebarBox).not.toBeNull();
+    expect(scrollbarBox).not.toBeNull();
+    expect(Math.abs(
+      scrollbarBox!.y + scrollbarBox!.height - sidebarBox!.y - sidebarBox!.height,
+    )).toBeLessThanOrEqual(1);
+  });
+
   test('标注工具栏默认贴近视口底部，可拖动到不遮挡画面的位置', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await preparePage(page);
