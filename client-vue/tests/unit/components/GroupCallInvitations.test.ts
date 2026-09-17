@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 describe('群组通话全局邀请', () => {
-  it.each(['video', 'screen'])('在其他页面收到 %s 邀请，接受后进入对应会话', type => {
+  it.each(['video', 'audio', 'screen'])('在其他页面收到 %s 邀请，接受后进入对应会话', type => {
     const wrapper = mount(GroupCallInvitations);
     mocks.handlers.get('group_call_started')!({ ...session, type });
     expect(mocks.info).toHaveBeenCalledOnce();

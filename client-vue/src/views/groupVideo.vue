@@ -31,7 +31,7 @@
         </n-tooltip>
 
         <!-- 摄像头控制 -->
-        <n-tooltip>
+        <n-tooltip v-if="!isAudioCall">
           <template #trigger>
             <n-button
               circle
@@ -48,12 +48,14 @@
 
         <!-- 虚拟背景 -->
         <VirtualBackground
+          v-if="!isAudioCall"
           :stream="originalLocalStream"
           @stream-updated="handleVirtualBGUpdate"
         />
 
         <!-- 录制功能 -->
         <MediaRecorder
+          v-if="!isAudioCall"
           :stream="localStream"
           @recording-start="handleRecordingStart"
           @recording-stop="handleRecordingStop"
@@ -92,7 +94,7 @@
               <SpeakingIndicator :stream="localStream" :muted="isMicMuted" />
             </span>
           </div>
-          <div v-if="isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
+          <div v-if="isAudioCall || isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
             <n-avatar :size="80" :src="currentUser?.avatar || undefined">
               <span v-if="!currentUser?.avatar">{{ currentUser?.nickname?.charAt(0) || currentUser?.username?.charAt(0) }}</span>
             </n-avatar>
@@ -115,7 +117,7 @@
               <SpeakingIndicator :stream="peer.stream" />
             </span>
           </div>
-          <div v-if="peer.isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
+          <div v-if="isAudioCall || peer.isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
             <n-avatar :size="80" :src="peer.user?.avatar || undefined">
               <span v-if="!peer.user?.avatar">{{ peer.user?.nickname?.charAt(0) || peer.user?.username?.charAt(0) }}</span>
             </n-avatar>
@@ -205,6 +207,9 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+const isAudioCall = computed(() => route.name === 'GroupAudio');
+const sessionType = computed(() => isAudioCall.value ? 'audio' as const : 'video' as const);
+const sessionDeviceType = computed(() => isAudioCall.value ? 3 : 1);
 const message = useMessage();
 const authStore = useAuthStore();
 const { currentUser } = storeToRefs(authStore);
@@ -226,11 +231,11 @@ const remotePeers = computed(() => peerRegistry.values().map(peer => ({
 })));
 
 const isMicMuted = ref(false);
-const isCameraOff = ref(false);
+const isCameraOff = ref(isAudioCall.value);
 const showMemberControl = ref(false);
 const participantUserIds = computed(() => {
   participantState.version.value;
-  return participantState.userIds(groupId.value, 'video');
+  return participantState.userIds(groupId.value, sessionType.value);
 });
 
 const localStream = ref<MediaStream | null>(null);
@@ -278,7 +283,9 @@ async function loadGroupDetail() {
 async function initLocalStream() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 24, max: 30 } },
+      video: isAudioCall.value
+        ? false
+        : { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 24, max: 30 } },
       audio: true,
     });
 
@@ -329,7 +336,7 @@ function initSocket() {
       if (!ready) return;
       socket.value?.emit('group_call_start', {
         groupId: groupId.value,
-        deviceType: 1,
+        deviceType: sessionDeviceType.value,
       });
     },
     { immediate: true },
@@ -394,7 +401,7 @@ function createPeerConnection(member: RemoteMember) {
         to: member.socketId,
         candidate: event.candidate,
         groupId: groupId.value,
-        deviceType: 1,
+        deviceType: sessionDeviceType.value,
       });
     }
   };
@@ -410,14 +417,14 @@ async function createAndSendOffer(member: RemoteMember) {
   socket.value?.emit('group_webrtc_offer', {
     to: member.socketId,
     offer,
-    deviceType: 1,
+    deviceType: sessionDeviceType.value,
     groupId: groupId.value,
   });
 }
 
 // 处理 offer
 async function handleOffer(data: any) {
-  if (data.groupId !== groupId.value || data.deviceType !== 1 || !data.fromUser) return;
+  if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value || !data.fromUser) return;
   // 如果连接不存在，创建新的
   const peer = peerRegistry.upsert({ ...data.fromUser, socketId: data.from });
   const pc = peer.connection as RTCPeerConnection;
@@ -428,14 +435,14 @@ async function handleOffer(data: any) {
   socket.value?.emit('group_webrtc_answer', {
     to: data.from,
     answer,
-    deviceType: 1,
+    deviceType: sessionDeviceType.value,
     groupId: groupId.value,
   });
 }
 
 // 处理 answer
 async function handleAnswer(data: any) {
-  if (data.groupId !== groupId.value || data.deviceType !== 1) return;
+  if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value) return;
   const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) {
     await pc.setRemoteDescription(data.answer);
@@ -444,7 +451,7 @@ async function handleAnswer(data: any) {
 
 // 处理 ICE 候选
 async function handleIceCandidate(data: any) {
-  if (data.groupId !== groupId.value || data.deviceType !== 1) return;
+  if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value) return;
   const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) {
     await pc.addIceCandidate(data.candidate);
@@ -456,18 +463,19 @@ function findPeerBySocket(socketId: string) {
 }
 
 function handleCallState(data: any) {
-  if (data.groupId !== groupId.value || !data.sessions.video || joinedCall) return;
+  const session = data.sessions[sessionType.value];
+  if (data.groupId !== groupId.value || !session || joinedCall) return;
   participantState.setChannel(
     groupId.value,
-    'video',
-    data.sessions.video.channelId,
+    sessionType.value,
+    session.channelId,
   );
   joinedCall = true;
-  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 1 });
+  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: sessionDeviceType.value });
 }
 
 function handleCallMembers(data: any) {
-  if (data.groupId !== groupId.value || data.type !== 'video') return;
+  if (data.groupId !== groupId.value || data.type !== sessionType.value) return;
   data.members.forEach((member: RemoteMember) => {
     if (member.id !== currentUser.value?.id) {
       peerRegistry.upsert(member);
@@ -477,7 +485,7 @@ function handleCallMembers(data: any) {
 }
 
 async function handleCallMemberJoined(data: any) {
-  if (data.groupId !== groupId.value || data.type !== 'video') return;
+  if (data.groupId !== groupId.value || data.type !== sessionType.value) return;
   if (data.member.id === currentUser.value?.id) return;
   mergeMemberSocket(data.member);
   // 只有房间中的现有成员向新成员发 offer，避免双方同时协商。
@@ -485,30 +493,30 @@ async function handleCallMemberJoined(data: any) {
 }
 
 function handleCallMemberLeft(data: any) {
-  if (data.groupId !== groupId.value || data.type !== 'video' || !data.userId) return;
+  if (data.groupId !== groupId.value || data.type !== sessionType.value || !data.userId) return;
   peerRegistry.remove(data.userId, data.socketId);
 }
 
 function handleCallPresence(data: ParticipantSnapshot) {
-  if (data.groupId !== groupId.value || data.type !== 'video') return;
+  if (data.groupId !== groupId.value || data.type !== sessionType.value) return;
   participantState.apply(data);
 }
 
 function handleCallEnded(data: any) {
-  if (data.groupId !== groupId.value || data.deviceType !== 1) return;
+  if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value) return;
   joinedCall = false;
-  participantState.clear(groupId.value, 'video');
+  participantState.clear(groupId.value, sessionType.value);
 }
 
 function handleSocketDisconnect() {
   joinedCall = false;
-  participantState.clear(groupId.value, 'video');
+  participantState.clear(groupId.value, sessionType.value);
   peerRegistry.clear();
 }
 
 function isMemberParticipating(userId: number) {
   participantState.version.value;
-  return participantState.isParticipating(groupId.value, 'video', userId);
+  return participantState.isParticipating(groupId.value, sessionType.value, userId);
 }
 
 function mergeMemberSocket(member: RemoteMember) {
@@ -594,13 +602,13 @@ function cleanupCall(endOwnedSession: boolean) {
 
   // 关闭所有对等连接
   peerRegistry.clear();
-  participantState.clear(groupId.value, 'video');
+  participantState.clear(groupId.value, sessionType.value);
 
   // 通知服务器
-  if (endOwnedSession && groupSessionState.getSession(groupId.value, 'video')?.ownerUserId === currentUser.value?.id) {
-    socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 1 });
+  if (endOwnedSession && groupSessionState.getSession(groupId.value, sessionType.value)?.ownerUserId === currentUser.value?.id) {
+    socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: sessionDeviceType.value });
   }
-  socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: 1 });
+  socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: sessionDeviceType.value });
   stopAuthenticatedWatch?.();
   stopAuthenticatedWatch = null;
   unbindSocketEvents();

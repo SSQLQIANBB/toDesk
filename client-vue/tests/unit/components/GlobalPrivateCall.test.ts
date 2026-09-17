@@ -127,7 +127,7 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     wrapper.unmount();
   });
 
-  it.each([0, 1])('在任意页面收到类型 %s 并直接接听，回复实际来电者', async type => {
+  it.each([0, 1, 2])('在任意页面收到类型 %s 并直接接听，回复实际来电者', async type => {
     const wrapper = render();
     request(type);
     await nextTick();
@@ -139,7 +139,7 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     expect(mocks.stopRingtone).toHaveBeenCalledWith('private:alice');
     expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', { to: { socketId: 'alice' }, accepted: true });
     expect(mocks.getDisplayMedia).not.toHaveBeenCalled();
-    expect(mocks.getUserMedia).toHaveBeenCalledTimes(type === 0 ? 1 : 0);
+    expect(mocks.getUserMedia).toHaveBeenCalledTimes(type === 1 ? 0 : 1);
     wrapper.unmount();
   });
   it('拒绝不申请媒体权限，且释放忙碌状态', async () => {

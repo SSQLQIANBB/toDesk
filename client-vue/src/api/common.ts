@@ -5,10 +5,10 @@ import { request } from '@/utils/request';
 // router.get('/:fileId/download', authMiddleware, fileController.downloadFile);
 // router.delete('/:fileId', authMiddleware, fileController.deleteFile);
 
-interface FileInfo {
+export interface FileInfo {
   id: string;
   originalName: string;
-  fileSize: Number;
+  fileSize: number;
   mimeType: string;
   fileUrl: string;
   createdAt: string;

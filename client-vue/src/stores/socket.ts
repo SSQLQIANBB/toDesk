@@ -87,12 +87,13 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function resolveSessionType(data: { type?: GroupSessionType; deviceType?: number }) {
+    if (data.deviceType === 3) return data.type || 'audio';
     return data.type || (data.deviceType === 2 ? 'screen' : 'video');
   }
 
   function handleGroupCallState(data: {
     groupId: number;
-    sessions: { video: GroupSession | null; screen: GroupSession | null };
+    sessions: { video: GroupSession | null; audio: GroupSession | null; screen: GroupSession | null };
   }) {
     groupSessionState.applySnapshot(data.groupId, data.sessions);
   }

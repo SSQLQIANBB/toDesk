@@ -42,7 +42,7 @@ function handleStarted(data: GroupSession & {
   user?: { nickname?: string; username?: string };
 }) {
   if (!authStore.currentUser || data.ownerUserId === authStore.currentUser.id) return;
-  const type = data.type || (data.deviceType === 2 ? 'screen' : 'video');
+  const type = data.type || (data.deviceType === 2 ? 'screen' : data.deviceType === 3 ? 'audio' : 'video');
   const path = `/group-${type}/${data.groupId}`;
   if (router.currentRoute.value.path === path) return;
   const key = `${data.groupId}:${type}`;
@@ -51,7 +51,7 @@ function handleStarted(data: GroupSession & {
   seen.add(eventId);
   pending.get(key)?.destroy();
   stopRingtone(key);
-  const label = type === 'screen' ? '屏幕共享' : '视频通话';
+  const label = type === 'screen' ? '屏幕共享' : type === 'audio' ? '语音通话' : '视频通话';
   ringtoneKeys.set(key, eventId);
   pending.set(key, dialog.info({
     title: `群组${label}邀请`,
@@ -67,11 +67,11 @@ function handleStarted(data: GroupSession & {
     maskClosable: false,
   }));
   notificationService.startCallRingtone(`group:${eventId}`);
-  if (document.hidden) void notificationService.showCall(data.user?.nickname || data.user?.username || '群成员', type === 'screen' ? 'screen' : 'video', undefined, () => window.focus());
+  if (document.hidden) void notificationService.showCall(data.user?.nickname || data.user?.username || '群成员', type, undefined, () => window.focus());
 }
 
 function handleEnded(data: { groupId: number; type?: string; deviceType?: number }) {
-  const key = `${data.groupId}:${data.type || (data.deviceType === 2 ? 'screen' : 'video')}`;
+  const key = `${data.groupId}:${data.type || (data.deviceType === 2 ? 'screen' : data.deviceType === 3 ? 'audio' : 'video')}`;
   pending.get(key)?.destroy();
   pending.delete(key);
   stopRingtone(key);

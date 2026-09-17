@@ -161,9 +161,21 @@
         </header>
         <n-scrollbar class="grow p-4" ref="scrollbarRef">
           <ul class="space-y-3">
-            <li class="flex flex-col w-full" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="index">
+            <li class="flex flex-col w-full" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="msg.id || msg.clientMessageId || index">
               <span class="text-xs text-gray-400 mb-1">{{msg.time}}</span>
-              <div class="p-3 rounded-lg max-w-[88%] sm:max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md"
+              <CallHistoryMessage
+                v-if="msg.messageType === 'call' && msg.call"
+                :record="msg.call"
+                :is-mine="msg.fromUserId === authUser?.id"
+              />
+              <div
+                v-else-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
+                class="p-2 rounded-lg max-w-[88%] sm:max-w-[60%] shadow-sm"
+                :class="msg.fromUserId === authUser?.id ? 'bg-blue-50' : 'bg-green-50'"
+              >
+                <ChatMediaMessage :type="msg.messageType" :media="msg.media" />
+              </div>
+              <div v-else class="p-3 rounded-lg max-w-[88%] sm:max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md"
                    :class="msg.fromUserId === authUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
                 {{ msg.message }}
               </div>
@@ -176,8 +188,11 @@
         
         <ToolBar :contact-user="contactUser" />
 
-        <div class="h-32 border-t bg-white">
-          <TextMsg @send="sendMsg" />
+        <div class="border-t bg-white px-4 pb-3">
+          <ChatMediaComposer @send="sendMedia" />
+          <div class="h-28">
+            <TextMsg @send="sendMsg" />
+          </div>
         </div>
       </div>
       <div class="h-full w-full flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-50 to-slate-100" v-else>
@@ -188,7 +203,7 @@
           </template>
           <template #extra>
             <div class="text-sm text-gray-500 mt-2">
-              您可以发送消息、进行视频通话或屏幕共享
+              您可以发送文字、图片、语音片段，或发起语音/视频通话和屏幕共享
             </div>
           </template>
         </n-empty>
@@ -208,10 +223,13 @@ import { getUserList, type User as BasicUser } from '@/api/auth';
 import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups, type Group } from '@/api/group';
-import { getOfflineMessages, getPrivateMessages, markMessagesAsRead } from '@/api/message';
+import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type CallHistoryRecord, type ChatMediaPayload } from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
+import CallHistoryMessage from '@/components/CallHistoryMessage.vue';
+import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
+import ChatMediaMessage from '@/components/ChatMediaMessage.vue';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
 import { mergeContactPresence } from '@/services/contactPresence';
@@ -243,6 +261,9 @@ type MessageInfo = {
   fromUserId: number;
   toUserId?: number;
   message: string;
+  messageType?: 'text' | 'call' | 'image' | 'voice';
+  call?: CallHistoryRecord;
+  media?: ChatMediaPayload;
 }
 
 const message = useMessage();
@@ -314,10 +335,13 @@ function handlePrivateMessage(data: any) {
 
   const senderId = Number(data.fromUserId);
   setMessage(senderId, {
+    id: data.id,
     from: data.from,
     fromUserId: senderId,
     toUserId: data.toUserId,
     message: data.message,
+    messageType: data.messageType,
+    media: data.media,
     time: data.time || new Date().toLocaleString(),
   });
 
@@ -330,18 +354,44 @@ function handlePrivateMessage(data: any) {
 
 }
 
+function handlePrivateCallHistory(data: any) {
+  if (!authUser.value) return;
+  const contactId = data.fromUserId === authUser.value.id
+    ? Number(data.toUserId)
+    : Number(data.fromUserId);
+  if (!contactId) return;
+
+  setMessage(contactId, {
+    id: data.id,
+    fromUserId: Number(data.fromUserId),
+    toUserId: Number(data.toUserId),
+    message: data.message,
+    messageType: data.messageType,
+    call: data.call,
+    time: data.time || new Date(data.createdAt).toLocaleString(),
+  });
+
+  if (contactId === contactUser.value?.id) {
+    currentMessageList.value = privateMessageMap.get(contactId) || [];
+    scrollToBottom();
+  }
+}
+
 function setMessage(id: number, data: MessageInfo) {
   const list = privateMessageMap.get(id) || [];
+  if (data.id && list.some(message => message.id === data.id)) return;
 
   privateMessageMap.set(id, [...list, data])
 }
 
 function bindPageSocketEvents(target: Socket) {
   target.on('private_message', handlePrivateMessage);
+  target.on('private_call_history', handlePrivateCallHistory);
 }
 
 function unbindPageSocketEvents(target: Socket | null | undefined) {
   target?.off('private_message', handlePrivateMessage);
+  target?.off('private_call_history', handlePrivateCallHistory);
 }
 
 
@@ -356,6 +406,10 @@ async function selectContact(user: User) {
       fromUserId: msg.fromUserId,
       toUserId: msg.toUserId,
       message: msg.message,
+      messageType: msg.messageType,
+      call: msg.call,
+      media: msg.media,
+      id: msg.id,
       time: new Date(msg.createdAt).toLocaleString(),
     }));
     privateMessageMap.set(user.id, history);
@@ -389,12 +443,35 @@ function sendMsg(v: string) {
   scrollToBottom();
 }
 
+function sendMedia(payload: { type: 'image' | 'voice'; media: ChatMediaPayload }) {
+  if (!contactUser.value || !authUser.value) return;
+  const msg: MessageInfo = {
+    clientMessageId: crypto.randomUUID(),
+    sendStatus: 'pending',
+    from: socket.value?.id,
+    fromUserId: authUser.value.id,
+    toUserId: contactUser.value.id,
+    message: payload.type === 'image' ? '[图片]' : `[语音] ${payload.media.durationSeconds}秒`,
+    messageType: payload.type,
+    media: payload.media,
+    time: new Date().toLocaleString(),
+  };
+  setMessage(contactUser.value.id, msg);
+  currentMessageList.value = privateMessageMap.get(contactUser.value.id) || [];
+  void retryPrivateMessage(msg);
+  scrollToBottom();
+}
+
 async function retryPrivateMessage(msg: MessageInfo) {
   if (!msg.toUserId) return;
   msg.sendStatus = 'pending';
   const target = contactUser.value?.id === msg.toUserId ? contactUser.value : { id: msg.toUserId };
   const result = await sendReliableMessage(socket.value, 'private_message', {
-    to: target, message: msg.message, clientMessageId: msg.clientMessageId,
+    to: target,
+    message: msg.message,
+    messageType: msg.messageType,
+    media: msg.media,
+    clientMessageId: msg.clientMessageId,
   });
   if (result.ok) { msg.id = result.id; msg.sendStatus = 'sent'; }
   else msg.sendStatus = 'failed';

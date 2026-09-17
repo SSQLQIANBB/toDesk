@@ -65,6 +65,9 @@
           </template>
           {{ groupSessionState.getButtonLabel(groupId, 'video') }}
         </n-button>
+        <n-button block secondary @click="handleAudioCall">
+          {{ groupSessionState.getButtonLabel(groupId, 'audio') }}
+        </n-button>
         <n-button block secondary @click="handleScreenShare">
           <template #icon>
             <n-icon :component="ScreenShareFilled" />
@@ -112,7 +115,13 @@
               class="flex flex-col"
               :class="msg.isMine ? 'items-end' : 'items-start'"
             >
-              <div class="flex items-end gap-2 max-w-[88%] sm:max-w-[70%]" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
+              <span v-if="msg.messageType === 'call' && msg.call" class="text-xs text-gray-400 mb-1">{{ msg.time }}</span>
+              <CallHistoryMessage
+                v-if="msg.messageType === 'call' && msg.call"
+                :record="msg.call"
+                :is-mine="msg.isMine"
+              />
+              <div v-else class="flex items-end gap-2 max-w-[88%] sm:max-w-[70%]" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
                 <n-avatar :size="32" :src="msg.user?.avatar || undefined">
                   <span v-if="!msg.user?.avatar">{{ msg.user?.nickname?.charAt(0) || msg.user?.username?.charAt(0) || '?' }}</span>
                 </n-avatar>
@@ -129,7 +138,12 @@
                       ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-br-none' 
                       : 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800 rounded-bl-none'"
                   >
-                    {{ msg.message }}
+                    <ChatMediaMessage
+                      v-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
+                      :type="msg.messageType"
+                      :media="msg.media"
+                    />
+                    <template v-else>{{ msg.message }}</template>
                   </div>
                   <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="text-xs mt-1 text-gray-500" @click="msg.sendStatus === 'failed' && retryGroupMessage(msg)">
                     {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
@@ -149,6 +163,7 @@
 
         <!-- 输入框 -->
         <footer class="p-4 border-t bg-gray-50">
+          <ChatMediaComposer :disabled="!canSpeak" :group-id="groupId" @send="sendGroupMedia" />
           <div class="flex gap-2 sm:gap-3 min-w-0">
             <n-input
               v-model:value="inputMessage"
@@ -211,6 +226,9 @@
                 </template>
                 {{ groupSessionState.getButtonLabel(groupId, 'video') }}
               </n-button>
+              <n-button block secondary @click="handleAudioCall">
+                {{ groupSessionState.getButtonLabel(groupId, 'audio') }}
+              </n-button>
               <n-button block secondary @click="handleScreenShare">
                 <template #icon>
                   <n-icon :component="ScreenShareFilled" />
@@ -236,9 +254,12 @@ import { storeToRefs } from 'pinia';
 import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
-import { getGroupMessages } from '@/api/message';
+import { getGroupMessages, type ChatMediaPayload } from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
 import { groupSessionState } from '@/services/groupSessionState';
+import CallHistoryMessage from '@/components/CallHistoryMessage.vue';
+import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
+import ChatMediaMessage from '@/components/ChatMediaMessage.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -298,6 +319,9 @@ async function loadGroupHistory() {
       time: new Date(msg.createdAt).toLocaleString(),
       user: msg.sender,
       isMine: msg.userId === currentUser.value?.id,
+      messageType: msg.messageType,
+      call: msg.call,
+      media: msg.media,
     }));
     scrollToBottom();
   } catch (error: any) {
@@ -349,7 +373,10 @@ function handleGroupMessage(data: any) {
     message: data.message,
     time: data.time,
     user: data.user,
-    isMine: false,
+    isMine: data.userId === currentUser.value?.id,
+    messageType: data.messageType,
+    call: data.call,
+    media: data.media,
   });
   scrollToBottom();
 }
@@ -383,6 +410,28 @@ function handleSend() {
   scrollToBottom();
 }
 
+function sendGroupMedia(payload: { type: 'image' | 'voice'; media: ChatMediaPayload }) {
+  if (!canSpeak.value) { message.warning('您已被禁言'); return; }
+  const msg = {
+    clientMessageId: crypto.randomUUID(),
+    message: payload.type === 'image' ? '[图片]' : `[语音] ${payload.media.durationSeconds}秒`,
+    messageType: payload.type,
+    media: payload.media,
+    time: new Date().toLocaleString(),
+    user: {
+      id: currentUser.value?.id,
+      username: currentUser.value?.username,
+      nickname: currentUser.value?.nickname,
+      avatar: currentUser.value?.avatar,
+    },
+    isMine: true,
+    sendStatus: 'pending',
+  };
+  messages.value.push(msg);
+  void retryGroupMessage(msg);
+  scrollToBottom();
+}
+
 // 滚动到底部
 function scrollToBottom() {
   nextTick(() => {
@@ -392,7 +441,11 @@ function scrollToBottom() {
 
 // 发起视频通话
 function handleVideoCall() {
-  router.push(`/group-video/${groupId.value}`);
+  void router.push(`/group-video/${groupId.value}`);
+}
+
+function handleAudioCall() {
+  void router.push(`/group-audio/${groupId.value}`);
 }
 
 // 发起屏幕共享
@@ -419,7 +472,11 @@ function goBack() {
 async function retryGroupMessage(msg: any) {
   msg.sendStatus = 'pending';
   const result = await sendReliableMessage(socket.value, 'group_message', {
-    groupId: groupId.value, message: msg.message, clientMessageId: msg.clientMessageId,
+    groupId: groupId.value,
+    message: msg.message,
+    messageType: msg.messageType,
+    media: msg.media,
+    clientMessageId: msg.clientMessageId,
   });
   if (result.ok) { msg.id = result.id; msg.sendStatus = 'sent'; }
   else msg.sendStatus = 'failed';

@@ -43,6 +43,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    name: 'GroupAudio',
+    path: '/group-audio/:id',
+    component: () => import('@/views/groupVideo.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     name: 'GroupScreen',
     path: '/group-screen/:id',
     component: () => import('@/views/groupScreen.vue'),

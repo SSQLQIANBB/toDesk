@@ -1,6 +1,20 @@
 import { http } from '@/utils/request';
 import type { User } from './auth';
 
+export interface CallHistoryRecord {
+  type: 'video' | 'audio' | 'screen';
+  status: 'completed' | 'rejected' | 'cancelled' | 'failed';
+  durationSeconds: number;
+}
+
+export interface ChatMediaPayload {
+  url: string;
+  mimeType: string;
+  fileName?: string;
+  fileSize?: number;
+  durationSeconds?: number;
+}
+
 export interface OfflineMessage {
   id: number;
   fromUserId: number;
@@ -9,6 +23,9 @@ export interface OfflineMessage {
   isRead: boolean;
   createdAt: string;
   sender: User;
+  messageType?: 'text' | 'call' | 'image' | 'voice';
+  call?: CallHistoryRecord;
+  media?: ChatMediaPayload;
 }
 
 export interface PrivateMessage extends OfflineMessage {
@@ -20,7 +37,9 @@ export interface GroupHistoryMessage {
   groupId: number;
   userId: number;
   message: string;
-  messageType: 'text' | 'image' | 'file' | 'system';
+  messageType: 'text' | 'image' | 'voice' | 'file' | 'system' | 'call';
+  call?: CallHistoryRecord;
+  media?: ChatMediaPayload;
   createdAt: string;
   sender: User;
 }

@@ -19,6 +19,12 @@ const screenSession: GroupSession = {
   channelId: 'group:7:screen',
 };
 
+const audioSession: GroupSession = {
+  ...videoSession,
+  type: 'audio',
+  channelId: 'group:7:audio',
+};
+
 describe('groupSessionState', () => {
   it('视频开始后其他成员按钮显示进入视频', () => {
     const state = createGroupSessionState();
@@ -34,9 +40,15 @@ describe('groupSessionState', () => {
     expect(state.getButtonLabel(7, 'screen')).toBe('进入共享');
   });
 
+  it('语音通话开始后其他成员按钮显示进入语音', () => {
+    const state = createGroupSessionState();
+    state.applyStarted(audioSession);
+    expect(state.getButtonLabel(7, 'audio')).toBe('进入语音');
+  });
+
   it('后进入群组的成员可从服务端快照恢复状态，结束后按钮恢复', () => {
     const state = createGroupSessionState();
-    state.applySnapshot(7, { video: videoSession, screen: screenSession });
+    state.applySnapshot(7, { video: videoSession, audio: audioSession, screen: screenSession });
 
     expect(state.getButtonLabel(7, 'video')).toBe('进入视频');
     expect(state.getButtonLabel(7, 'screen')).toBe('进入共享');
@@ -50,7 +62,7 @@ describe('groupSessionState', () => {
 
   it('删除群组时清理该群组的视频和共享状态，不影响其他群组', () => {
     const state = createGroupSessionState();
-    state.applySnapshot(7, { video: videoSession, screen: screenSession });
+    state.applySnapshot(7, { video: videoSession, audio: audioSession, screen: screenSession });
     state.applyStarted({
       ...videoSession,
       groupId: 8,

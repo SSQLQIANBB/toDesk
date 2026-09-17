@@ -1,6 +1,6 @@
 import { readonly, ref } from 'vue';
 
-export type MediaType = 'video' | 'screen';
+export type MediaType = 'video' | 'audio' | 'screen';
 
 export type ParticipantSnapshot = {
   groupId: number;

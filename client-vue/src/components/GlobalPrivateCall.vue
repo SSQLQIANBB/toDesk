@@ -7,11 +7,11 @@
     :style="floatingStyle"
     role="dialog"
     :aria-modal="isFullscreen"
-    :aria-label="connectionType === DEVICE_TYPE.SCREEN ? '屏幕共享' : '视频通话'"
+    :aria-label="callTitle"
   >
     <header class="private-call__header" @pointerdown="beginFloatingDrag">
       <div class="private-call__title">
-        <strong>{{ connectionType === DEVICE_TYPE.SCREEN ? '屏幕共享' : '视频通话' }} · {{ contactUserName }}</strong>
+        <strong>{{ callTitle }} · {{ contactUserName }}</strong>
         <span class="private-call__status">{{ connectionStatus === 'connected' ? '已连接' : '连接中' }}</span>
       </div>
       <div class="private-call__actions">
@@ -21,16 +21,24 @@
         <n-button size="small" type="error" @click="hangup">挂断</n-button>
       </div>
     </header>
-    <div v-if="connectionType === DEVICE_TYPE.CAMERA" class="private-call__controls">
+    <div v-if="connectionType === DEVICE_TYPE.CAMERA || connectionType === DEVICE_TYPE.AUDIO" class="private-call__controls">
       <n-button size="small" secondary :aria-pressed="isMicrophoneMuted" @click="toggleMicrophone">
         {{ isMicrophoneMuted ? '开启麦克风' : '静音' }}
       </n-button>
-      <n-button size="small" secondary :aria-pressed="isCameraOff" @click="toggleCamera">
+      <n-button v-if="connectionType === DEVICE_TYPE.CAMERA" size="small" secondary :aria-pressed="isCameraOff" @click="toggleCamera">
         {{ isCameraOff ? '开启摄像头' : '关闭摄像头' }}
       </n-button>
     </div>
     <div class="private-call__stage">
-      <div class="private-call__remote" :class="{ 'private-call__video--local': isLocalMain }" @pointerdown="beginFloatingDrag">
+      <div v-if="connectionType === DEVICE_TYPE.AUDIO" class="private-call__audio">
+        <n-avatar :size="96" :src="activePeer?.avatar || undefined">
+          {{ contactUserName.charAt(0) }}
+        </n-avatar>
+        <strong>{{ contactUserName }}</strong>
+        <span>{{ isConnected ? '语音通话中' : '等待对方接听…' }}</span>
+        <audio ref="audioRef" autoplay />
+      </div>
+      <div v-else class="private-call__remote" :class="{ 'private-call__video--local': isLocalMain }" @pointerdown="beginFloatingDrag">
         <div v-if="!mainStreamReady && !isLocalMain" class="private-call__waiting">
           {{ isConnected ? '对方已连接，等待画面…' : '等待对方连接…' }}
         </div>
@@ -69,7 +77,7 @@
       </n-icon>
       <p class="text-lg">
         <span class="font-bold">{{ incomingCallFrom }}</span>
-        {{ incomingCallType === DEVICE_TYPE.SCREEN ? '请求屏幕共享' : '发起视频通话' }}
+        {{ incomingCallTitle }}
       </p>
     </div>
   </n-modal>
@@ -83,12 +91,13 @@ import { usePrivateCallStore } from '@/stores/privateCall';
 import notificationService from '@/services/notificationService';
 import { cameraConstraints, screenRecordConstraints } from '@/views/remoteShare/components/config';
 import { limitVideoBitrate } from '@/services/mediaBitrate';
-import { useMessage, NModal, NButton, NIcon } from 'naive-ui';
+import { useMessage, NModal, NButton, NIcon, NAvatar } from 'naive-ui';
 
 
 enum DEVICE_TYPE {
   CAMERA = 0,
   SCREEN = 1,
+  AUDIO = 2,
 }
 
 enum RTC_TYPE {
@@ -129,6 +138,10 @@ const isCameraOff = ref(false);
 const mainStreamReady = ref(false);
 const smallStreamReady = ref(false);
 const isLocalMain = computed(() => connectionType.value === DEVICE_TYPE.SCREEN ? isScreenSender.value : showLocalMain.value);
+const callTitle = computed(() => {
+  if (connectionType.value === DEVICE_TYPE.SCREEN) return '屏幕共享';
+  return connectionType.value === DEVICE_TYPE.AUDIO ? '语音通话' : '视频通话';
+});
 const floatingPosition = ref<{ left: number; top: number } | null>(null);
 const floatingStyle = computed(() => !isFullscreen.value && floatingPosition.value
   ? { left: `${floatingPosition.value.left}px`, top: `${floatingPosition.value.top}px`, right: 'auto', bottom: 'auto' }
@@ -146,12 +159,17 @@ let currentStream: MediaStream | null = null;
 let remoteStream: MediaStream | null = null;
 const videoRef = ref<HTMLVideoElement | null>(null)
 const videoSelfRef = ref<HTMLVideoElement | null>(null)
+const audioRef = ref<HTMLAudioElement | null>(null)
 
 const contactUserName = computed(() => {
   return activePeer.value?.nickname || activePeer.value?.username || '对方';
 });
+const incomingCallTitle = computed(() => {
+  if (incomingCallType.value === DEVICE_TYPE.SCREEN) return '请求屏幕共享';
+  return incomingCallType.value === DEVICE_TYPE.AUDIO ? '发起语音通话' : '发起视频通话';
+});
 
-function attachVideo(element: HTMLVideoElement | null, stream: MediaStream | null, muted: boolean) {
+function attachVideo(element: HTMLMediaElement | null, stream: MediaStream | null, muted: boolean) {
   if (!element) return;
   if (element.srcObject !== stream) element.srcObject = stream;
   element.muted = muted;
@@ -161,6 +179,11 @@ function attachVideo(element: HTMLVideoElement | null, stream: MediaStream | nul
 }
 
 function syncVideos() {
+  if (connectionType.value === DEVICE_TYPE.AUDIO) {
+    attachVideo(audioRef.value, remoteStream, false);
+    mainStreamReady.value = !!remoteStream?.getAudioTracks().length;
+    return;
+  }
   const main = isLocalMain.value ? currentStream : remoteStream;
   const small = isLocalMain.value ? remoteStream : currentStream;
   attachVideo(videoRef.value, main, isLocalMain.value);
@@ -281,6 +304,8 @@ async function initDeviceMedia(type = DEVICE_TYPE.CAMERA) {
   try {
     if (type === DEVICE_TYPE.CAMERA) {
       currentStream = await mediaDevices.getUserMedia(cameraConstraints);
+    } else if (type === DEVICE_TYPE.AUDIO) {
+      currentStream = await mediaDevices.getUserMedia({ audio: true, video: false });
     } else {
       currentStream = await mediaDevices.getDisplayMedia(screenRecordConstraints);
 
@@ -312,6 +337,7 @@ function stopTrack() {
   if (videoSelfRef.value) {
     videoSelfRef.value.srcObject = null;
   }
+  if (audioRef.value) audioRef.value.srcObject = null;
   remoteStream = null;
 }
 
@@ -371,6 +397,9 @@ async function initRTC(type = RTC_TYPE.CALLER) {
         connectionStatus.value = 'connected';
         isConnected.value = true;
         isConnecting.value = false;
+        if (activePeer.value) {
+          socket.value?.emit('webrtc_call_connected', { to: activePeer.value });
+        }
         message.success('连接成功');
       } else if (peer?.connectionState === 'failed' || peer?.connectionState === 'disconnected') {
         connectionStatus.value = 'disconnected';
@@ -460,7 +489,7 @@ async function flushIce() {
 
 // 全局接收来电；回复始终发送给来电方，而不是聊天页选中的联系人。
 function handleIncomingCall(data: { from: string; deviceType: DEVICE_TYPE; user?: User }) {
-  if (data.deviceType !== DEVICE_TYPE.CAMERA && data.deviceType !== DEVICE_TYPE.SCREEN) return;
+  if (![DEVICE_TYPE.CAMERA, DEVICE_TYPE.SCREEN, DEVICE_TYPE.AUDIO].includes(data.deviceType)) return;
   if (activePeer.value || incomingCallShow.value) {
     if (activePeer.value?.socketId !== data.from) {
       socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false });
@@ -473,7 +502,10 @@ function handleIncomingCall(data: { from: string; deviceType: DEVICE_TYPE; user?
   incomingCallType.value = data.deviceType;
   incomingCallShow.value = true;
   notificationService.startCallRingtone(`private:${data.from}`);
-  if (document.hidden) void notificationService.showCall(incomingCallFrom.value, data.deviceType === DEVICE_TYPE.SCREEN ? 'screen' : 'video', data.user?.avatar, () => window.focus());
+  if (document.hidden) {
+    const type = data.deviceType === DEVICE_TYPE.SCREEN ? 'screen' : data.deviceType === DEVICE_TYPE.AUDIO ? 'audio' : 'video';
+    void notificationService.showCall(incomingCallFrom.value, type, data.user?.avatar, () => window.focus());
+  }
 }
 
 // 接听来电
@@ -490,7 +522,7 @@ async function acceptCall() {
 
     const attempt = generation;
     // 共享接收方只观看对方屏幕，无需选择自己的屏幕。
-    if (incomingCallType.value === DEVICE_TYPE.CAMERA) await initDeviceMedia(DEVICE_TYPE.CAMERA);
+    if (incomingCallType.value !== DEVICE_TYPE.SCREEN) await initDeviceMedia(incomingCallType.value);
     if (attempt !== generation) { stopTrack(); return; }
     await nextTick();
     syncVideos();
@@ -635,6 +667,9 @@ window.addEventListener('resize', clampFloatingPosition);
 .private-call__stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: clamp(8px, 2vw, 24px); }
 .private-call__remote { position: relative; width: 100%; height: 100%; min-height: 0; background: #020617; border-radius: 14px; overflow: hidden; }
 .private-call__remote video { width: 100%; height: 100%; object-fit: contain; }
+.private-call__audio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; width: 100%; height: 100%; color: #f8fafc; background: radial-gradient(circle at top, #253553, #0b1220 58%); }
+.private-call__audio strong { font-size: 22px; }
+.private-call__audio span { color: #94a3b8; }
 .private-call__self { position: absolute; right: clamp(16px, 3vw, 40px); bottom: clamp(20px, 4vw, 44px); width: clamp(130px, 20vw, 270px); aspect-ratio: 4 / 3; border: 2px solid #64748b; border-radius: 12px; overflow: hidden; background: #111827; box-shadow: 0 10px 30px #0008; cursor: pointer; }
 .private-call__self:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
 .private-call__self video { width: 100%; height: 100%; object-fit: cover; }

@@ -1,6 +1,6 @@
 import { reactive } from 'vue';
 
-export type GroupSessionType = 'video' | 'screen';
+export type GroupSessionType = 'video' | 'audio' | 'screen';
 
 export type GroupSession = {
   groupId: number;
@@ -13,6 +13,7 @@ export type GroupSession = {
 
 export type GroupSessionSnapshot = {
   video: GroupSession | null;
+  audio: GroupSession | null;
   screen: GroupSession | null;
 };
 
@@ -24,7 +25,7 @@ export function createGroupSessionState() {
   const sessions = reactive(new Map<string, GroupSession>());
 
   function applySnapshot(groupId: number, snapshot: GroupSessionSnapshot) {
-    for (const type of ['video', 'screen'] as const) {
+    for (const type of ['video', 'audio', 'screen'] as const) {
       const session = snapshot[type];
       if (session) {
         sessions.set(getKey(groupId, type), session);
@@ -48,13 +49,16 @@ export function createGroupSessionState() {
 
   function getButtonLabel(groupId: number, type: GroupSessionType) {
     if (getSession(groupId, type)) {
-      return type === 'video' ? '进入视频' : '进入共享';
+      if (type === 'video') return '进入视频';
+      return type === 'audio' ? '进入语音' : '进入共享';
     }
-    return type === 'video' ? '发起视频通话' : '发起屏幕共享';
+    if (type === 'video') return '发起视频通话';
+    return type === 'audio' ? '发起语音通话' : '发起屏幕共享';
   }
 
   function clearGroup(groupId: number) {
     sessions.delete(getKey(groupId, 'video'));
+    sessions.delete(getKey(groupId, 'audio'));
     sessions.delete(getKey(groupId, 'screen'));
   }
 
