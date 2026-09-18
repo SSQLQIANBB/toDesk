@@ -173,7 +173,12 @@
                 class="p-2 rounded-lg max-w-[88%] sm:max-w-[60%] shadow-sm"
                 :class="msg.fromUserId === authUser?.id ? 'bg-blue-50' : 'bg-green-50'"
               >
-                <ChatMediaMessage :type="msg.messageType" :media="msg.media" />
+                <ChatMediaMessage
+                  :type="msg.messageType"
+                  :media="msg.media"
+                  :is-mine="msg.fromUserId === authUser?.id"
+                  @loaded="scrollToBottom('auto')"
+                />
               </div>
               <div v-else class="p-3 rounded-lg max-w-[88%] sm:max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md"
                    :class="msg.fromUserId === authUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
@@ -415,12 +420,14 @@ async function selectContact(user: User) {
     }));
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
+    scrollToBottom('auto');
     const ids = res.messages.filter(msg => msg.fromUserId === user.id && !msg.isRead).map(msg => msg.id);
     if (ids.length) await markMessagesAsRead(ids);
     unread.readPrivate(user.id);
   } catch (error: any) {
     message.error('加载聊天记录失败: ' + error.message);
     currentMessageList.value = privateMessageMap.get(user.id) || []
+    scrollToBottom('auto');
   }
 }
 function sendMsg(v: string) {
@@ -482,9 +489,9 @@ async function retryPrivateMessage(msg: MessageInfo) {
 }
 
 // 滚动到底部
-function scrollToBottom() {
+function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
   nextTick(() => {
-    scrollbarRef.value?.scrollTo({ top: 999999, behavior: 'smooth' });
+    scrollbarRef.value?.scrollTo({ top: Number.MAX_SAFE_INTEGER, behavior });
   });
 }
 

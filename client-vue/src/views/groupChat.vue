@@ -142,6 +142,8 @@
                       v-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
                       :type="msg.messageType"
                       :media="msg.media"
+                      :is-mine="msg.isMine"
+                      @loaded="scrollToBottom('auto')"
                     />
                     <template v-else>{{ msg.message }}</template>
                   </div>
@@ -324,7 +326,7 @@ async function loadGroupHistory() {
       call: msg.call,
       media: msg.media,
     }));
-    scrollToBottom();
+    scrollToBottom('auto');
   } catch (error: any) {
     message.error('加载群聊记录失败: ' + error.message);
   }
@@ -434,9 +436,9 @@ function sendGroupMedia(payload: { type: 'image' | 'voice'; media: ChatMediaPayl
 }
 
 // 滚动到底部
-function scrollToBottom() {
+function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
   nextTick(() => {
-    scrollbarRef.value?.scrollTo({ top: 999999, behavior: 'smooth' });
+    scrollbarRef.value?.scrollTo({ top: Number.MAX_SAFE_INTEGER, behavior });
   });
 }
 

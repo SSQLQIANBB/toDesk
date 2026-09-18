@@ -35,31 +35,6 @@
           </div>
         </n-card>
 
-        <!-- 模糊背景 -->
-        <n-card
-          :class="['background-option', currentEffect === 'blur' && 'selected']"
-          size="small"
-          hoverable
-          @click="applyEffect('blur')"
-        >
-          <div class="option-content">
-            <div class="blur-preview"></div>
-            <n-text>模糊背景</n-text>
-          </div>
-        </n-card>
-
-        <!-- 模糊强度 -->
-        <n-space v-if="currentEffect === 'blur'" vertical size="small">
-          <n-text depth="3">模糊强度</n-text>
-          <n-slider
-            v-model:value="blurAmount"
-            :min="5"
-            :max="50"
-            :step="5"
-            @update:value="updateBlurAmount"
-          />
-        </n-space>
-
         <!-- 纯色背景 -->
         <n-card
           :class="['background-option', currentEffect === 'color' && 'selected']"
@@ -134,8 +109,7 @@ const emit = defineEmits<{
 const message = useMessage();
 
 // 状态
-const currentEffect = ref<'none' | 'blur' | 'color' | 'image'>('none');
-const blurAmount = ref(20);
+const currentEffect = ref<'none' | 'color' | 'image'>('none');
 const backgroundColor = ref('#00AA00');
 const backgroundImage = ref<HTMLImageElement | null>(null);
 
@@ -186,7 +160,7 @@ async function startProcessing() {
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('浏览器不支持画布处理');
       composeBackground(ctx, results, canvas.width, canvas.height, {
-        effect: currentEffect.value, blur: blurAmount.value,
+        effect: currentEffect.value,
         color: backgroundColor.value, image: backgroundImage.value,
       });
       if (!processedStream) {
@@ -228,7 +202,6 @@ function stopProcessing() {
   processedStream = null;
 }
 
-function updateBlurAmount() { /* 下一帧使用当前设置 */ }
 function updateBackgroundColor() { /* 下一帧使用当前设置 */ }
 
 // 处理图片上传
@@ -294,14 +267,6 @@ defineExpose({
   align-items: center;
   gap: 8px;
   padding: 8px;
-}
-
-.blur-preview {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  filter: blur(8px);
-  border-radius: 8px;
 }
 
 .color-preview {

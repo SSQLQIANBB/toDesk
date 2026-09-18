@@ -15,7 +15,7 @@ export async function createSegmenter() {
   return segmenter;
 }
 
-export type BackgroundStyle = { effect: 'blur' | 'color' | 'image'; blur: number; color: string; image: HTMLImageElement | null };
+export type BackgroundStyle = { effect: 'color' | 'image'; color: string; image: HTMLImageElement | null };
 
 export function composeBackground(ctx: CanvasRenderingContext2D, results: Results, width: number, height: number, style: BackgroundStyle) {
   ctx.save();
@@ -24,10 +24,7 @@ export function composeBackground(ctx: CanvasRenderingContext2D, results: Result
   ctx.globalCompositeOperation = 'source-in';
   ctx.drawImage(results.image, 0, 0, width, height);
   ctx.globalCompositeOperation = 'destination-over';
-  if (style.effect === 'blur') {
-    ctx.filter = `blur(${style.blur}px)`;
-    ctx.drawImage(results.image, 0, 0, width, height);
-  } else if (style.effect === 'image' && style.image) {
+  if (style.effect === 'image' && style.image) {
     ctx.drawImage(style.image, 0, 0, width, height);
   } else {
     ctx.fillStyle = style.color;

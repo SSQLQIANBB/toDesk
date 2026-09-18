@@ -118,6 +118,32 @@ describe('私聊通话历史', () => {
   });
 });
 
+describe('群组通话邀请时序', () => {
+  it('创建尚未完成时挂断，不再向群成员广播邀请', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    const session = {
+      groupId: 7,
+      type: 'video',
+      channelId: 'group:7:video',
+      ownerUserId: 1,
+      ownerSocketId: 'socket-1',
+      startedAt: new Date(10_000).toISOString(),
+    };
+    let finishStart!: (value: { created: true; session: typeof session }) => void;
+    mock.start.mockImplementationOnce(() => new Promise(resolve => { finishStart = resolve; }));
+    mock.get.mockResolvedValueOnce(null);
+
+    const starting = alice.handlers.get('group_call_start')!({ groupId: 7, deviceType: 1 });
+    await alice.handlers.get('group_call_end')!({ groupId: 7, deviceType: 1 });
+    finishStart({ created: true, session });
+    await starting;
+
+    expect(mock.broadcasts.some(item => item.event === 'group_call_started')).toBe(false);
+  });
+});
+
 describe('群组邀请发送范围', () => {
   it.each([1, 2])('deviceType=%s 时未加入群组 Socket 房间的在线成员也收到邀请', async deviceType => {
     initialMeeting({} as any);

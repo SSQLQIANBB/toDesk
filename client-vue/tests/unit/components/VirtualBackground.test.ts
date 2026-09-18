@@ -32,9 +32,15 @@ beforeEach(() => {
 });
 
 describe('背景流生命周期', () => {
+  it('不再提供模糊背景选项', () => {
+    const wrapper = shallowMount(VirtualBackground, { props: { stream: raw }, global: { stubs: Object.fromEntries(['NIcon', 'NButton', 'NText', 'NCard', 'NSlider', 'NSpace', 'NColorPicker', 'NUpload', 'NPopover'].map(name => [name, true])) } });
+    expect(wrapper.text()).not.toContain('模糊背景');
+    wrapper.unmount();
+  });
+
   it('应用效果保留麦克风，关闭效果恢复同一个原始摄像头流', async () => {
     const wrapper = shallowMount(VirtualBackground, { props: { stream: raw }, global: { stubs: Object.fromEntries(['NIcon', 'NButton', 'NText', 'NCard', 'NSlider', 'NSpace', 'NColorPicker', 'NUpload', 'NPopover'].map(name => [name, true])) } });
-    await wrapper.vm.applyEffect('blur');
+    await wrapper.vm.applyEffect('color');
     await flushPromises();
     expect(wrapper.emitted('stream-updated')?.[0]?.[0]).toBe(output);
     expect(output.addTrack).toHaveBeenCalledWith(audio);
@@ -47,8 +53,8 @@ describe('背景流生命周期', () => {
   });
   it('切换样式复用处理器，不叠加捕获循环', async () => {
     const wrapper = shallowMount(VirtualBackground, { props: { stream: raw }, global: { stubs: Object.fromEntries(['NIcon', 'NButton', 'NText', 'NCard', 'NSlider', 'NSpace', 'NColorPicker', 'NUpload', 'NPopover'].map(name => [name, true])) } });
-    await wrapper.vm.applyEffect('blur');
     await wrapper.vm.applyEffect('color');
+    await wrapper.vm.applyEffect('image');
     expect(mocks.create).toHaveBeenCalledOnce();
     wrapper.unmount();
     expect(mocks.close).toHaveBeenCalledOnce();
@@ -56,7 +62,7 @@ describe('背景流生命周期', () => {
   it('模型失败时保留原画面，不切换到空画布', async () => {
     mocks.create.mockRejectedValueOnce(new Error('model unavailable'));
     const wrapper = shallowMount(VirtualBackground, { props: { stream: raw }, global: { stubs: Object.fromEntries(['NIcon', 'NButton', 'NText', 'NCard', 'NSlider', 'NSpace', 'NColorPicker', 'NUpload', 'NPopover'].map(name => [name, true])) } });
-    await wrapper.vm.applyEffect('blur');
+    await wrapper.vm.applyEffect('color');
     expect(wrapper.emitted('stream-updated')?.slice(-1)[0]?.[0]).toBe(raw);
     expect(mocks.cameraStop).not.toHaveBeenCalled();
     wrapper.unmount();

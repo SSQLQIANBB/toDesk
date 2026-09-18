@@ -195,7 +195,6 @@ import VirtualBackground from '@/components/VirtualBackground.vue';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
 import SpeakingIndicator from '@/components/SpeakingIndicator.vue';
-import { groupSessionState } from '@/services/groupSessionState';
 import {
   createMediaParticipantState,
   type ParticipantSnapshot,
@@ -605,7 +604,8 @@ function cleanupCall(endOwnedSession: boolean) {
   participantState.clear(groupId.value, sessionType.value);
 
   // 通知服务器
-  if (endOwnedSession && groupSessionState.getSession(groupId.value, sessionType.value)?.ownerUserId === currentUser.value?.id) {
+  // 服务端会校验会话所有者；即使“开始”仍在异步创建中，也要发送结束事件以取消待广播的邀请。
+  if (endOwnedSession) {
     socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: sessionDeviceType.value });
   }
   socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: sessionDeviceType.value });

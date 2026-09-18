@@ -4,14 +4,20 @@
     <n-button size="small" secondary :disabled="disabled || uploading" @click="imageInput?.click()">
       {{ uploading ? '上传中…' : '发送图片' }}
     </n-button>
-    <template v-if="recording">
-      <span class="recording-time">录音中 {{ elapsedSeconds }}s / 60s</span>
-      <n-button size="small" type="primary" :disabled="uploading" @click="finishRecording">发送语音</n-button>
-      <n-button size="small" secondary @click="cancelRecording">取消</n-button>
-    </template>
-    <n-button v-else size="small" secondary :disabled="disabled || uploading" @click="startRecording">
-      录制语音
-    </n-button>
+    <button
+      type="button"
+      class="hold-to-talk"
+      :class="{ 'hold-to-talk--active': recording }"
+      :disabled="disabled || uploading"
+      @pointerdown.prevent="startRecording"
+      @pointerup.prevent="finishRecording"
+      @pointercancel="cancelRecording"
+      @keydown.space.prevent="startRecording"
+      @keyup.space.prevent="finishRecording"
+      @contextmenu.prevent
+    >
+      {{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}
+    </button>
   </div>
 </template>
 
@@ -38,6 +44,7 @@ let recordingStartedAt = 0;
 let recordingTimer: number | null = null;
 let chunks: Blob[] = [];
 let discardRecording = false;
+let isPressing = false;
 
 async function uploadMedia(file: File, type: 'image' | 'voice', durationSeconds?: number) {
   uploading.value = true;
@@ -75,14 +82,24 @@ async function handleImageSelected(event: Event) {
   await uploadMedia(file, 'image');
 }
 
-async function startRecording() {
+async function startRecording(event?: PointerEvent | KeyboardEvent) {
+  if (isPressing || recording.value || props.disabled || uploading.value) return;
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
     message.error('当前浏览器不支持语音录制');
     return;
   }
 
+  isPressing = true;
+  if (event && 'pointerId' in event) {
+    (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+  }
   try {
-    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    if (!isPressing) {
+      stream.getTracks().forEach(track => track.stop());
+      return;
+    }
+    recordingStream = stream;
     const mimeType = selectAudioMimeType();
     recorder = mimeType
       ? new MediaRecorder(recordingStream, { mimeType })
@@ -106,10 +123,12 @@ async function startRecording() {
 }
 
 function finishRecording() {
+  isPressing = false;
   if (recorder?.state === 'recording') recorder.stop();
 }
 
 function cancelRecording() {
+  isPressing = false;
   discardRecording = true;
   if (recorder?.state === 'recording') recorder.stop();
   else releaseRecordingResources();
@@ -127,6 +146,7 @@ function handleRecordingStopped() {
 }
 
 function releaseRecordingResources() {
+  isPressing = false;
   if (recordingTimer !== null) window.clearInterval(recordingTimer);
   recordingTimer = null;
   recordingStream?.getTracks().forEach(track => track.stop());
@@ -142,6 +162,9 @@ onBeforeUnmount(cancelRecording);
 
 <style scoped>
 .chat-media-composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
-.recording-time { color: #ef4444; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hold-to-talk { flex: 1; min-width: 150px; min-height: 34px; padding: 5px 18px; border: 1px solid #d9d9d9; border-radius: 6px; color: #333; background: #f7f7f7; font-size: 14px; font-weight: 500; user-select: none; touch-action: none; cursor: pointer; }
+.hold-to-talk:hover { background: #eee; }
+.hold-to-talk--active { background: #d9d9d9; transform: scale(.99); }
+.hold-to-talk:disabled { color: #aaa; cursor: not-allowed; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 </style>

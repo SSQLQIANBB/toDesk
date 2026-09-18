@@ -255,6 +255,7 @@ const initialMeeting = (server: Server) => {
     let currentUser: MeetingUser | null = null;
     const joinedMediaSessions = new Map<string, GroupSession>();
     const ownedSessions = new Map<string, GroupSession>();
+    const groupCallStartGenerations = new Map<string, number>();
 
     socket.on('authenticate', async (data: { token: string; nickname?: string; avatar?: string }) => {
       try {
@@ -564,7 +565,14 @@ const initialMeeting = (server: Server) => {
     socket.on('group_call_start', async (data: { groupId: number; deviceType: number }) => {
       if (!currentUser || !data.groupId) return;
       const type = getSessionType(data.deviceType);
+      const startKey = `${data.groupId}:${type}`;
+      const startGeneration = (groupCallStartGenerations.get(startKey) || 0) + 1;
+      groupCallStartGenerations.set(startKey, startGeneration);
       const result = await groupSessionService.start(data.groupId, type, currentUser);
+      if (groupCallStartGenerations.get(startKey) !== startGeneration) {
+        if (result.created) await groupSessionService.end(data.groupId, type, currentUser.id);
+        return;
+      }
       if (result.created) {
         ownedSessions.set(result.session.channelId, result.session);
         await emitGroupSessionEvent(data.groupId, 'group_call_started', {
@@ -589,6 +597,8 @@ const initialMeeting = (server: Server) => {
           : ['video', 'audio', 'screen'];
 
       for (const type of types) {
+        const startKey = `${data.groupId}:${type}`;
+        groupCallStartGenerations.set(startKey, (groupCallStartGenerations.get(startKey) || 0) + 1);
         const session = await groupSessionService.get(data.groupId, type);
         const ended = await groupSessionService.end(data.groupId, type, currentUser.id);
         if (!ended || !session) continue;

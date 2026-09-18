@@ -15,7 +15,7 @@ test('背景分割模型能从项目资源加载并处理真实浏览器画布',
     segmenter.onResults((results: any) => {
       frames++;
       composeBackground(output.getContext('2d')!, results, 256, 144, {
-        effect: 'color', color: '#FF0000', blur: 10, image: null,
+        effect: 'color', color: '#FF0000', image: null,
       });
     });
     await segmenter.send({ image: source });
