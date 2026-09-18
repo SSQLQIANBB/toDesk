@@ -60,14 +60,14 @@ redis-cli -h 127.0.0.1 -p 6379 ping
 cp backend-koa/.env.example backend-koa/.env.local
 ```
 
-根据本机 MySQL、Redis 和邮箱配置编辑 `backend-koa/.env.local`，然后从仓库根目录执行：
+根据本机 MySQL、Redis、七牛开发空间和邮箱配置编辑 `backend-koa/.env.local`，然后从仓库根目录执行：
 
 ```bash
 pnpm env:check
 pnpm run server
 ```
 
-后端启动脚本会加载并校验 `.env.local`。连接旧库时不要随意启用 `DB_AUTO_CREATE` 和 `DB_SYNC_ALTER`。SMTP 变量只在调试邮箱验证码时填写，但必须整组填写。授权码只保存在本机，文件权限建议为 `600`。
+后端启动脚本会加载并校验 `.env.local`。连接旧库时不要随意启用 `DB_AUTO_CREATE` 和 `DB_SYNC_ALTER`。七牛 AK/SK 与 CDN 域名是文件上传必填项；空间名和签名有效期由项目配置固定。SMTP 变量只在调试邮箱验证码时填写，但必须整组填写。密钥和授权码只保存在本机，文件权限建议为 `600`。
 
 后端默认监听 `http://localhost:3000`。
 
@@ -85,7 +85,7 @@ cp client-vue/.env.example client-vue/.env.local
 pnpm run client
 ```
 
-浏览器打开 `http://localhost:5173/`。Vite 将 `/api`、`/meeting` 和 `/uploads` 代理到后端的 3000 端口。修改后端端口时，还需修改 `client-vue/vite.config.ts` 的代理目标。`VITE_*` 会进入浏览器代码，不能填写任何密钥。
+浏览器打开 `http://localhost:5173/`。Vite 将 `/api`、`/meeting` 和迁移期兼容的 `/uploads` 代理到后端的 3000 端口。新文件由后端直接上传七牛，浏览器不需要七牛变量。修改后端端口时，还需修改 `client-vue/vite.config.ts` 的代理目标。`VITE_*` 会进入浏览器代码，不能填写任何密钥。
 
 ## 检查与停止
 

@@ -5,6 +5,7 @@ import {
   PrivateCallTracker,
   serializeChatMessage,
 } from '../../../src/services/callHistoryService';
+import { createChatMediaMessage } from '../../../src/services/chatMediaMessageService';
 
 const request = {
   callerSocketId: 'caller-socket',
@@ -81,5 +82,24 @@ describe('通话历史', () => {
       },
     });
     expect(parseCallHistoryMessage('[屏幕共享] 共享时长 01:01:01')).toBeNull();
+  });
+
+  it('返回消息时把七牛稳定引用转换为可访问地址', () => {
+    const message = createChatMediaMessage({
+      type: 'image',
+      media: {
+        url: 'qiniu://public/avatar/photo.png',
+        fileId: 3,
+        mimeType: 'image/png',
+      },
+    });
+
+    expect(serializeChatMessage({ id: 4, message })).toMatchObject({
+      messageType: 'image',
+      media: {
+        url: 'https://files.example.test/avatar/photo.png',
+        fileId: 3,
+      },
+    });
   });
 });

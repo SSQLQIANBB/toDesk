@@ -2,6 +2,7 @@ export type ChatMediaType = 'image' | 'voice';
 
 export type ChatMediaPayload = {
   url: string;
+  fileId?: number;
   mimeType: string;
   fileName?: string;
   fileSize?: number;
@@ -18,7 +19,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_VOICE_DURATION_SECONDS = 60;
 
 function isAllowedUrl(url: string) {
-  return url.startsWith('/uploads/') || /^https:\/\//i.test(url);
+  return url.startsWith('/uploads/') || url.startsWith('qiniu://') || /^https:\/\//i.test(url);
 }
 
 function parsePayload(value: unknown): ChatMediaMessage | null {
@@ -29,6 +30,7 @@ function parsePayload(value: unknown): ChatMediaMessage | null {
 
   const media = record.media;
   if (typeof media.url !== 'string' || !isAllowedUrl(media.url)) return null;
+  if (media.fileId !== undefined && (!Number.isSafeInteger(media.fileId) || media.fileId < 1)) return null;
   if (typeof media.mimeType !== 'string') return null;
   if (record.type === 'image' && !media.mimeType.startsWith('image/')) return null;
   if (record.type === 'voice' && !media.mimeType.startsWith('audio/')) return null;

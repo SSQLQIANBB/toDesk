@@ -1,12 +1,14 @@
-# 七牛 Kodo CDN 与 Caddy 证书自动同步操作手册
+# 七牛 Kodo 文件存储、CDN 与 Caddy 证书自动同步操作手册
 
-本文记录 ToDesk 对象存储域名从首次创建到自动续期的完整流程。以后修改域名、
-重建空间或更换服务器时，应按顺序执行，不要跳过验证步骤。
+本文记录 ToDesk 从本地 `uploads` 迁移到七牛 Kodo，以及对象存储域名从首次创建到
+自动续期的完整流程。以后修改空间、域名或更换服务器时，应按顺序执行，不要跳过
+验证步骤。
 
 ## 1. 最终架构
 
 ```text
 浏览器
+  ├─ 上传 → ToDesk 后端 → 七牛 Kodo
   ├─ https://files.sycsq.top         → 七牛 CDN → 公共 Kodo 空间
   └─ https://private-files.sycsq.top → 七牛 CDN → 私有 Kodo 空间
 
@@ -15,7 +17,8 @@ Caddy → AliDNS DNS-01 → Let's Encrypt 自动签发和续期
 cert-sync → 上传新证书 → 更新两个七牛 CDN 域名
 ```
 
-文件流量不会经过 ToDesk 服务器。Caddy 只负责通过 DNS-01 获取证书，
+上传请求经过 ToDesk 后端完成登录态、文件归属和类型校验，下载流量直接访问七牛
+CDN，不经过 ToDesk 服务器。Caddy 只负责通过 DNS-01 获取证书，
 `cert-sync` 只在证书变化时调用七牛 API。
 
 证书签发和续期不产生证书购买费用；七牛对象存储、CDN 流量、回源和请求仍按
@@ -89,8 +92,10 @@ CERT_SYNC_RETRY_SECONDS=300
 chmod 600 /opt/todesk/.env.production
 ```
 
-阿里云密钥只用于 DNS-01，七牛密钥只用于上传证书和修改 CDN HTTPS 配置，
-二者不能混用。
+阿里云密钥只用于 DNS-01。七牛密钥由后端用于上传/删除对象和生成私有下载地址，
+同时由 `cert-sync` 用于上传证书和修改 CDN HTTPS 配置，二者不能混用。公共空间
+`to-desk-pub`、私有空间 `to-desk` 和 3600 秒签名有效期固定维护在
+`backend-koa/src/config/qiniu.ts`，不是环境变量。
 
 ## 5. Caddy 自动签发证书
 
@@ -262,7 +267,50 @@ https://private-files.sycsq.top/<key>?e=<deadline>&token=<downloadToken>
 有效签名应返回 `200`；去掉 `e` 和 `token` 后必须返回 `401` 或 `403`。必须在
 文件已经进入 CDN 缓存后再次验证无签名访问，确认缓存不会绕过鉴权。
 
-## 11. 自动同步工作方式
+## 11. 应用上传与历史 uploads 迁移
+
+应用使用两个空间：
+
+- 头像写入公共空间，数据库保存稳定引用，接口返回公共 CDN 地址。
+- 聊天图片、语音和普通文件写入私有空间，数据库只保存
+  `qiniu://private/<key>`；读取消息时由后端生成临时签名地址。
+- 客户端只拿到可访问地址和文件 ID，不接触七牛 AccessKey/SecretKey。
+- 发送媒体消息时后端会校验文件 ID 属于当前发送者，并校验群文件归属，不能由
+  客户端任意提交一个私有对象 key 换取签名。
+
+首次发布包含迁移代码的版本时，GitHub Actions 在新后端启动后自动执行：
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml \
+  exec -T backend pnpm storage:migrate-local
+```
+
+迁移脚本只处理 `files.fileUrl` 仍以 `/uploads/` 开头的记录，因此可以安全重跑。
+它会把头像上传到公共空间，其他文件上传到私有空间，并在同一数据库事务中更新
+用户/群头像、单聊消息、群消息及文件记录。源文件只读保留在 `todesk-uploads`
+卷中，不会在迁移时删除。
+
+手动检查迁移结果：
+
+```bash
+cd /opt/todesk
+docker compose --env-file .env.production -f docker-compose.prod.yml \
+  exec -T backend pnpm storage:migrate-local
+```
+
+在 MySQL 中执行：
+
+```sql
+SELECT COUNT(*) AS pending_local_files
+FROM files
+WHERE fileUrl LIKE '/uploads/%';
+```
+
+结果为 `0` 后，再分别验证头像、私聊图片、群聊图片、语音和文件下载。确认七牛
+对象与数据库备份完整前，不要删除 `todesk-uploads` 数据卷；旧 `/uploads` 路由
+保留为迁移期兼容入口，新上传不会再写入该目录。
+
+## 12. 自动同步工作方式
 
 生产 Compose 中的 `cert-sync` 服务：
 
@@ -278,7 +326,7 @@ https://private-files.sycsq.top/<key>?e=<deadline>&token=<downloadToken>
 七牛 CDN 配置更新通常需要 5 至 10 分钟。同步服务不会自动删除旧证书，避免误删
 仍被其他域名使用的证书；可定期在七牛证书管理中手动删除确认未绑定的旧证书。
 
-## 12. 部署和检查自动同步
+## 13. 部署和检查自动同步
 
 代码推送后，GitHub Actions 会构建并传输 `todesk-cert-sync` 镜像。部署前必须先
 把七牛 AK/SK 写入服务器 `.env.production`，否则工作流会主动失败，避免出现
@@ -311,7 +359,7 @@ docker logs -f todesk-cert-sync
 `requested Qiniu CDN certificate update`。下一个检查周期会确认七牛域名已经使用
 该证书，并把状态改为 `deployed`。
 
-## 13. 故障排查
+## 14. 故障排查
 
 ### Caddy 没有签发证书
 
@@ -350,7 +398,7 @@ docker logs --tail=300 todesk-cert-sync
 日常部署中执行 `docker compose down -v`，该命令还会删除 Caddy 证书和其他业务
 数据卷。
 
-## 14. 定期维护
+## 15. 定期维护
 
 每月至少检查一次：
 

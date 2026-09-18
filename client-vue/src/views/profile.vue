@@ -586,6 +586,7 @@ async function handleAvatarUpload({ file, onFinish, onError }: UploadCustomReque
     const uploadFormData = new FormData();
 
     uploadFormData.append('file', rawFile);
+    uploadFormData.append('purpose', 'avatar');
 
     const { file: uploadedFile } = await uploadFile(uploadFormData);
     formData.avatar = uploadedFile.fileUrl;

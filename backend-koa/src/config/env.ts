@@ -27,6 +27,13 @@ function secretValue(name: string) {
   return requiredValue(name).refine((value) => value.length >= 32, `${name} 至少需要 32 个字符`)
 }
 
+function domainValue(name: string) {
+  return requiredValue(name).refine(
+    (value) => !value.includes('://') && /^[a-z0-9.-]+$/i.test(value),
+    `${name} 只能填写不带协议和路径的域名`
+  )
+}
+
 const optionalValue = z
   .string()
   .trim()
@@ -63,7 +70,11 @@ const rawEnvSchema = z
     SMTP_PORT: integerValue('SMTP_PORT', 465, 1, 65535),
     SMTP_USER: optionalValue,
     SMTP_PASSWORD: optionalSecret,
-    SMTP_FROM: optionalValue
+    SMTP_FROM: optionalValue,
+    FILES_DOMAIN: domainValue('FILES_DOMAIN'),
+    PRIVATE_FILES_DOMAIN: domainValue('PRIVATE_FILES_DOMAIN'),
+    QINIU_ACCESS_KEY: requiredValue('QINIU_ACCESS_KEY'),
+    QINIU_SECRET_KEY: requiredValue('QINIU_SECRET_KEY')
   })
   .superRefine((values, context) => {
     if (values.JWT_SECRET === values.REFRESH_TOKEN_SECRET) {
@@ -165,6 +176,12 @@ export function createEnv(source: NodeJS.ProcessEnv) {
     auth: Object.freeze({
       jwtSecret: values.JWT_SECRET,
       refreshTokenSecret: values.REFRESH_TOKEN_SECRET
+    }),
+    qiniu: Object.freeze({
+      accessKey: values.QINIU_ACCESS_KEY,
+      secretKey: values.QINIU_SECRET_KEY,
+      publicDomain: `https://${values.FILES_DOMAIN}`,
+      privateDomain: `https://${values.PRIVATE_FILES_DOMAIN}`
     }),
     smtp
   })

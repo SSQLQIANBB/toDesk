@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "node --env-file=.env.local ./node_modules/nodemon/bin/nodemon.js -r tsconfig-paths/register src/app.ts",
     "env:check": "node --env-file=.env.local -r ts-node/register -r tsconfig-paths/register -e \"require('./src/config/env')\"",
+    "storage:migrate-local": "node -r ts-node/register -r tsconfig-paths/register src/scripts/migrateLocalFilesToQiniu.ts",
     "start": "node -r ts-node/register -r tsconfig-paths/register src/app.ts"
   },
   "keywords": [],
@@ -26,9 +27,11 @@
     "mysql2": "^3.23.1",
     "nodemailer": "^10.0.9",
     "pm2": "^7.0.2",
+    "qiniu": "^7.15.2",
     "qs": "^6.16.0",
     "request": "^2.88.2",
     "sequelize": "^6.37.7",
+    "uuid": "^13.0.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {

@@ -1,4 +1,5 @@
 import { formatChatMediaMessage, parseChatMediaMessage } from './chatMediaMessageService';
+import { qiniuStorage } from './qiniuStorageService';
 
 export type CallHistoryType = 'video' | 'audio' | 'screen';
 export type CallHistoryStatus = 'completed' | 'rejected' | 'cancelled' | 'failed';
@@ -87,6 +88,9 @@ export function serializeChatMessage(record: any) {
   if (call) return { ...message, message: formatCallHistoryMessage(call), messageType: 'call', call };
 
   const mediaMessage = parseChatMediaMessage(message.message);
+  if (mediaMessage) {
+    mediaMessage.media.url = qiniuStorage.resolveUrl(mediaMessage.media.url);
+  }
   return mediaMessage
     ? {
         ...message,

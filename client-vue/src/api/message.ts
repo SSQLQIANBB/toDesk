@@ -9,6 +9,7 @@ export interface CallHistoryRecord {
 
 export interface ChatMediaPayload {
   url: string;
+  fileId?: number;
   mimeType: string;
   fileName?: string;
   fileSize?: number;

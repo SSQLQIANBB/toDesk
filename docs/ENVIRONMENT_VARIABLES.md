@@ -23,9 +23,11 @@
 2. 把端口、布尔值等字符串转换为正确类型；
 3. 拒绝示例密钥、重复 JWT 密钥和不完整 SMTP 配置；
 4. 对生产环境启用更严格的 Redis、SMTP 和数据库变更约束；
-5. 输出按 `app`、`database`、`redis`、`auth`、`smtp` 分组的只读配置。
+5. 输出按 `app`、`database`、`redis`、`auth`、`qiniu`、`smtp` 分组的只读配置。
 
 业务模块只能导入 `env`，禁止新增 `process.env.X`。这样变量缺失会在进程启动阶段集中失败，而不是运行到某个接口后才暴露问题。
+
+七牛 AK/SK 属于后端私密配置；两个 CDN 域名属于部署配置，必须写在后端 `.env.local`、根目录 Docker `.env` 或服务器 `.env.production`，不能出现在 `client-vue/.env*`。公共空间 `to-desk-pub`、私有空间 `to-desk` 和 3600 秒签名有效期是项目固定配置，集中维护在 `backend-koa/src/config/qiniu.ts`，无需配置环境变量。
 
 本地后端启动前执行：
 

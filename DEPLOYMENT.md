@@ -3,7 +3,7 @@
 本方案将服务拆成两个独立部分：
 
 - 服务器级共享基础设施：MySQL、Redis 和 `shared-services` Docker 网络。
-- ToDesk 应用：Caddy、Web、后端、上传文件和 HTTPS 证书。
+- ToDesk 应用：Caddy、Web、后端、七牛对象存储接入和 HTTPS 证书。
 
 共享 MySQL/Redis 可以减少每个项目重复运行数据库进程和保存镜像带来的内存、
 磁盘占用。代价是维护或故障会同时影响多个项目，因此基础设施必须独立部署、
@@ -130,9 +130,12 @@ REFRESH_TOKEN_SECRET=<另一个新的随机密钥>
 服务器；Caddy 仅通过 AliDNS DNS-01 创建临时 `_acme-challenge` TXT 记录并自动
 续期证书。AliDNS 凭据应来自仅有当前 DNS Zone 解析管理权限的 RAM 用户。
 
-`cert-sync` 服务会读取 Caddy 新证书，调用七牛 API 上传证书并更新两个 CDN 域名，
-不再需要手动续期。七牛 AK/SK 仅保存在服务器环境文件中。首次创建 CDN 域名、
-上传初始证书、配置缓存/鉴权/CNAME 以及自动同步排查步骤见
+后端使用七牛 AK/SK 将头像写入公共空间，将聊天媒体和文件写入私有空间；
+`cert-sync` 使用同一组服务器端凭据上传 Caddy 新证书并更新两个 CDN 域名。
+七牛密钥仅保存在服务器环境文件中。公共空间 `to-desk-pub`、私有空间 `to-desk`
+和 3600 秒签名有效期固定维护在 `backend-koa/src/config/qiniu.ts`。首次创建 CDN
+域名、迁移旧 `uploads`、配置缓存/鉴权/CNAME 以及自动
+同步排查步骤见
 [`docs/QINIU_CDN_CERTIFICATE_AUTOMATION.md`](docs/QINIU_CDN_CERTIFICATE_AUTOMATION.md)。
 
 JWT 密钥可使用以下命令分别生成：
@@ -205,7 +208,9 @@ docker logs -f todesk-cert-sync
 curl -I https://desk.example.com
 ```
 
-确认 HTTPS、注册登录、聊天、Socket.IO 和文件上传正常后，再关闭旧服务器。
+工作流会在启动新后端后自动执行幂等的 `uploads` 迁移。确认迁移 SQL 的待处理数
+为 0，并验证 HTTPS、头像、私聊/群聊媒体、Socket.IO 和文件下载正常后，再关闭
+旧服务器。
 
 ## 6. 让未来项目复用 MySQL 和 Redis
 
@@ -275,7 +280,8 @@ docker compose down -v
 需要重点备份：
 
 - 共享 MySQL 数据。
-- `todesk-uploads` 上传文件。
+- `todesk-uploads` 历史上传文件（迁移验证与回退期间保留）。
+- 七牛公共/私有空间中的业务对象及其配置清单。
 - `/opt/shared-services/.env.infrastructure`。
 - `/opt/todesk/.env.production`。
 

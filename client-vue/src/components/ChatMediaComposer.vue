@@ -44,12 +44,14 @@ async function uploadMedia(file: File, type: 'image' | 'voice', durationSeconds?
   try {
     const form = new FormData();
     form.append('file', file);
+    form.append('purpose', 'chat');
     if (props.groupId) form.append('groupId', String(props.groupId));
     const { file: uploaded } = await uploadFile(form);
     emit('send', {
       type,
       media: {
         url: uploaded.fileUrl,
+        fileId: uploaded.id,
         mimeType: uploaded.mimeType,
         fileName: uploaded.originalName,
         fileSize: uploaded.fileSize,

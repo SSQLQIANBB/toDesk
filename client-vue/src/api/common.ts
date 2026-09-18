@@ -6,7 +6,7 @@ import { request } from '@/utils/request';
 // router.delete('/:fileId', authMiddleware, fileController.deleteFile);
 
 export interface FileInfo {
-  id: string;
+  id: number;
   originalName: string;
   fileSize: number;
   mimeType: string;

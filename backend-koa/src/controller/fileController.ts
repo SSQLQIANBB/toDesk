@@ -1,30 +1,26 @@
 import { Context } from 'koa'
-import { File, User, Group } from '../models'
-import path from 'path'
+import { File, User } from '../models'
 import fs from 'fs/promises'
-import { v4 as uuidv4 } from 'uuid'
-
-// 文件上传目录
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads')
-
-// 确保上传目录存在
-async function ensureUploadDir() {
-  try {
-    await fs.access(UPLOAD_DIR)
-  } catch {
-    await fs.mkdir(UPLOAD_DIR, { recursive: true })
-  }
-}
+import path from 'path'
+import {
+  buildObjectKey,
+  parseStorageReference,
+  qiniuStorage,
+  type UploadPurpose
+} from '../services/qiniuStorageService'
 
 /**
  * 上传文件
  */
 export async function uploadFile(ctx: Context) {
+  let temporaryFilePath: string | undefined
+  let uploadedStorageRef: string | undefined
   try {
-    await ensureUploadDir()
-
     const userId = ctx.state.user?.userId
-    const { groupId } = ctx.request.body as any
+    const { groupId, purpose = 'file' } = ctx.request.body as {
+      groupId?: string
+      purpose?: UploadPurpose
+    }
     const file = ctx.request.files?.file
 
     if (!file || Array.isArray(file)) {
@@ -33,35 +29,42 @@ export async function uploadFile(ctx: Context) {
       return
     }
 
-    // 生成唯一文件名
-    const ext = path.extname(file.originalFilename || '')
-    const fileName = `${uuidv4()}${ext}`
-    const filePath = path.join(UPLOAD_DIR, fileName)
-    const fileUrl = `/uploads/${fileName}`
-
-    try {
-      // 移动文件
-      await fs.rename(file.filepath, filePath)
-    } catch (error) {
-      if (error.code === 'EXDEV') {
-        await fs.copyFile(file.filepath, filePath)
-        await fs.unlink(file.filepath)
-      } else {
-        throw error
-      }
+    if (!['avatar', 'chat', 'file'].includes(purpose)) {
+      ctx.status = 400
+      ctx.body = { error: '文件用途无效' }
+      return
     }
+    if (purpose === 'avatar' && !file.mimetype?.startsWith('image/')) {
+      ctx.status = 400
+      ctx.body = { error: '头像必须是图片文件' }
+      return
+    }
+
+    temporaryFilePath = file.filepath
+    const originalName = file.originalFilename || 'file'
+    const scope = purpose === 'avatar' ? 'public' : 'private'
+    const objectKey = buildObjectKey(purpose, originalName)
+    const uploaded = await qiniuStorage.uploadFile(
+      temporaryFilePath,
+      objectKey,
+      scope,
+      file.mimetype || 'application/octet-stream',
+      file.size
+    )
+    uploadedStorageRef = uploaded.storageRef
 
     // 保存文件记录
     const fileRecord = await File.create({
       userId,
       groupId: groupId ? parseInt(groupId) : undefined,
-      fileName,
-      originalName: file.originalFilename || fileName,
+      fileName: path.basename(objectKey),
+      originalName,
       fileSize: file.size,
       mimeType: file.mimetype || 'application/octet-stream',
-      filePath,
-      fileUrl
+      filePath: objectKey,
+      fileUrl: uploaded.storageRef
     })
+    uploadedStorageRef = undefined
 
     ctx.body = {
       message: '文件上传成功',
@@ -70,14 +73,23 @@ export async function uploadFile(ctx: Context) {
         originalName: fileRecord.originalName,
         fileSize: fileRecord.fileSize,
         mimeType: fileRecord.mimeType,
-        fileUrl: fileRecord.fileUrl,
+        fileUrl: uploaded.fileUrl,
         createdAt: fileRecord.createdAt
       }
     }
   } catch (error: any) {
     console.error('文件上传失败:', error)
+    if (uploadedStorageRef) {
+      await qiniuStorage.deleteFile(uploadedStorageRef).catch((cleanupError) => {
+        console.error('清理未入库的七牛对象失败:', cleanupError)
+      })
+    }
     ctx.status = 500
     ctx.body = { error: '文件上传失败: ' + error.message }
+  } finally {
+    if (temporaryFilePath) {
+      await fs.unlink(temporaryFilePath).catch(() => undefined)
+    }
   }
 }
 
@@ -112,7 +124,10 @@ export async function getFiles(ctx: Context) {
     })
 
     ctx.body = {
-      files,
+      files: files.map((file) => ({
+        ...file.toJSON(),
+        fileUrl: qiniuStorage.resolveUrl(file.fileUrl)
+      })),
       hasMore: files.length === parseInt(limit as string)
     }
   } catch (error: any) {
@@ -139,7 +154,12 @@ export async function downloadFile(ctx: Context) {
     // 更新下载次数
     await file.update({ downloadCount: file.downloadCount + 1 })
 
-    // 检查文件是否存在
+    if (parseStorageReference(file.fileUrl)) {
+      ctx.redirect(qiniuStorage.resolveUrl(file.fileUrl))
+      return
+    }
+
+    // 迁移完成前继续兼容历史 uploads 文件。
     try {
       await fs.access(file.filePath)
     } catch {
@@ -187,11 +207,14 @@ export async function deleteFile(ctx: Context) {
       return
     }
 
-    // 删除物理文件
-    try {
-      await fs.unlink(file.filePath)
-    } catch (error) {
-      console.error('删除物理文件失败:', error)
+    if (parseStorageReference(file.fileUrl)) {
+      await qiniuStorage.deleteFile(file.fileUrl)
+    } else {
+      try {
+        await fs.unlink(file.filePath)
+      } catch (error: any) {
+        if (error.code !== 'ENOENT') throw error
+      }
     }
 
     // 删除数据库记录

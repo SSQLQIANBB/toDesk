@@ -10,14 +10,18 @@ describe('聊天媒体消息', () => {
     const message = createChatMediaMessage({
       type: 'image',
       media: {
-        url: '/uploads/photo.png',
+        url: 'qiniu://private/chat/photo.png',
+        fileId: 12,
         mimeType: 'image/png',
         fileName: 'photo.png',
         fileSize: 1024,
       },
     });
     const parsed = parseChatMediaMessage(message);
-    expect(parsed).toMatchObject({ type: 'image', media: { url: '/uploads/photo.png' } });
+    expect(parsed).toMatchObject({
+      type: 'image',
+      media: { url: 'qiniu://private/chat/photo.png', fileId: 12 },
+    });
     expect(formatChatMediaMessage(parsed!)).toBe('[图片] photo.png');
   });
 

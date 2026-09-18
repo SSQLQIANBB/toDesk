@@ -1,7 +1,7 @@
 import { type Server } from 'http';
 import { Server as Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
-import { GroupMember, GroupMessage, Message, User as UserModel } from '../models';
+import { File, GroupMember, GroupMessage, Message, User as UserModel } from '../models';
 import { saveReliableMessage } from '../services/reliableMessageService';
 import { isTokenVersionCurrent } from '../services/tokenVersionService';
 import {
@@ -65,9 +65,25 @@ function getPrivateCallType(deviceType: number): CallHistoryType | null {
   return null;
 }
 
-function getMessageContent(data: { message?: string; messageType?: string; media?: ChatMediaMessage['media'] }) {
+async function getMessageContent(
+  data: { message?: string; messageType?: string; media?: ChatMediaMessage['media'] },
+  userId: number,
+  groupId?: number,
+) {
   if (data.messageType === 'image' || data.messageType === 'voice') {
-    return createChatMediaMessage({ type: data.messageType, media: data.media });
+    const fileId = data.media?.fileId;
+    if (!Number.isSafeInteger(fileId)) throw new Error('媒体文件无效');
+
+    const file = await File.findOne({ where: { id: fileId, userId } });
+    const belongsToTarget = groupId === undefined
+      ? file?.groupId == null
+      : Number(file?.groupId) === groupId;
+    if (!file || !belongsToTarget) throw new Error('媒体文件无效');
+
+    return createChatMediaMessage({
+      type: data.messageType,
+      media: { ...data.media, url: file.fileUrl },
+    });
   }
   const message = data.message?.trim();
   if (!message || message.length > 10000) throw new Error('消息无效');
@@ -332,7 +348,7 @@ const initialMeeting = (server: Server) => {
       }
 
       try {
-        const messageContent = getMessageContent(data);
+        const messageContent = await getMessageContent(data, currentUser.id);
         const writeStartedAt = Date.now();
         const receiverSockets = getUserSockets(data.to.id);
         const { saved: savedMessage, duplicate } = await saveReliableMessage({
@@ -479,7 +495,7 @@ const initialMeeting = (server: Server) => {
       }
 
       try {
-        const messageContent = getMessageContent(data);
+        const messageContent = await getMessageContent(data, currentUser.id, data.groupId);
         const writeStartedAt = Date.now();
         const member = await GroupMember.findOne({ where: { groupId: data.groupId, userId: currentUser.id } });
         if (!member || member.canSpeak === false) { ack?.({ ok: false, error: '无发送权限' }); return; }

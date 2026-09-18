@@ -5,7 +5,11 @@ const validEnv = {
   NODE_ENV: 'development',
   DB_PASSWORD: 'local-database-password',
   JWT_SECRET: 'jwt-secret-with-at-least-32-characters',
-  REFRESH_TOKEN_SECRET: 'refresh-secret-with-at-least-32-characters'
+  REFRESH_TOKEN_SECRET: 'refresh-secret-with-at-least-32-characters',
+  FILES_DOMAIN: 'files.example.test',
+  PRIVATE_FILES_DOMAIN: 'private-files.example.test',
+  QINIU_ACCESS_KEY: 'qiniu-access-key',
+  QINIU_SECRET_KEY: 'qiniu-secret-key'
 }
 
 describe('后端环境变量', () => {
@@ -22,7 +26,20 @@ describe('后端环境变量', () => {
     expect(env.database.autoCreate).toBe(false)
     expect(env.database.syncAlter).toBe(false)
     expect(env.redis).toMatchObject({ host: 'localhost', port: 6379, db: 2 })
+    expect(env.qiniu).toMatchObject({
+      publicDomain: 'https://files.example.test',
+      privateDomain: 'https://private-files.example.test'
+    })
     expect(env.smtp).toBeNull()
+  })
+
+  it('拒绝带协议的七牛 CDN 域名', () => {
+    expect(() =>
+      createEnv({
+        ...validEnv,
+        FILES_DOMAIN: 'https://files.example.test'
+      })
+    ).toThrow(/FILES_DOMAIN.*域名/s)
   })
 
   it('拒绝示例密钥、相同 JWT 密钥和不完整 SMTP 配置', () => {

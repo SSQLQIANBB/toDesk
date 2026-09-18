@@ -1,6 +1,6 @@
 # ToDesk 功能实现链路
 
-本文以当前 `client-vue/src` 与 `backend-koa/src` 为准，按“页面或组件 → 前端状态/API/Socket → 后端路由或事件 → MySQL/Redis/浏览器资源”的顺序说明。文中的文件名均可点击跳到源码；HTTP 地址和 Socket 事件名可直接用于排查 Network 或服务端日志。部署与启动参见 [STARTUP.md](../STARTUP.md)、[DEPLOYMENT.md](../DEPLOYMENT.md)；邮箱配置参见 [EMAIL_VERIFICATION.md](./EMAIL_VERIFICATION.md)，带宽取舍参见 [LOW_BANDWIDTH_REALTIME.md](./LOW_BANDWIDTH_REALTIME.md)。
+本文以当前 `client-vue/src` 与 `backend-koa/src` 为准，按“页面或组件 → 前端状态/API/Socket → 后端路由或事件 → MySQL/Redis/浏览器资源”的顺序说明。文中的文件名均可点击跳到源码；HTTP 地址和 Socket 事件名可直接用于排查 Network 或服务端日志。部署与启动参见 [STARTUP.md](../STARTUP.md)、[DEPLOYMENT.md](../DEPLOYMENT.md)；邮箱配置参见 [EMAIL_VERIFICATION.md](./EMAIL_VERIFICATION.md)，七牛存储与 CDN 参见 [QINIU_CDN_CERTIFICATE_AUTOMATION.md](./QINIU_CDN_CERTIFICATE_AUTOMATION.md)，带宽取舍参见 [LOW_BANDWIDTH_REALTIME.md](./LOW_BANDWIDTH_REALTIME.md)。
 
 ## 1. 程序入口与公共通信层
 
@@ -118,7 +118,7 @@ HTTP 路由主要以 `/api/auth`、`/api/groups`、`/api/messages`、`/api/invit
 
 ### 8.2 录制与文件上传
 
-[MediaRecorder.vue](../client-vue/src/components/MediaRecorder.vue) 使用浏览器 MediaRecorder 录制传入的流，群视频和群共享分别在 [groupVideo.vue](../client-vue/src/views/groupVideo.vue)、[groupScreen.vue](../client-vue/src/views/groupScreen.vue) 使用；其录制开始、停止与下载/预览在浏览器侧完成。当前 `handleRecordingStop` 主要提示录制结果，并未自动上传会议录像。头像等普通文件上传由 [api/common.ts](../client-vue/src/api/common.ts) 发 `POST /api/files/upload`；后端 [router/file.ts](../backend-koa/src/router/file.ts) → [fileController.ts](../backend-koa/src/controller/fileController.ts) 写入上传目录与 [File.ts](../backend-koa/src/models/File.ts)。`GET /api/files`、`GET /api/files/:fileId/download`、`DELETE /api/files/:fileId` 也在后端实现，但主界面目前主要调用上传接口。
+[MediaRecorder.vue](../client-vue/src/components/MediaRecorder.vue) 使用浏览器 MediaRecorder 录制传入的流，群视频和群共享分别在 [groupVideo.vue](../client-vue/src/views/groupVideo.vue)、[groupScreen.vue](../client-vue/src/views/groupScreen.vue) 使用；其录制开始、停止与下载/预览在浏览器侧完成。当前 `handleRecordingStop` 主要提示录制结果，并未自动上传会议录像。头像、聊天图片、语音片段和普通文件由 [api/common.ts](../client-vue/src/api/common.ts) 发 `POST /api/files/upload`；后端 [router/file.ts](../backend-koa/src/router/file.ts) → [fileController.ts](../backend-koa/src/controller/fileController.ts) → [qiniuStorageService.ts](../backend-koa/src/services/qiniuStorageService.ts)，头像写入公共空间，其他文件写入私有空间。[File.ts](../backend-koa/src/models/File.ts) 只保存稳定的 `qiniu://` 引用，返回消息或文件列表时再生成 CDN/临时签名地址。发送媒体消息时 [config/meeting.ts](../backend-koa/src/config/meeting.ts) 通过文件 ID 校验发送者与群归属。`GET /api/files`、`GET /api/files/:fileId/download`、`DELETE /api/files/:fileId` 分别负责刷新访问地址、重定向下载和删除七牛对象；旧 `/uploads` 只保留为历史迁移兼容入口。
 
 ## 9. 桌面通知、声音与移动端
 

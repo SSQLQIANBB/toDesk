@@ -46,6 +46,10 @@ services:
       REDIS_DB: 0
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required in .env}
       REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:?REFRESH_TOKEN_SECRET is required in .env}
+      FILES_DOMAIN: ${FILES_DOMAIN:?FILES_DOMAIN is required in .env}
+      PRIVATE_FILES_DOMAIN: ${PRIVATE_FILES_DOMAIN:?PRIVATE_FILES_DOMAIN is required in .env}
+      QINIU_ACCESS_KEY: ${QINIU_ACCESS_KEY:?QINIU_ACCESS_KEY is required in .env}
+      QINIU_SECRET_KEY: ${QINIU_SECRET_KEY:?QINIU_SECRET_KEY is required in .env}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:-}

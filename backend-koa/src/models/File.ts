@@ -73,12 +73,12 @@ File.init(
     filePath: {
       type: DataTypes.STRING(500),
       allowNull: false,
-      comment: '文件存储路径',
+      comment: '七牛对象 key；迁移前记录为本地文件路径',
     },
     fileUrl: {
       type: DataTypes.STRING(500),
       allowNull: false,
-      comment: '文件访问URL',
+      comment: '稳定存储引用；迁移前记录为 /uploads URL',
     },
     downloadCount: {
       type: DataTypes.INTEGER,
