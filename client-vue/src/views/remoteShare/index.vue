@@ -1,5 +1,9 @@
 <template>
-  <n-layout has-sider class="h-full w-full bg-gradient-to-br from-slate-50 to-slate-100">
+  <n-layout
+    has-sider
+    class="remote-shell h-full w-full"
+    :class="{ 'sidebar-open': mobileSidebarOpen }"
+  >
     <n-layout-sider
       class="remote-sidebar"
       :class="{ 'mobile-open': mobileSidebarOpen }"
@@ -8,16 +12,16 @@
       :collapsed-width="0"
       collapse-mode="transform"
       :show-trigger="false"
-      content-class="flex flex-col bg-white shadow-lg"
+      content-class="remote-sidebar-content flex flex-col"
     >
       <n-button class="mobile-sidebar-close" secondary @click="mobileSidebarOpen = false">关闭列表</n-button>
       <!-- 用户信息卡片 -->
-      <div class="p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-        <div class="flex items-center gap-3 mb-3">
+      <div class="sidebar-profile p-4 text-white">
+        <div class="sidebar-profile-main flex items-center gap-3 mb-3">
           <n-avatar 
             :size="48" 
             :src="authUser?.avatar || undefined"
-            class="cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
+            class="profile-avatar cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
             @click="goToProfile"
           >
             <span v-if="!authUser?.avatar">{{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}</span>
@@ -30,7 +34,8 @@
             </div>
           </div>
           <n-button 
-            type="error" 
+            class="sidebar-logout"
+            type="error"
             size="small" 
             strong
             secondary
@@ -41,22 +46,22 @@
         </div>
         <!-- 快捷操作 -->
         <div class="flex gap-2">
-          <n-button size="small" secondary block @click="goToProfile">
+          <n-button class="profile-button" size="small" secondary block @click="goToProfile">
             个人中心
           </n-button>
         </div>
       </div>
 
       <!-- Tab 切换 -->
-      <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="flex-1 min-h-0 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
+      <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="sidebar-tabs flex-1 min-h-0 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
         <!-- 联系人 -->
         <n-tab-pane name="users" :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'" display-directive="show:lazy" class="flex flex-col h-full min-h-0 pt-0">
-          <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between gap-2">
+          <div class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between gap-2">
             <span>联系人 ({{ displayUsers.length }})</span>
             <span v-if="unread.privateTotal > 0" class="contact-unread-badge" aria-label="未读消息">{{ unread.privateTotal > 99 ? '99+' : unread.privateTotal }}</span>
           </div>
           <n-scrollbar class="flex-1 min-h-0">
-            <ul class="p-3 space-y-2">
+            <ul class="contact-list p-2 space-y-1">
               <n-badge 
                 :offset="[-8, 8]" 
                 class="w-full" 
@@ -67,7 +72,7 @@
                 :key="user.id"
               >
                 <li 
-                  class="w-full flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-blue-50 hover:shadow-md border"
+                  class="contact-item w-full flex items-center gap-3 cursor-pointer transition-all"
                   :class="contactUser?.id === user.id ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
                   @click="selectContact(user)"
                 >
@@ -98,7 +103,7 @@
 
         <!-- 我的群组 -->
         <n-tab-pane name="groups" :tab="unread.groupTotal ? `我的群组 (${unread.groupTotal})` : '我的群组'" display-directive="show:lazy" class="flex flex-col h-full min-h-0 pt-0">
-          <div class="px-4 py-3 text-xs text-gray-500 font-semibold border-b bg-gray-50 flex items-center justify-between">
+          <div class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between">
             <span>我的群组 ({{ myGroups.length }})</span>
             <n-button size="tiny" @click="goToGroups">管理</n-button>
           </div>
@@ -112,7 +117,7 @@
                 <div 
                   v-for="group in myGroups" 
                   :key="group.id"
-                  class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-blue-50 hover:shadow-md border bg-white border-gray-200"
+                  class="group-item flex items-center gap-3 cursor-pointer transition-all"
                   @click="goToGroupChat(group.id)"
                 >
                   <n-avatar :size="40" :src="group.avatar || undefined">
@@ -145,9 +150,9 @@
     </n-layout-sider>
 
     <n-layout-content content-class="w-full flex flex-col">
-      <div v-if="contactUser" class="h-full w-full flex flex-col bg-white">
+      <div v-if="contactUser" class="chat-panel h-full w-full flex flex-col">
         <!-- 聊天头部 -->
-        <header class="min-h-16 shadow-sm flex items-center px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
+        <header class="chat-header min-h-16 flex items-center px-3 sm:px-6 py-2">
           <n-button class="mobile-sidebar-toggle" secondary aria-label="打开联系人列表" @click="mobileSidebarOpen = true">☰</n-button>
           <div class="flex items-center gap-3 w-0 flex-grow overflow-hidden">
             <n-avatar :size="40" :src="contactUser.avatar || undefined" class="flex-shrink-0">
@@ -159,48 +164,53 @@
             </div>
           </div>
         </header>
-        <n-scrollbar class="grow p-4" ref="scrollbarRef">
-          <ul class="space-y-3">
-            <li class="flex flex-col w-full" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="msg.id || msg.clientMessageId || index">
-              <span class="text-xs text-gray-400 mb-1">{{msg.time}}</span>
-              <CallHistoryMessage
-                v-if="msg.messageType === 'call' && msg.call"
-                :record="msg.call"
-                :is-mine="msg.fromUserId === authUser?.id"
-              />
+        <n-scrollbar class="message-scrollbar grow" ref="scrollbarRef">
+          <ul class="message-list space-y-4">
+            <li class="message-item flex flex-col w-full" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="msg.id || msg.clientMessageId || index">
               <div
-                v-else-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
-                class="p-2 rounded-lg max-w-[88%] sm:max-w-[60%] shadow-sm"
-                :class="msg.fromUserId === authUser?.id ? 'bg-blue-50' : 'bg-green-50'"
+                class="message-entry"
+                :class="[
+                  msg.fromUserId === authUser?.id ? 'message-entry--mine' : 'message-entry--theirs',
+                  { 'message-entry--call': msg.messageType === 'call' },
+                ]"
               >
-                <ChatMediaMessage
-                  :type="msg.messageType"
-                  :media="msg.media"
+                <CallHistoryMessage
+                  v-if="msg.messageType === 'call' && msg.call"
+                  :record="msg.call"
                   :is-mine="msg.fromUserId === authUser?.id"
-                  @loaded="scrollToBottom('auto')"
                 />
+                <div
+                  v-else-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
+                  class="message-bubble message-bubble--media"
+                >
+                  <ChatMediaMessage
+                    :type="msg.messageType"
+                    :media="msg.media"
+                    :is-mine="msg.fromUserId === authUser?.id"
+                    @loaded="scrollToBottom('auto')"
+                  />
+                </div>
+                <div v-else class="message-bubble message-bubble--text overflow-hidden text-wrap break-words">
+                  {{ msg.message }}
+                </div>
+                <span class="message-time">{{msg.time}}</span>
               </div>
-              <div v-else class="p-3 rounded-lg max-w-[88%] sm:max-w-[60%] overflow-hidden text-wrap break-words shadow-sm transition-all hover:shadow-md"
-                   :class="msg.fromUserId === authUser?.id ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white' : 'bg-gradient-to-br from-green-400 to-green-500 text-white'">
-                {{ msg.message }}
-              </div>
-              <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="text-xs text-gray-500 mt-1" @click="msg.sendStatus === 'failed' && retryPrivateMessage(msg)">
+              <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="message-status text-xs mt-1" @click="msg.sendStatus === 'failed' && retryPrivateMessage(msg)">
                 {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
               </button>
             </li>
           </ul>
         </n-scrollbar>
         
-        <ToolBar :contact-user="contactUser" />
-
-        <div class="border-t bg-white px-4 pb-3">
-          <ChatMediaComposer @send="sendMedia" />
-          <div class="h-28">
-            <TextMsg @send="sendMsg" />
+        <div class="message-composer-shell">
+          <ToolBar class="chat-toolbar" :contact-user="contactUser" />
+          <ChatMediaComposer class="chat-media-actions" @send="sendMedia" />
+          <div class="message-editor-shell h-28">
+            <TextMsg class="message-editor" @send="sendMsg" />
           </div>
         </div>
       </div>
-      <div class="h-full w-full flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-50 to-slate-100" v-else>
+      <div class="chat-empty-state h-full w-full flex flex-col items-center justify-center gap-4" v-else>
         <n-button class="mobile-sidebar-toggle" secondary @click="mobileSidebarOpen = true">打开联系人列表</n-button>
         <n-empty description="请从左侧选择一个联系人开始聊天" size="large">
           <template #icon>
@@ -666,22 +676,446 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.contact-unread-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #e11d48; color: #fff; font-size: 11px; line-height: 1; }
+.remote-shell {
+  position: relative;
+  background: #f1f5f9;
+  color: #1e293b;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+:deep(.remote-sidebar) {
+  border-right: 1px solid rgba(203, 213, 225, 0.76);
+  box-shadow: none;
+}
+
+:deep(.remote-sidebar-content) {
+  background: #f8fafc;
+  box-shadow: none;
+}
+
+.sidebar-profile {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-profile-main {
+  min-height: 48px;
+}
+
+.profile-avatar {
+  box-shadow: 0 8px 22px rgba(30, 64, 175, 0.24);
+}
+
+:deep(.sidebar-logout),
+:deep(.profile-button) {
+  --n-color: rgba(255, 255, 255, 0.13) !important;
+  --n-color-hover: rgba(255, 255, 255, 0.22) !important;
+  --n-color-pressed: rgba(255, 255, 255, 0.28) !important;
+  --n-text-color: rgba(255, 255, 255, 0.9) !important;
+  --n-text-color-hover: #fff !important;
+  --n-border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  --n-border-hover: 1px solid rgba(255, 255, 255, 0.24) !important;
+  border-radius: 9px;
+  backdrop-filter: blur(10px);
+}
+
+:deep(.sidebar-tabs .n-tabs-nav) {
+  flex: none;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+:deep(.sidebar-tabs) {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+:deep(.sidebar-tabs .n-tabs-pane-wrapper),
+:deep(.sidebar-tabs .n-tab-pane) {
+  min-height: 0;
+  flex: 1;
+}
+
+:deep(.sidebar-tabs .n-tab-pane) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.sidebar-tabs .n-tabs-tab) {
+  padding-block: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+:deep(.sidebar-tabs .n-tabs-tab--active) {
+  color: #2563eb;
+}
+
+:deep(.sidebar-tabs .n-tabs-bar) {
+  height: 2px;
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.sidebar-section-header {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.78);
+  background: rgba(248, 250, 252, 0.92);
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.contact-list {
+  padding-bottom: 16px;
+}
+
+.contact-item,
+.group-item {
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.contact-item:hover,
+.group-item:hover {
+  border-color: transparent;
+  background: rgba(226, 232, 240, 0.62);
+  box-shadow: none;
+}
+
+.contact-item.bg-blue-100 {
+  border-color: #dbeafe;
+  background: rgba(239, 246, 255, 0.96);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.08);
+}
+
+.contact-unread-badge {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e11d48;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.chat-panel {
+  background: #f8fafc;
+}
+
+.chat-header {
+  z-index: 2;
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+  backdrop-filter: blur(14px);
+}
+
+.message-scrollbar {
+  min-height: 0;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(219, 234, 254, 0.56), transparent 32%),
+    #f8fafc;
+}
+
+:deep(.message-scrollbar .n-scrollbar-content) {
+  padding: 24px;
+}
+
+.message-entry {
+  position: relative;
+  max-width: min(68%, 680px);
+}
+
+.message-bubble {
+  min-width: 92px;
+  padding: 11px 14px 27px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  color: #334155;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.message-bubble:hover {
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.09);
+}
+
+.message-entry--mine .message-bubble {
+  border-color: #2563eb;
+  border-bottom-right-radius: 5px;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 7px 20px rgba(37, 99, 235, 0.18);
+}
+
+.message-entry--theirs .message-bubble {
+  border-bottom-left-radius: 5px;
+}
+
+.message-bubble--media {
+  padding: 6px 7px 25px;
+}
+
+.message-time {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  max-width: calc(100% - 20px);
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-entry--mine .message-time {
+  color: rgba(219, 234, 254, 0.78);
+}
+
+.message-entry :deep(.call-history-message) {
+  min-width: 220px;
+  padding-bottom: 30px;
+  border-radius: 16px;
+}
+
+.message-entry--mine :deep(.call-history-message) {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.message-entry--call.message-entry--mine .message-time {
+  color: #64748b;
+}
+
+.message-status {
+  color: #64748b;
+}
+
+.message-composer-shell {
+  flex: none;
+  padding: 0 16px 14px;
+  border-top: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.025);
+}
+
+:deep(.chat-toolbar) {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0 4px;
+  border: 0;
+}
+
+:deep(.chat-toolbar .n-button),
+:deep(.chat-media-actions .n-button) {
+  --n-color: #f1f5f9 !important;
+  --n-color-hover: #e2e8f0 !important;
+  --n-color-pressed: #cbd5e1 !important;
+  --n-text-color: #475569 !important;
+  --n-text-color-hover: #1e293b !important;
+  --n-border: 1px solid transparent !important;
+  --n-border-hover: 1px solid transparent !important;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+:deep(.chat-media-actions) {
+  gap: 8px;
+  padding: 5px 0 8px;
+}
+
+:deep(.chat-media-actions .hold-to-talk) {
+  min-height: 36px;
+  border-color: #dbe3ee;
+  border-radius: 11px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+:deep(.chat-media-actions .hold-to-talk:hover) {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+:deep(.chat-media-actions .hold-to-talk--active) {
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+:deep(.message-editor) {
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: #f1f5f9;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow 0.2s ease, background 0.2s ease;
+}
+
+:deep(.message-editor:focus-within) {
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+
+:deep(.message-editor [contenteditable="true"]) {
+  padding: 12px 92px 12px 14px;
+  color: #1e293b;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+:deep(.message-editor .n-button) {
+  min-width: 72px;
+  border-radius: 10px;
+}
+
+.chat-empty-state {
+  padding: 28px;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(219, 234, 254, 0.7), transparent 24%),
+    linear-gradient(145deg, #f8fafc, #f1f5f9);
+}
+
+:deep(.chat-empty-state .n-empty) {
+  max-width: 420px;
+  padding: 34px 40px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(12px);
+}
+
+:deep(.chat-empty-state .n-empty__icon) {
+  display: flex;
+  width: 80px;
+  height: 80px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  background: #eff6ff;
+  color: #2563eb !important;
+  box-shadow: inset 0 0 0 1px #dbeafe;
+}
+
+:deep(.chat-empty-state .n-empty__description) {
+  margin-top: 20px;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.mobile-sidebar-toggle,
+.mobile-sidebar-close {
+  display: none;
+}
+
+.n-tabs.n-tabs--top .n-tab-pane {
+  padding-top: 0;
+}
+
 @media (max-width: 767px) {
+  .remote-shell.sidebar-open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    background: rgba(15, 23, 42, 0.52);
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+  }
+
   :deep(.remote-sidebar) {
     position: absolute;
     inset: 0 auto 0 0;
     z-index: 20;
-    max-width: calc(100vw - 44px);
-    transform: translateX(-100%);
-    transition: transform .2s ease;
+    width: min(80vw, 320px) !important;
+    min-width: min(80vw, 320px) !important;
+    max-width: min(80vw, 320px);
+    border-right: 0;
+    border-radius: 0 18px 18px 0;
+    box-shadow: 18px 0 50px rgba(15, 23, 42, 0.24);
+    transform: translateX(-104%);
+    transition: transform 0.24s ease;
   }
-  :deep(.remote-sidebar.mobile-open) { transform: translateX(0); }
+
+  :deep(.remote-sidebar.mobile-open) {
+    transform: translateX(0);
+  }
+
+  :deep(.remote-sidebar-content) {
+    overflow: hidden;
+    border-radius: 0 18px 18px 0;
+  }
+
+  .sidebar-profile { order: 1; }
+  .sidebar-tabs { order: 2; }
+
+  .mobile-sidebar-close {
+    display: inline-flex;
+    order: 3;
+    flex: none;
+    margin: 10px 12px 12px;
+    border-radius: 10px;
+  }
+
+  .mobile-sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .chat-header {
+    min-height: 60px;
+    padding-inline: 12px;
+  }
+
+  :deep(.message-scrollbar .n-scrollbar-content) {
+    padding: 16px 12px;
+  }
+
+  .message-entry {
+    max-width: 88%;
+  }
+
+  .message-composer-shell {
+    padding: 0 12px max(10px, env(safe-area-inset-bottom));
+  }
+
+  :deep(.chat-toolbar) {
+    gap: 6px;
+    padding-top: 9px;
+  }
+
+  :deep(.chat-toolbar .n-button) {
+    padding-inline: 10px;
+  }
+
+  .message-editor-shell {
+    height: 104px;
+  }
+
+  .chat-empty-state {
+    padding: 20px;
+  }
+
+  :deep(.chat-empty-state .n-empty) {
+    width: 100%;
+    padding: 28px 18px;
+  }
 }
-.mobile-sidebar-toggle { display: none; }
-.mobile-sidebar-close { display: none; }
-@media (max-width: 767px) { .mobile-sidebar-toggle, .mobile-sidebar-close { display: inline-flex; } }
-.n-tabs.n-tabs--top .n-tab-pane {
-  padding-top: 0px;
+
+@media (prefers-reduced-motion: reduce) {
+  :deep(.remote-sidebar),
+  .message-bubble {
+    transition: none;
+  }
 }
 </style>
