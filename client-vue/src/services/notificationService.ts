@@ -38,6 +38,7 @@ class NotificationService {
   private defaultSoundSources = { message: '', call: '' };
   private notificationSound: HTMLAudioElement | null = null;
   private callRingtone: HTMLAudioElement | null = null;
+  private outgoingRingtone: HTMLAudioElement | null = null;
   private activeCallRingtones = new Set<string>();
   private preferences: NotificationPreferences = { ...defaultPreferences };
 
@@ -247,6 +248,21 @@ class NotificationService {
     }
   }
 
+  startOutgoingRingtone(tone: SoundPreferences['callTone']) {
+    if (!this.soundPreferences.callEnabled) return;
+    this.stopOutgoingRingtone();
+    const audio = this.outgoingRingtone ||= new Audio();
+    audio.src = callTones.find(item => item.value === tone)!.src || this.defaultSoundSources.call;
+    audio.volume = .55;
+    audio.loop = true;
+    void audio.play().catch(error => console.warn('播放回铃音失败:', error));
+  }
+
+  stopOutgoingRingtone() {
+    this.outgoingRingtone?.pause();
+    if (this.outgoingRingtone) this.outgoingRingtone.currentTime = 0;
+  }
+
   private stopAllCallRingtones() {
     this.activeCallRingtones.clear();
     this.callRingtone?.pause();
@@ -397,7 +413,10 @@ class NotificationService {
       this.notificationSound.src = this.getSoundSource('message');
     }
     if (!this.soundPreferences.messageEnabled) this.notificationSound?.pause();
-    if (!this.soundPreferences.callEnabled) this.stopAllCallRingtones();
+    if (!this.soundPreferences.callEnabled) {
+      this.stopAllCallRingtones();
+      this.stopOutgoingRingtone();
+    }
     if (previous.callTone !== this.soundPreferences.callTone && this.callRingtone) {
       this.callRingtone.pause();
       this.callRingtone.src = this.getSoundSource('call');

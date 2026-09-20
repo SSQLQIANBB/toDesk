@@ -29,7 +29,7 @@ const message = useMessage();
 const settings = ref(notificationService.getSoundPreferences());
 const sections = [
   { kind: 'message', title: '消息提示音', description: '私聊、群聊消息及群组邀请的声音提醒', label: '消息提示音', enabled: 'messageEnabled', tone: 'messageTone', options: [...messageTones] },
-  { kind: 'call', title: '来电铃声', description: '语音、视频通话及屏幕共享邀请的声音提醒', label: '来电铃声', enabled: 'callEnabled', tone: 'callTone', options: [...callTones] },
+  { kind: 'call', title: '来电铃声', description: '邀请等待期间循环播放，单人呼叫的发起方也会听到你选择的铃声', label: '来电铃声', enabled: 'callEnabled', tone: 'callTone', options: [...callTones] },
 ] as const;
 const previewing = ref<SoundKind | null>(null);
 let previewAudio: HTMLAudioElement | null = null;

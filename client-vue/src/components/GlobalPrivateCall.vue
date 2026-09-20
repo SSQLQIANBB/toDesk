@@ -9,26 +9,15 @@
     :aria-modal="isFullscreen"
     :aria-label="callTitle"
   >
-    <header class="private-call__header" @pointerdown="beginFloatingDrag">
+    <header v-if="connectionType === DEVICE_TYPE.SCREEN" class="private-call__header" @pointerdown="beginFloatingDrag">
       <div class="private-call__title">
         <strong>{{ callTitle }} · {{ contactUserName }}</strong>
         <span class="private-call__status">{{ connectionStatus === 'connected' ? '已连接' : '连接中' }}</span>
       </div>
       <div class="private-call__actions">
-        <n-button v-if="connectionType === DEVICE_TYPE.CAMERA" size="small" secondary @click="toggleFullscreen">
-          {{ isFullscreen ? '取消全屏' : '全屏' }}
-        </n-button>
         <n-button size="small" type="error" @click="hangup">挂断</n-button>
       </div>
     </header>
-    <div v-if="connectionType === DEVICE_TYPE.CAMERA || connectionType === DEVICE_TYPE.AUDIO" class="private-call__controls">
-      <n-button size="small" secondary :aria-pressed="isMicrophoneMuted" @click="toggleMicrophone">
-        {{ isMicrophoneMuted ? '开启麦克风' : '静音' }}
-      </n-button>
-      <n-button v-if="connectionType === DEVICE_TYPE.CAMERA" size="small" secondary :aria-pressed="isCameraOff" @click="toggleCamera">
-        {{ isCameraOff ? '开启摄像头' : '关闭摄像头' }}
-      </n-button>
-    </div>
     <div class="private-call__stage">
       <div v-if="connectionType === DEVICE_TYPE.AUDIO" class="private-call__audio">
         <n-avatar :size="96" :src="activePeer?.avatar || undefined">
@@ -37,6 +26,15 @@
         <strong>{{ contactUserName }}</strong>
         <span>{{ isConnected ? '语音通话中' : '等待对方接听…' }}</span>
         <audio ref="audioRef" autoplay />
+        <div class="private-call__audio-actions">
+          <button class="audio-action audio-action--hangup" type="button" aria-label="挂断" title="挂断" @click="hangup">
+            <i class="iconfont icon-hangup" aria-hidden="true"></i>
+          </button>
+          <button class="audio-action audio-action--mute" type="button" :aria-label="isMicrophoneMuted ? '开启麦克风' : '静音'"
+            :title="isMicrophoneMuted ? '开启麦克风' : '静音'" :aria-pressed="isMicrophoneMuted" @click="toggleMicrophone">
+            <i class="iconfont" :class="isMicrophoneMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
       <div v-else class="private-call__remote" :class="{ 'private-call__video--local': isLocalMain }" @pointerdown="beginFloatingDrag">
         <div v-if="!mainStreamReady && !isLocalMain" class="private-call__waiting">
@@ -53,6 +51,25 @@
         <div v-if="!isLocalMain && isCameraOff" class="private-call__waiting">摄像头已关闭</div>
         <span class="private-call__caption">{{ isLocalMain ? '对方' : '我' }}</span>
       </div>
+      <template v-if="connectionType === DEVICE_TYPE.CAMERA">
+        <button class="video-action private-call__fullscreen" type="button"
+          :aria-label="isFullscreen ? '取消全屏' : '全屏'" :title="isFullscreen ? '取消全屏' : '全屏'" @click="toggleFullscreen">
+          <i class="iconfont icon-arrow" :class="{ 'is-collapsed': isFullscreen }" aria-hidden="true"></i>
+        </button>
+        <div class="private-call__video-actions">
+          <button class="video-action" type="button" :aria-label="isMicrophoneMuted ? '开启麦克风' : '静音'"
+            :title="isMicrophoneMuted ? '开启麦克风' : '静音'" :aria-pressed="isMicrophoneMuted" @click="toggleMicrophone">
+            <i class="iconfont" :class="isMicrophoneMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i>
+          </button>
+          <button class="video-action video-action--hangup" type="button" aria-label="挂断" title="挂断" @click="hangup">
+            <i class="iconfont icon-hangup" aria-hidden="true"></i>
+          </button>
+          <button class="video-action" type="button" :aria-label="isCameraOff ? '开启摄像头' : '关闭摄像头'"
+            :title="isCameraOff ? '开启摄像头' : '关闭摄像头'" :aria-pressed="isCameraOff" @click="toggleCamera">
+            <i class="iconfont" :class="isCameraOff ? 'icon-video-off' : 'icon-video'" aria-hidden="true"></i>
+          </button>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -117,6 +134,8 @@ const callStore = usePrivateCallStore();
 const activePeer = ref<User | null>(null);
 const socket = computed(() => socketStore.socket);
 let generation = 0;
+let outgoingCallId: string | null = null;
+let outgoingRinging = false;
 let pendingIce: RTCIceCandidateInit[] = [];
 
 const message = useMessage();
@@ -279,7 +298,9 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
     syncVideos();
 
     // 发送呼叫请求
+    outgoingCallId = crypto.randomUUID();
     socket.value?.emit('webrtc_call_request', {
+      callId: outgoingCallId,
       to: activePeer.value,
       deviceType: type
     });
@@ -487,7 +508,7 @@ async function flushIce() {
 }
 
 // 全局接收来电；回复始终发送给来电方，而不是聊天页选中的联系人。
-function handleIncomingCall(data: { from: string; deviceType: DEVICE_TYPE; user?: User }) {
+function handleIncomingCall(data: { from: string; callId?: string; deviceType: DEVICE_TYPE; user?: User }) {
   if (![DEVICE_TYPE.CAMERA, DEVICE_TYPE.SCREEN, DEVICE_TYPE.AUDIO].includes(data.deviceType)) return;
   if (activePeer.value || incomingCallShow.value) {
     if (activePeer.value?.socketId !== data.from) {
@@ -501,6 +522,12 @@ function handleIncomingCall(data: { from: string; deviceType: DEVICE_TYPE; user?
   incomingCallType.value = data.deviceType;
   incomingCallShow.value = true;
   notificationService.startCallRingtone(`private:${data.from}`);
+  if (data.callId) {
+    socket.value?.emit('webrtc_call_ringing', {
+      to: { socketId: data.from }, callId: data.callId,
+      tone: notificationService.getSoundPreferences().callTone,
+    });
+  }
   if (document.hidden) {
     const type = data.deviceType === DEVICE_TYPE.SCREEN ? 'screen' : data.deviceType === DEVICE_TYPE.AUDIO ? 'audio' : 'video';
     void notificationService.showCall(incomingCallFrom.value, type, data.user?.avatar, () => window.focus());
@@ -556,6 +583,9 @@ function rejectCall() {
 
 // 处理呼叫响应
 async function handleCallResponse(data: { accepted: boolean }) {
+  outgoingCallId = null;
+  outgoingRinging = false;
+  notificationService.stopOutgoingRingtone();
   if (data.accepted) {
     connectModalShow.value = true;
     await nextTick();
@@ -582,6 +612,9 @@ function hangup() {
 
 function cleanup() {
   generation++;
+  outgoingCallId = null;
+  outgoingRinging = false;
+  notificationService.stopOutgoingRingtone();
   if (incomingCallFromSocketId.value) notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
   incomingCallFromSocketId.value = '';
   stopFloatingDrag();
@@ -633,6 +666,12 @@ watch(() => callStore.request, request => {
 }, { flush: 'sync' });
 
 const handlers: Record<string, (data: any) => void> = {
+  webrtc_call_ringing: data => {
+    if (!outgoingCallId || outgoingRinging || data.callId !== outgoingCallId || data.from !== activePeer.value?.socketId) return;
+    if (data.tone !== 'default' && data.tone !== 'classic') return;
+    outgoingRinging = true;
+    notificationService.startOutgoingRingtone(data.tone);
+  },
   webrtc_call_request: handleIncomingCall,
   webrtc_offer: data => { if (data.from === activePeer.value?.socketId && !incomingCallShow.value) void handleOffer(data.offer); },
   webrtc_answer: data => { if (data.from === activePeer.value?.socketId) void handleAnswer(data.answer); },
@@ -661,15 +700,21 @@ window.addEventListener('resize', clampFloatingPosition);
 .private-call__title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .private-call__status { color: #86efac; font-size: 12px; }
 .private-call__actions { display: flex; gap: 8px; flex: none; }
-.private-call__controls { display: flex; justify-content: center; gap: 10px; padding: 9px 12px; background: #111b2b; border-bottom: 1px solid #273449; }
-.private-call__controls :deep(.n-button) { min-width: 106px; border-radius: 999px; }
 .private-call__stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: clamp(8px, 2vw, 24px); }
 .private-call__remote { position: relative; width: 100%; height: 100%; min-height: 0; background: #020617; border-radius: 14px; overflow: hidden; }
 .private-call__remote video { width: 100%; height: 100%; object-fit: contain; }
 .private-call__audio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; width: 100%; height: 100%; color: #f8fafc; background: radial-gradient(circle at top, #253553, #0b1220 58%); }
 .private-call__audio strong { font-size: 22px; }
 .private-call__audio span { color: #94a3b8; }
-.private-call__self { position: absolute; right: clamp(16px, 3vw, 40px); bottom: clamp(20px, 4vw, 44px); width: clamp(130px, 20vw, 270px); aspect-ratio: 4 / 3; border: 2px solid #64748b; border-radius: 12px; overflow: hidden; background: #111827; box-shadow: 0 10px 30px #0008; cursor: pointer; }
+.private-call__audio-actions { position: absolute; left: 0; right: 0; bottom: max(7vh, calc(env(safe-area-inset-bottom) + 20px)); display: flex; align-items: center; justify-content: center; height: 64px; }
+.audio-action { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; color: #fff; cursor: pointer; }
+.audio-action .iconfont { font-size: var(--icon-size-call); }
+.audio-action--hangup { width: 64px; height: 64px; background: #ef4444; }
+.audio-action--hangup:hover { background: #dc2626; }
+.audio-action--mute { position: absolute; right: clamp(24px, 6vw, 64px); width: 48px; height: 48px; background: #334155; }
+.audio-action--mute[aria-pressed="true"] { background: #2563eb; }
+.audio-action:focus-visible { outline: 3px solid #93c5fd; outline-offset: 4px; }
+.private-call__self { position: absolute; right: clamp(16px, 3vw, 40px); bottom: calc(112px + env(safe-area-inset-bottom)); width: clamp(130px, 20vw, 270px); aspect-ratio: 4 / 3; border: 2px solid #64748b; border-radius: 12px; overflow: hidden; background: #111827; box-shadow: 0 10px 30px #0008; cursor: pointer; }
 .private-call__self:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
 .private-call__self video { width: 100%; height: 100%; object-fit: cover; }
 .private-call__video--local video { transform: scaleX(-1); }
@@ -678,20 +723,33 @@ window.addEventListener('resize', clampFloatingPosition);
 .private-call--compact { inset: auto 16px 16px auto; width: min(360px, calc(100vw - 24px)); height: 280px; border: 1px solid #475569; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px #0008; }
 .private-call--compact .private-call__header { min-height: 44px; padding: 6px 10px; font-size: 12px; cursor: grab; touch-action: none; user-select: none; }
 .private-call--compact .private-call__header:active { cursor: grabbing; }
-.private-call--compact .private-call__controls { padding: 5px; gap: 6px; }
-.private-call--compact .private-call__controls :deep(.n-button) { min-width: 0; }
 .private-call--compact .private-call__stage { padding: 0; }
 .private-call--compact .private-call__remote { border-radius: 0; cursor: grab; touch-action: none; }
 .private-call--compact .private-call__remote:active { cursor: grabbing; }
-.private-call--compact .private-call__self { right: 8px; bottom: 8px; width: 84px; border-radius: 7px; }
+.private-call--compact .private-call__self { right: 8px; bottom: 72px; width: 84px; border-radius: 7px; }
 .private-call--compact .private-call__status, .private-call--compact .private-call__caption { display: none; }
+.private-call__video-actions { position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; gap: 24px; }
+.video-action { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; border: 1px solid #ffffff30; border-radius: 50%; background: #1e293bcc; color: #fff; cursor: pointer; backdrop-filter: blur(12px); }
+.video-action .iconfont { font-size: var(--icon-size-call); }
+.video-action:hover { background: #475569; }
+.video-action[aria-pressed="true"] { background: #2563eb; }
+.video-action--hangup { width: 64px; height: 64px; background: #ef4444; border: 0; }
+.video-action--hangup:hover { background: #dc2626; }
+.video-action:focus-visible { outline: 3px solid #93c5fd; outline-offset: 4px; }
+.private-call__fullscreen { position: absolute; right: 16px; top: calc(16px + env(safe-area-inset-top)); width: 44px; height: 44px; }
+.private-call__fullscreen .is-collapsed { transform: rotate(180deg); }
+.private-call--compact .private-call__video-actions { bottom: 12px; gap: 16px; }
+.private-call--compact .video-action { width: 40px; height: 40px; }
+.private-call--compact .video-action .iconfont { font-size: var(--icon-size-control); }
+.private-call--compact .private-call__fullscreen { top: 8px; right: 8px; }
 :global(.private-invite .n-dialog__title), :global(.private-invite .n-dialog__content) { color: #f8fafc; }
 @media (max-width: 600px) {
   .private-call__header { min-height: 56px; padding: 8px 12px; }
   .private-call__title strong { max-width: 40vw; font-size: 13px; }
   .private-call__stage { padding: 0; }
   .private-call__remote { border-radius: 0; }
-  .private-call__self { right: 10px; bottom: max(18px, env(safe-area-inset-bottom)); width: 32vw; }
+  .private-call__self { right: 10px; bottom: calc(112px + env(safe-area-inset-bottom)); width: 32vw; }
+  .private-call--compact .private-call__self { bottom: 72px; width: 84px; }
   .private-call--compact { right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); height: 250px; }
 }
 </style>

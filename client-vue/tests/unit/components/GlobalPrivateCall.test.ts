@@ -23,6 +23,8 @@ vi.mock('naive-ui', async importOriginal => ({
   useMessage: () => ({ info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn() }),
 }));
 vi.mock('@/services/notificationService', () => ({ default: {
+  startOutgoingRingtone: vi.fn(), stopOutgoingRingtone: vi.fn(),
+  getSoundPreferences: () => ({ callTone: 'default' }),
   showCall: vi.fn(), startCallRingtone: mocks.startRingtone, stopCallRingtone: mocks.stopRingtone,
 } }));
 import GlobalPrivateCall from '../../../src/components/GlobalPrivateCall.vue';
@@ -58,16 +60,39 @@ beforeEach(() => {
 });
 
 describe('全局单人邀请（无需挂载聊天页或选择联系人）', () => {
+  it('语音通话仅在底部显示挂断和静音图标，操作控制真实轨道', async () => {
+    const wrapper = render();
+    request(2);
+    wrapper.findComponent(Modal).vm.$emit('positive-click');
+    await flushPromises();
+    expect(wrapper.find('.private-call__header').exists()).toBe(false);
+    expect(wrapper.find('.private-call__controls').exists()).toBe(false);
+    const mute = wrapper.find('.audio-action--mute');
+    expect(mute.text()).toBe('');
+    await mute.trigger('click');
+    expect(mocks.audioTrack.enabled).toBe(false);
+    expect(mute.attributes('aria-pressed')).toBe('true');
+    expect(mute.find('.icon-microphone-off').exists()).toBe(true);
+    await mute.trigger('click');
+    expect(mocks.audioTrack.enabled).toBe(true);
+    await wrapper.find('.audio-action--hangup').trigger('click');
+    expect(wrapper.find('.private-call').exists()).toBe(false);
+    expect(mocks.emit).toHaveBeenCalledWith('webrtc_hangup', expect.anything());
+    wrapper.unmount();
+  });
   it('视频接听后默认全屏，可缩成浮窗再恢复', async () => {
     const wrapper = render();
     request(0);
     wrapper.findComponent(Modal).vm.$emit('positive-click');
     await flushPromises();
     expect(wrapper.find('.private-call').exists()).toBe(true);
+    expect(wrapper.find('.private-call__header').exists()).toBe(false);
+    expect(wrapper.find('.private-call__controls').exists()).toBe(false);
+    expect(wrapper.find('.private-call__video-actions').text()).toBe('');
     expect(wrapper.find('.private-call--compact').exists()).toBe(false);
-    await wrapper.find('.private-call__actions button').trigger('click');
+    await wrapper.find('.private-call__fullscreen').trigger('click');
     expect(wrapper.find('.private-call--compact').exists()).toBe(true);
-    await wrapper.find('.private-call__actions button').trigger('click');
+    await wrapper.find('.private-call__fullscreen').trigger('click');
     expect(wrapper.find('.private-call--compact').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -98,27 +123,27 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     request(0);
     wrapper.findComponent(Modal).vm.$emit('positive-click');
     await flushPromises();
-    await wrapper.findAll('.private-call__controls button')[0]!.trigger('click');
-    await wrapper.findAll('.private-call__controls button')[1]!.trigger('click');
+    await wrapper.findAll('.private-call__video-actions button')[0]!.trigger('click');
+    await wrapper.findAll('.private-call__video-actions button')[2]!.trigger('click');
     expect(mocks.audioTrack.enabled).toBe(false);
     expect(mocks.videoTrack.enabled).toBe(false);
     expect(wrapper.text()).toContain('摄像头已关闭');
-    await wrapper.findAll('.private-call__controls button')[0]!.trigger('click');
-    await wrapper.findAll('.private-call__controls button')[1]!.trigger('click');
+    await wrapper.findAll('.private-call__video-actions button')[0]!.trigger('click');
+    await wrapper.findAll('.private-call__video-actions button')[2]!.trigger('click');
     expect(mocks.audioTrack.enabled).toBe(true);
     expect(mocks.videoTrack.enabled).toBe(true);
     wrapper.unmount();
   });
 
-  it('视频浮窗可以通过标题栏拖动', async () => {
+  it('视频浮窗可以通过画面拖动', async () => {
     const wrapper = render();
     request(0);
     wrapper.findComponent(Modal).vm.$emit('positive-click');
     await flushPromises();
-    await wrapper.find('.private-call__actions button').trigger('click');
+    await wrapper.find('.private-call__fullscreen').trigger('click');
     const panel = wrapper.find('.private-call').element as HTMLElement;
     vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({ left: 16, top: 20, width: 300, height: 260 } as DOMRect);
-    wrapper.find('.private-call__header').element.dispatchEvent(new MouseEvent('pointerdown', { clientX: 30, clientY: 40, bubbles: true }));
+    wrapper.find('.private-call__remote').element.dispatchEvent(new MouseEvent('pointerdown', { clientX: 30, clientY: 40, bubbles: true }));
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 200, clientY: 220 }));
     await nextTick();
     expect(panel.style.left).toBe('186px');

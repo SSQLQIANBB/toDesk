@@ -16,6 +16,7 @@ export type PrivateCallHistoryRecord = CallHistoryRecord & {
 };
 
 type PrivateCallSession = {
+  callId?: string;
   callerSocketId: string;
   calleeSocketId: string;
   callerUserId: number;
@@ -103,6 +104,19 @@ export function serializeChatMessage(record: any) {
 
 export class PrivateCallTracker {
   private readonly sessions = new Map<string, PrivateCallSession>();
+
+  isPending(callerSocketId: string, calleeSocketId: string, callId: string) {
+    const session = this.sessions.get(this.getKey(callerSocketId, calleeSocketId));
+    return !!session && !session.accepted && session.callId === callId;
+  }
+
+  getPeerSocketIds(socketId: string) {
+    return [...this.sessions.values()].flatMap(session => {
+      if (session.callerSocketId === socketId) return [session.calleeSocketId];
+      if (session.calleeSocketId === socketId) return [session.callerSocketId];
+      return [];
+    });
+  }
 
   request(session: Omit<PrivateCallSession, 'accepted' | 'startedAt'>) {
     const existingKey = this.findKey(session.callerSocketId, session.calleeSocketId);

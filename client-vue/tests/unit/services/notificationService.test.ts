@@ -29,6 +29,20 @@ beforeEach(() => {
 });
 
 describe('通知设置', () => {
+  it('主叫使用被叫选择的铃声循环播放，停止后归零且不改动自己的铃声', async () => {
+    const { default: service } = await import('../../../src/services/notificationService');
+    service.startOutgoingRingtone('classic');
+    expect(sounds[2]!.src).toContain('classic-ring.mp3');
+    expect(sounds[2]!.loop).toBe(true);
+    expect(service.getSoundPreferences().callTone).toBe('default');
+    sounds[2]!.currentTime = 8;
+    service.stopOutgoingRingtone();
+    expect(sounds[2]!.currentTime).toBe(0);
+    expect(pause).toHaveBeenCalledOnce();
+    service.updateSoundPreferences({ callEnabled: false });
+    service.startOutgoingRingtone('classic');
+    expect(play).toHaveBeenCalledOnce();
+  });
   it('消息静音不影响来电，来电静音不影响消息', async () => {
     const { default: service } = await import('../../../src/services/notificationService');
     service.updateSoundPreferences({ messageEnabled: false });

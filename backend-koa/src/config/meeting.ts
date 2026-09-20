@@ -305,6 +305,9 @@ const initialMeeting = (server: Server) => {
       socketToUserMap.delete(socketId);
       if (currentUser) emitPresenceChange(currentUser.id, previous);
 
+      for (const peerSocketId of privateCallTracker.getPeerSocketIds(socketId)) {
+        io.to(peerSocketId).emit('webrtc_hangup', { from: socketId });
+      }
       await Promise.all(privateCallTracker.finishForSocket(socketId).map(recordPrivateCall));
 
       groupRooms.forEach((members, groupId) => {
@@ -413,6 +416,7 @@ const initialMeeting = (server: Server) => {
       if (!currentUser || !type || !data.to?.socketId || !calleeUserId) return;
 
       privateCallTracker.request({
+        callId: typeof data.callId === 'string' ? data.callId : undefined,
         callerSocketId: socketId,
         calleeSocketId: data.to.socketId,
         callerUserId: currentUser.id,
@@ -420,9 +424,19 @@ const initialMeeting = (server: Server) => {
         type,
       });
       socket.to(data.to.socketId).emit('webrtc_call_request', {
+        callId: data.callId,
         from: socketId,
         deviceType: data.deviceType,
         user: currentUser,
+      });
+    });
+
+    socket.on('webrtc_call_ringing', (data) => {
+      if (!currentUser || typeof data?.callId !== 'string' || !data.to?.socketId) return;
+      if (data.tone !== 'default' && data.tone !== 'classic') return;
+      if (!privateCallTracker.isPending(data.to.socketId, socketId, data.callId)) return;
+      socket.to(data.to.socketId).emit('webrtc_call_ringing', {
+        from: socketId, callId: data.callId, tone: data.tone,
       });
     });
 

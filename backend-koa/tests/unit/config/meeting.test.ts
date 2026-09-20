@@ -83,6 +83,40 @@ beforeEach(() => {
 });
 
 describe('私聊通话历史', () => {
+  it('被叫断开时通知主叫结束等待，并拒绝已结束呼叫的铃声回传', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    const bob = connect(2);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    await bob.handlers.get('authenticate')!({ token: '2' });
+    alice.handlers.get('webrtc_call_request')!({ to: { socketId: 'socket-2' }, deviceType: 2, callId: 'call-1' });
+    await bob.handlers.get('disconnect')!();
+    expect(mock.broadcasts).toContainEqual({ rooms: ['socket-1'], event: 'webrtc_hangup', payload: { from: 'socket-2' } });
+    bob.handlers.get('webrtc_call_ringing')!({ to: { socketId: 'socket-1' }, callId: 'call-1', tone: 'classic' });
+    expect(mock.broadcasts.filter(item => item.event === 'webrtc_call_ringing')).toHaveLength(0);
+  });
+  it('仅转发当前未接受呼叫的被叫铃声，拒绝伪造及过期回传', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    const bob = connect(2);
+    const other = connect(3);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    await bob.handlers.get('authenticate')!({ token: '2' });
+    await other.handlers.get('authenticate')!({ token: '3' });
+    alice.handlers.get('webrtc_call_request')!({ to: { socketId: 'socket-2' }, deviceType: 2, callId: 'call-1' });
+    const ringing = { to: { socketId: 'socket-1' }, callId: 'call-1', tone: 'classic' };
+    other.handlers.get('webrtc_call_ringing')!(ringing);
+    bob.handlers.get('webrtc_call_ringing')!({ ...ringing, callId: 'stale' });
+    bob.handlers.get('webrtc_call_ringing')!({ ...ringing, tone: 'https://untrusted.test/audio' });
+    expect(mock.broadcasts.filter(item => item.event === 'webrtc_call_ringing')).toHaveLength(0);
+    bob.handlers.get('webrtc_call_ringing')!(ringing);
+    expect(mock.broadcasts.filter(item => item.event === 'webrtc_call_ringing')).toEqual([
+      { rooms: ['socket-1'], event: 'webrtc_call_ringing', payload: { from: 'socket-2', callId: 'call-1', tone: 'classic' } },
+    ]);
+    await bob.handlers.get('webrtc_call_response')!({ to: { socketId: 'socket-1' }, accepted: true });
+    bob.handlers.get('webrtc_call_ringing')!(ringing);
+    expect(mock.broadcasts.filter(item => item.event === 'webrtc_call_ringing')).toHaveLength(1);
+  });
   it('从双方实际接通开始计时，并在挂断后同步给双方', async () => {
     initialMeeting({} as any);
     const alice = connect(1);
