@@ -78,6 +78,9 @@ select {
 }
 
 @media (max-width: 767px) {
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; touch-action: pan-x pan-y; }
+  body { position: fixed; inset: 0; }
+  #app .n-config-provider, #app .n-scrollbar-container, .n-modal-container { overscroll-behavior: none; }
   #app .h-screen { height: 100dvh; }
   #app .mobile-sidebar-toggle,
   #app .mobile-sidebar-close {

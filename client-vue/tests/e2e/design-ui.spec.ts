@@ -92,7 +92,7 @@ for (const width of [1440, 375]) {
       await prepare(page);
       await page.route(/\/api\/messages\/(private\?|group\/7\?)/, route => route.fulfill({ json: {
         messages: [0, 1, 2].map(index => ({
-          id: 100 + index, fromUserId: 4, toUserId: 1, userId: 4, groupId: 7,
+          id: 100 + index, fromUserId: index === 1 ? 1 : 4, toUserId: index === 1 ? 4 : 1, userId: index === 1 ? 1 : 4, groupId: 7,
           sender: { id: 4, username: 'monkey' },
           message: '', messageType: 'image', createdAt: '2026-09-20T04:00:00Z', isRead: true,
           media: { url: `https://chat-images.test/${index}.svg`, mimeType: 'image/svg+xml' },
@@ -124,6 +124,15 @@ for (const width of [1440, 375]) {
       await expect(images.nth(1).locator('img')).toHaveJSProperty('naturalHeight', 800);
       await expect(images.nth(2)).toContainText('图片加载失败');
       await expect(images.nth(2).getByText('图片加载中…')).toBeHidden();
+      for (const index of [0, 1]) {
+        const frame = (await images.nth(index).boundingBox())!;
+        const photo = images.nth(index).locator('img');
+        const bounds = (await photo.boundingBox())!;
+        expect(bounds.height).toBeLessThanOrEqual(frame.height);
+        expect(bounds.width).toBeLessThanOrEqual(frame.width);
+        expect(Math.abs(index === 1 ? bounds.x + bounds.width - frame.x - frame.width : bounds.x - frame.x)).toBeLessThan(1);
+        await expect(photo).toHaveCSS('border-radius', '10px');
+      }
       expect(await sizes()).toEqual(before);
       expect(await images.first().boundingBox()).toEqual(positionBefore);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -179,6 +188,16 @@ for (const width of [1440, 375]) {
     await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('chat.png') });
     const editor = page.getByRole('textbox', { name: '消息', exact: true });
     await expect(editor).toBeVisible();
+    await editor.click();
+    await expect(editor).toBeFocused();
+    await page.getByText('一起开始远程协作吧', { exact: true }).click();
+    await expect(editor).not.toBeFocused();
+    if (width < 768) {
+      await expect(editor).toHaveCSS('font-size', '16px');
+      await expect(page.locator('body')).toHaveCSS('position', 'fixed');
+      await expect(page.locator('html')).toHaveCSS('overscroll-behavior', 'none');
+      await expect(page.locator('html')).toHaveCSS('touch-action', 'pan-x pan-y');
+    }
     await expect(page.locator('.header-icon')).toHaveCount(0);
     await expect(page.locator('.message-time')).toHaveCount(0);
     await expect(page.getByText('通话时长 00:15')).toBeVisible();

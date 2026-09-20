@@ -14,7 +14,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, computed, onMounted } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 
 type MsgValue = string
 
@@ -115,11 +115,18 @@ function handleSend() {
   if (editorRef.value) editorRef.value.innerText = ''
 }
 
+function blurOnOutsidePointer(event: PointerEvent) {
+  const editor = editorRef.value
+  if (editor && editor === document.activeElement && !event.composedPath().includes(editor)) editor.blur()
+}
+
 onMounted(() => {
+  document.addEventListener('pointerdown', blurOnOutsidePointer, true)
   if (props.value && editorRef.value) {
     editorRef.value.innerText = props.value
   }
 })
+onBeforeUnmount(() => document.removeEventListener('pointerdown', blurOnOutsidePointer, true))
 </script>
 
 <style scoped>
@@ -133,7 +140,7 @@ onMounted(() => {
 .send-button:disabled { cursor: not-allowed; }
 @media (max-width: 767px) {
   .text-composer { gap: 6px; }
-  .text-editor { padding-inline: 14px; }
+  .text-editor { padding-inline: 14px; font-size: 16px; }
   .text-placeholder { left: 14px; }
   .send-button { width: 40px; height: 40px; }
 }
