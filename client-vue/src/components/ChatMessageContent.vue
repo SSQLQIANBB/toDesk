@@ -3,6 +3,7 @@
   <div v-else class="message-bubble" :class="{
     'message-bubble--mine': isMine,
     'message-bubble--media': (messageType === 'image' || messageType === 'voice') && media,
+    'message-bubble--image': messageType === 'image' && media,
   }">
     <ChatImageMessage v-if="messageType === 'image' && media" :media="media" />
     <ChatVoiceMessage v-else-if="messageType === 'voice' && media" :media="media" :is-mine="isMine" />
@@ -45,6 +46,14 @@ defineProps<{
   box-shadow: 0 7px 20px rgba(37, 99, 235, .18);
 }
 .message-bubble--media { padding: 6px 7px; }
+.message-bubble--image,
+.message-bubble--image:hover {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  box-shadow: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .message-bubble { transition: none; }
 }
