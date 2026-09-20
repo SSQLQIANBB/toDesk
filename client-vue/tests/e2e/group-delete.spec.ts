@@ -111,7 +111,7 @@ test.describe('群组删除', () => {
     await openGroupDetail(page);
 
     await page.getByRole('button', { name: '删除群组' }).click();
-    await expect(page.getByText(/删除后群消息、成员关系和邀请/)).toBeVisible();
+    await expect(page.getByText(/删除群组后，相关的群消息历史、成员关系和邀请记录/)).toBeVisible();
     await page.getByRole('button', { name: '取消' }).click();
 
     expect(state.getDeleteRequests()).toBe(0);

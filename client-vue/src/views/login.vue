@@ -1,32 +1,11 @@
 <template>
   <div class="login-page relative min-h-[100dvh] overflow-hidden flex items-center justify-center px-4 py-6 sm:p-6">
     <div class="login-scene" aria-hidden="true">
-      <div class="cosmic-orb cosmic-orb-primary"></div>
-      <div class="cosmic-orb cosmic-orb-secondary"></div>
-      <div class="star-field star-field-one">
-        <span v-for="index in 14" :key="`star-one-${index}`" class="star"></span>
-      </div>
-      <div class="star-field star-field-two">
-        <span v-for="index in 14" :key="`star-two-${index}`" class="star"></span>
-      </div>
-      <div class="orbit-line orbit-line-one"></div>
-      <div class="orbit-line orbit-line-two"></div>
-      <div class="astronaut-scene">
-        <div class="astronaut">
-          <div class="astronaut-backpack"></div>
-          <div class="astronaut-head"></div>
-          <div class="astronaut-arm astronaut-arm-left"></div>
-          <div class="astronaut-arm astronaut-arm-right"></div>
-          <div class="astronaut-body">
-            <div class="astronaut-panel"></div>
-          </div>
-          <div class="astronaut-leg astronaut-leg-left"></div>
-          <div class="astronaut-leg astronaut-leg-right"></div>
-        </div>
-      </div>
+      <div class="star-field"><span v-for="index in 80" :key="index" class="star" :style="{ left: `${(index * 37.7) % 100}%`, top: `${(index * 23.3) % 100}%`, opacity: 0.2 + (index % 5) / 8 }"></span></div>
     </div>
 
     <div class="login-content relative z-20 w-full max-w-md">
+      <img class="login-astronaut" src="@/assets/design/astronaut.svg" alt="" aria-hidden="true" />
       <n-card class="login-card shadow-2xl">
         <template #header>
           <div class="login-brand text-center">
@@ -34,7 +13,7 @@
               <span class="login-brand-mark" aria-hidden="true">T</span>
               <h1 class="login-brand-title">ToDesk</h1>
             </div>
-            <p class="login-brand-subtitle">远程协作平台</p>
+            <p class="login-brand-subtitle">远程协作平台 · 高效安全链接</p>
           </div>
         </template>
 
@@ -42,14 +21,14 @@
           <!-- 登录 -->
           <n-tab-pane name="login" tab="登录">
             <n-form v-if="loginMethod === 'account'" ref="loginFormRef" :model="loginForm" :rules="loginRules" class="mt-4">
-              <n-form-item path="username" label="账号">
+              <n-form-item path="username" label="账号 / 邮箱">
                 <n-input
                   v-model:value="loginForm.username"
                   placeholder="请输入用户名或邮箱"
                   @keyup.enter="handleLogin"
                 >
                   <template #prefix>
-                    <n-icon :component="PersonFilled" />
+                    <n-icon :component="PersonOutline" />
                   </template>
                 </n-input>
               </n-form-item>
@@ -59,11 +38,11 @@
                   v-model:value="loginForm.password"
                   type="password"
                   show-password-on="click"
-                  placeholder="请输入密码"
+                  placeholder="请输入登录密码"
                   @keyup.enter="handleLogin"
                 >
                   <template #prefix>
-                    <n-icon :component="LockFilled" />
+                    <n-icon :component="LockClosedOutline" />
                   </template>
                 </n-input>
               </n-form-item>
@@ -80,8 +59,8 @@
                 登录
               </n-button>
               <div class="mt-3 flex items-center justify-between gap-3">
-                <n-button text type="primary" @click="loginMethod = 'email'">验证码登录</n-button>
-                <n-button text type="primary" @click="activeTab = 'forgot'">忘记密码？</n-button>
+                <n-button class="login-link" text type="primary" @click="loginMethod = 'email'">验证码免密登录</n-button>
+                <n-button class="login-link" text type="primary" @click="activeTab = 'forgot'">忘记密码？</n-button>
               </div>
             </n-form>
             <n-form v-else ref="emailLoginFormRef" :model="emailLoginForm" :rules="emailLoginRules" class="mt-4">
@@ -96,7 +75,7 @@
               </n-form-item>
               <n-button type="primary" block size="large" :loading="loading" :disabled="loading" class="mt-2" @click="handleEmailLogin">登录</n-button>
               <div class="mt-3 text-center">
-                <n-button text type="primary" @click="loginMethod = 'account'">账号密码登录</n-button>
+                <n-button class="login-link" text type="primary" @click="loginMethod = 'account'">返回账号密码登录</n-button>
               </div>
             </n-form>
           </n-tab-pane>
@@ -105,51 +84,51 @@
           <n-tab-pane name="register" tab="注册">
             <n-form ref="registerFormRef" :model="registerForm" :rules="registerRules" class="mt-4">
               <n-form-item path="username" label="用户名">
-                <n-input 
-                  v-model:value="registerForm.username" 
-                  placeholder="请输入用户名"
+                <n-input
+                  v-model:value="registerForm.username"
+                  placeholder="设置登录账号"
                 >
                   <template #prefix>
-                    <n-icon :component="PersonFilled" />
+                    <n-icon :component="PersonOutline" />
                   </template>
                 </n-input>
               </n-form-item>
 
               <n-form-item path="password" label="密码">
-                <n-input 
-                  v-model:value="registerForm.password" 
+                <n-input
+                  v-model:value="registerForm.password"
                   type="password"
                   show-password-on="click"
                   placeholder="至少 6 位，包含大小写字母和数字"
                 >
                   <template #prefix>
-                    <n-icon :component="LockFilled" />
+                    <n-icon :component="LockClosedOutline" />
                   </template>
                 </n-input>
               </n-form-item>
 
               <n-form-item path="confirmPassword" label="确认密码">
-                <n-input 
-                  v-model:value="registerForm.confirmPassword" 
+                <n-input
+                  v-model:value="registerForm.confirmPassword"
                   type="password"
                   show-password-on="click"
                   placeholder="请再次输入密码"
                 >
                   <template #prefix>
-                    <n-icon :component="LockFilled" />
+                    <n-icon :component="LockClosedOutline" />
                   </template>
                 </n-input>
               </n-form-item>
 
               <n-form-item path="nickname" label="昵称（可选）">
-                <n-input 
-                  v-model:value="registerForm.nickname" 
-                  placeholder="请输入昵称"
+                <n-input
+                  v-model:value="registerForm.nickname"
+                  placeholder="团队展示名称"
                 />
               </n-form-item>
 
               <n-form-item path="email" label="邮箱">
-                <n-input v-model:value="registerForm.email" type="email" placeholder="用于找回密码" />
+                <n-input v-model:value="registerForm.email" type="email" placeholder="用于接收验证码与找回密码" />
               </n-form-item>
               <n-form-item path="emailCode" label="邮箱验证码">
                 <div class="flex w-full gap-2">
@@ -158,16 +137,16 @@
                 </div>
               </n-form-item>
 
-              <n-button 
-                type="primary" 
-                block 
+              <n-button
+                type="primary"
+                block
                 size="large"
                 :loading="registerLoading"
                 :disabled="registerLoading"
                 @click="handleRegister"
                 class="mt-2"
               >
-                注册
+                立即注册
               </n-button>
             </n-form>
           </n-tab-pane>
@@ -203,7 +182,7 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
-import { PersonFilled, LockFilled } from '@vicons/material';
+import { PersonOutline, LockClosedOutline } from '@vicons/ionicons5';
 import { register, resetPassword, sendEmailCode, type LoginCredentials, type User } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { createLoginController } from '@/services/loginController';
@@ -398,561 +377,33 @@ async function handleRegister() {
 </script>
 
 <style scoped>
-.login-page {
-  isolation: isolate;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-  background:
-    radial-gradient(circle at 15% 20%, rgba(30, 64, 175, 0.35) 0%, transparent 45%),
-    radial-gradient(circle at 85% 75%, rgba(124, 58, 237, 0.25) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.12) 0%, transparent 60%),
-    linear-gradient(180deg, #070913 0%, #0d1127 100%);
-}
-
-.login-content {
-  padding-bottom: 44px;
-}
-
-.login-brand-lockup {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.login-brand-mark {
-  display: inline-flex;
-  width: 38px;
-  height: 38px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  color: #fff;
-  font-size: 21px;
-  font-weight: 800;
-  line-height: 1;
-  background: linear-gradient(135deg, #10b981, #2dd4bf);
-  box-shadow: 0 10px 26px rgba(16, 185, 129, 0.28);
-}
-
-.login-brand-title {
-  margin: 0;
-  color: #f8fafc;
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.03em;
-}
-
-.login-brand-subtitle {
-  margin: 9px 0 0;
-  color: #94a3b8;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-}
-
-.icp-record {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  color: rgba(203, 213, 225, 0.66);
-  font-size: 12px;
-  line-height: 20px;
-  text-align: center;
-  letter-spacing: 0.04em;
-}
-
-.login-scene {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.login-page::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: radial-gradient(circle at center, black, transparent 76%);
-}
-
-.login-page::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 120%, rgba(19, 127, 255, 0.28), transparent 42%),
-    linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.34) 100%);
-}
-
-.cosmic-orb,
-.star-field,
-.orbit-line,
-.astronaut-scene {
-  position: absolute;
-  pointer-events: none;
-}
-
-.cosmic-orb {
-  z-index: 2;
-  border-radius: 999px;
-  filter: blur(6px);
-  opacity: 0.88;
-}
-
-.cosmic-orb-primary {
-  width: clamp(180px, 30vw, 420px);
-  height: clamp(180px, 30vw, 420px);
-  left: max(-120px, -8vw);
-  top: max(-96px, -6vw);
-  background: radial-gradient(circle, rgba(43, 210, 255, 0.58), rgba(43, 210, 255, 0.08) 62%, transparent 70%);
-}
-
-.cosmic-orb-secondary {
-  width: clamp(220px, 36vw, 520px);
-  height: clamp(220px, 36vw, 520px);
-  right: max(-180px, -10vw);
-  bottom: max(-160px, -10vw);
-  background: radial-gradient(circle, rgba(156, 104, 255, 0.48), rgba(156, 104, 255, 0.08) 60%, transparent 72%);
-}
-
-.star-field {
-  inset: -140px 0 auto;
-  z-index: 4;
-  height: 720px;
-  animation: star-fall 13s linear infinite;
-}
-
-.star-field-two {
-  animation-delay: -6.5s;
-}
-
-.star {
-  position: absolute;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 0 14px rgba(167, 220, 255, 0.9);
-}
-
-.star::before,
-.star::after {
-  content: '';
-  position: absolute;
-  border-radius: inherit;
-  background: inherit;
-  box-shadow: inherit;
-}
-
-.star::before {
-  width: 5px;
-  height: 5px;
-  left: 48px;
-  top: 72px;
-  opacity: 0.62;
-}
-
-.star::after {
-  width: 2px;
-  height: 2px;
-  left: -36px;
-  top: 132px;
-  opacity: 0.78;
-}
-
-.star:nth-child(1) { left: 6%; top: 8%; }
-.star:nth-child(2) { left: 16%; top: 22%; }
-.star:nth-child(3) { left: 27%; top: 4%; }
-.star:nth-child(4) { left: 38%; top: 27%; }
-.star:nth-child(5) { left: 48%; top: 13%; }
-.star:nth-child(6) { left: 58%; top: 31%; }
-.star:nth-child(7) { left: 67%; top: 7%; }
-.star:nth-child(8) { left: 78%; top: 24%; }
-.star:nth-child(9) { left: 88%; top: 12%; }
-.star:nth-child(10) { left: 94%; top: 34%; }
-.star:nth-child(11) { left: 12%; top: 42%; }
-.star:nth-child(12) { left: 34%; top: 51%; }
-.star:nth-child(13) { left: 64%; top: 46%; }
-.star:nth-child(14) { left: 84%; top: 55%; }
-
-.orbit-line {
-  z-index: 3;
-  border: 1px solid rgba(142, 207, 255, 0.18);
-  border-radius: 999px;
-  transform: rotate(-18deg);
-}
-
-.orbit-line-one {
-  width: min(78vw, 980px);
-  height: min(36vw, 440px);
-  right: -18vw;
-  top: 12vh;
-}
-
-.orbit-line-two {
-  width: min(54vw, 680px);
-  height: min(26vw, 330px);
-  left: -16vw;
-  bottom: 8vh;
-}
-
-.astronaut-scene {
-  z-index: 5;
-  right: clamp(24px, 9vw, 160px);
-  bottom: clamp(40px, 9vh, 120px);
-  width: clamp(132px, 17vw, 240px);
-  height: clamp(158px, 20vw, 288px);
-  opacity: 0.82;
-  animation: astronaut-float 6.5s ease-in-out infinite;
-}
-
-.astronaut {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform: rotate(-10deg);
-}
-
-.astronaut-backpack,
-.astronaut-head,
-.astronaut-body,
-.astronaut-arm,
-.astronaut-leg {
-  position: absolute;
-}
-
-.astronaut-backpack {
-  width: 42%;
-  height: 50%;
-  top: 27%;
-  left: 29%;
-  border-radius: 46% 46% 16% 16%;
-  background: linear-gradient(135deg, #6d92aa, #a9ccda);
-}
-
-.astronaut-head {
-  z-index: 3;
-  width: 42%;
-  height: 28%;
-  top: 10%;
-  left: 29%;
-  border-radius: 50%;
-  background: linear-gradient(90deg, #dce7ef 0 50%, #fff 50% 100%);
-  box-shadow: inset -10px -10px 24px rgba(83, 113, 139, 0.18);
-}
-
-.astronaut-head::after {
-  content: '';
-  position: absolute;
-  width: 62%;
-  height: 56%;
-  left: 19%;
-  top: 22%;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #26d5f7 0 52%, #057eb1 52% 100%);
-  box-shadow: inset 0 8px 14px rgba(255, 255, 255, 0.18);
-}
-
-.astronaut-body {
-  z-index: 2;
-  width: 38%;
-  height: 36%;
-  top: 36%;
-  left: 31%;
-  border-radius: 42% / 22%;
-  background: linear-gradient(90deg, #dce7ef 0 50%, #fff 50% 100%);
-}
-
-.astronaut-panel {
-  position: absolute;
-  width: 66%;
-  height: 38%;
-  top: 20%;
-  left: 17%;
-  border-radius: 8px;
-  background: #b8d2ef;
-}
-
-.astronaut-panel::before {
-  content: '';
-  position: absolute;
-  width: 44%;
-  height: 12%;
-  left: 12%;
-  top: 22%;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 9px 0 #fff, 0 18px 0 #fff;
-}
-
-.astronaut-panel::after {
-  content: '';
-  position: absolute;
-  width: 13%;
-  aspect-ratio: 1;
-  right: 14%;
-  top: 24%;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 16px 0 3px #fff;
-}
-
-.astronaut-arm {
-  z-index: 1;
-  width: 34%;
-  height: 12%;
-  top: 42%;
-  background: #eef5f8;
-}
-
-.astronaut-arm-left {
-  left: 12%;
-  border-radius: 0 0 0 999px;
-  transform: rotate(-20deg);
-}
-
-.astronaut-arm-right {
-  right: 12%;
-  border-radius: 0 0 999px 0;
-  transform: rotate(20deg);
-}
-
-.astronaut-leg {
-  z-index: 1;
-  width: 14%;
-  height: 22%;
-  bottom: 12%;
-  background: #eef5f8;
-}
-
-.astronaut-leg-left {
-  left: 33%;
-  transform: rotate(18deg);
-}
-
-.astronaut-leg-right {
-  right: 32%;
-  transform: rotate(-18deg);
-}
-
-.astronaut-leg::after {
-  content: '';
-  position: absolute;
-  width: 160%;
-  height: 34%;
-  bottom: -22%;
-  border-bottom: 6px solid #76a1bd;
-  background: inherit;
-}
-
-.astronaut-leg-left::after {
-  right: 0;
-  border-radius: 24px 0 0 0;
-}
-
-.astronaut-leg-right::after {
-  left: 0;
-  border-radius: 0 24px 0 0;
-}
-
-:deep(.login-card) {
-  overflow: hidden;
-  --n-color: rgba(18, 24, 43, 0.74) !important;
-  --n-text-color: #cbd5e1 !important;
-  --n-title-text-color: #f8fafc !important;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
-  background: rgba(18, 24, 43, 0.74);
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.55),
-    0 0 36px rgba(16, 185, 129, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-:deep(.login-card .n-card-header) {
-  padding: 30px 30px 18px;
-}
-
-:deep(.login-card .n-card__content) {
-  padding: 0 30px 30px;
-}
-
-:deep(.login-card .n-tabs-rail) {
-  --n-tab-color-segment: rgba(2, 6, 23, 0.46) !important;
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background: rgba(2, 6, 23, 0.46);
-}
-
-:deep(.login-card .n-tabs-capsule) {
-  border-radius: 10px;
-  background: linear-gradient(135deg, #10b981, #0d9488);
-  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.22);
-}
-
-:deep(.login-card .n-tabs-tab) {
-  --n-tab-text-color: #94a3b8 !important;
-  --n-tab-text-color-hover: #e2e8f0 !important;
-  --n-tab-text-color-active: #fff !important;
-  min-height: 36px;
-  border-radius: 10px;
-  font-weight: 600;
-}
-
-:deep(.login-card .n-form-item-label) {
-  color: #cbd5e1;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-:deep(.login-card .n-input) {
-  --n-color: rgba(2, 6, 23, 0.4) !important;
-  --n-color-focus: rgba(2, 6, 23, 0.58) !important;
-  --n-text-color: #f8fafc !important;
-  --n-placeholder-color: #64748b !important;
-  --n-border: 1px solid rgba(255, 255, 255, 0.11) !important;
-  --n-border-hover: 1px solid rgba(16, 185, 129, 0.72) !important;
-  --n-border-focus: 1px solid #10b981 !important;
-  --n-box-shadow-focus: 0 0 0 2px rgba(16, 185, 129, 0.15) !important;
-  --n-caret-color: #34d399 !important;
-  min-height: 40px;
-  border-radius: 11px;
-}
-
-:deep(.login-card .n-input .n-icon) {
-  color: #64748b;
-}
-
-:deep(.login-card .n-button) {
-  border-radius: 11px;
-}
-
-:deep(.login-card .n-button--primary-type) {
-  --n-color: #10b981 !important;
-  --n-color-hover: #059669 !important;
-  --n-color-pressed: #047857 !important;
-  --n-color-focus: #059669 !important;
-  --n-border: 1px solid #10b981 !important;
-  --n-border-hover: 1px solid #059669 !important;
-  --n-border-pressed: 1px solid #047857 !important;
-  --n-border-focus: 1px solid #059669 !important;
-  --n-ripple-color: #6ee7b7 !important;
-  box-shadow: 0 10px 24px rgba(16, 185, 129, 0.2);
-}
-
-:deep(.login-card .n-button--default-type) {
-  --n-color: rgba(15, 23, 42, 0.72) !important;
-  --n-color-hover: rgba(30, 41, 59, 0.9) !important;
-  --n-color-pressed: rgba(15, 23, 42, 0.92) !important;
-  --n-text-color: #cbd5e1 !important;
-  --n-text-color-hover: #f8fafc !important;
-  --n-text-color-pressed: #f8fafc !important;
-  --n-border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  --n-border-hover: 1px solid rgba(16, 185, 129, 0.55) !important;
-  --n-border-pressed: 1px solid rgba(16, 185, 129, 0.7) !important;
-}
-
-:deep(.login-card .n-button--text-type) {
-  --n-text-color-text: #34d399 !important;
-  --n-text-color-text-hover: #6ee7b7 !important;
-  --n-text-color-text-pressed: #10b981 !important;
-}
-
-:deep(.login-card .n-form-item-feedback-wrapper) {
-  color: #fca5a5;
-}
-
-@keyframes star-fall {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, -18%, 0);
-  }
-  12% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.9;
-    transform: translate3d(0, 96vh, 0);
-  }
-}
-
-@keyframes astronaut-float {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) rotate(-3deg);
-  }
-  50% {
-    transform: translate3d(-10px, -18px, 0) rotate(4deg);
-  }
-}
-
-@media (max-width: 640px) {
-  .login-page {
-    height: 100dvh;
-    align-items: safe center;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-width: none;
-    padding-top: max(24px, env(safe-area-inset-top));
-    padding-bottom: max(24px, env(safe-area-inset-bottom));
-  }
-
-  .login-page::-webkit-scrollbar {
-    display: none;
-  }
-
-  .star-field {
-    height: 520px;
-    opacity: 0.62;
-  }
-
-  .orbit-line {
-    opacity: 0.42;
-  }
-
-  .astronaut-scene {
-    right: -20px;
-    bottom: 10px;
-    width: 118px;
-    height: 142px;
-    opacity: 0.24;
-  }
-
-  :deep(.login-card) {
-    border-radius: 22px;
-    background: rgba(18, 24, 43, 0.82);
-  }
-
-  :deep(.login-card .n-card-header) {
-    padding: 24px 22px 16px;
-  }
-
-  :deep(.login-card .n-card__content) {
-    padding: 0 22px 24px;
-  }
-
-  .login-brand-title {
-    font-size: 27px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .star-field,
-  .astronaut-scene {
-    animation: none;
-  }
-}
+.login-page { background:radial-gradient(circle at 15% 20%,#1e40af59,transparent 45%),radial-gradient(circle at 85% 75%,#7c3aed40,transparent 50%),radial-gradient(circle at 50% 50%,#10b9811f,transparent 60%),linear-gradient(180deg,#070913,#0d1127); font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif; }
+.login-content { padding-bottom:36px; }
+.login-scene,.star-field { position:absolute; inset:0; pointer-events:none; }
+.star { position:absolute; width:2px; height:2px; border-radius:50%; background:white; }
+.login-astronaut { position:absolute; width:144px; height:144px; right:-80px; bottom:4px; z-index:30; pointer-events:none; animation:float 6s ease-in-out infinite; }
+.login-brand-lockup { display:inline-flex; align-items:center; gap:8px; margin-bottom:4px; }
+.login-brand-mark { display:grid; place-items:center; width:36px; height:36px; border-radius:12px; background:linear-gradient(to top right,#10b981,#2dd4bf); font-size:20px; font-weight:900; color:white; box-shadow:0 10px 15px -3px #10b9814d; }
+.login-brand-title { font-size:24px; font-weight:700; letter-spacing:-.025em; color:white; }
+.login-brand-subtitle { font-size:12px; color:#94a3b8; letter-spacing:.05em; font-weight:500; }
+.icp-record { position:absolute; bottom:0; width:100%; text-align:center; color:#94a3b8; font-size:11px; }
+:deep(.login-card) { --n-color:rgba(18,24,43,.65) !important; --n-text-color:#cbd5e1 !important; border:1px solid #ffffff1f; border-radius:24px; background:rgba(18,24,43,.65); backdrop-filter:blur(20px); box-shadow:0 25px 50px -12px #0008,0 0 30px #10b9810d; }
+:deep(.login-card .n-card-header) { padding:32px 32px 24px; }
+:deep(.login-card .n-card__content) { padding:0 32px 32px; }
+:deep(.login-card .n-tabs-rail) { padding:4px; border:1px solid #ffffff1a; border-radius:16px; background:#0f172a99; }
+:deep(.login-card .n-tabs-capsule) { border-radius:12px; background:#059669; box-shadow:0 4px 6px -1px #0002; }
+:deep(.login-card .n-tabs-tab) { --n-tab-text-color:#94a3b8 !important; --n-tab-text-color-hover:white !important; --n-tab-text-color-active:white !important; min-height:32px; font-size:12px; font-weight:600; }
+:deep(.login-card .n-form-item-label) { color:#cbd5e1; font-size:12px; font-weight:500; padding-bottom:6px; }
+:deep(.login-card .n-form-item-label__asterisk) { color:#34d399; }
+:deep(.login-card .n-form-item-feedback-wrapper) { min-height:16px; }
+:deep(.login-card .n-input) { --n-color:#0f172a80 !important; --n-color-focus:#0f172a80 !important; --n-text-color:white !important; --n-placeholder-color:#64748b !important; --n-border:1px solid #ffffff1a !important; --n-border-hover:1px solid #10b981 !important; --n-border-focus:1px solid #10b981 !important; --n-box-shadow-focus:0 0 0 1px #10b981 !important; --n-caret-color:#34d399 !important; --n-height:42px !important; border-radius:12px; }
+:deep(.login-card .n-input__prefix), :deep(.login-card .n-input__suffix) { color:#94a3b8; }
+:deep(.login-card .n-button) { border-radius:12px; font-size:12px; }
+:deep(.login-card .n-button--primary-type:not(.login-link)) { --n-color:#10b981 !important; --n-color-hover:#059669 !important; --n-color-pressed:#047857 !important; --n-border:0 !important; --n-border-hover:0 !important; --n-border-pressed:0 !important; --n-border-focus:0 !important; }
+:deep(.login-card .n-button--primary-type:not(.login-link)) { background:linear-gradient(to right,#10b981,#14b8a6); box-shadow:0 10px 15px -3px #10b98140; font-size:14px; font-weight:600; }
+:deep(.login-card .login-link) { --n-color:transparent !important; --n-color-hover:transparent !important; --n-text-color:#34d399 !important; --n-text-color-hover:#6ee7b7 !important; background:transparent; box-shadow:none; }
+:deep(.login-card .n-button--default-type) { --n-color:#1e293b !important; --n-color-hover:#334155 !important; --n-text-color:#34d399 !important; --n-border:1px solid #ffffff1a !important; --n-border-hover:1px solid #ffffff33 !important; }
+@keyframes float { 50% { transform:translateY(-15px) rotate(3deg); } }
+@media (max-width:767px) { .login-page { height:100dvh; align-items:safe center; overflow-y:auto; scrollbar-width:none; } .login-page::-webkit-scrollbar { display:none; } .login-astronaut { width:112px; height:112px; right:-48px; bottom:-4px; } :deep(.login-card .n-card-header) { padding:24px 24px 24px; } :deep(.login-card .n-card__content) { padding:0 24px 24px; } }
+@media (prefers-reduced-motion:reduce) { .login-astronaut { animation:none; } }
 </style>

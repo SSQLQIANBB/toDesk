@@ -1,6 +1,6 @@
 <template>
   <div class="call-history-message" :class="{ 'call-history-message--mine': isMine }">
-    <n-icon :size="30" :component="record.type === 'screen' ? ScreenShareFilled : record.type === 'audio' ? PhoneFilled : VideocamFilled" />
+    <i class="ui-icon text-blue-600" :class="record.type === 'screen' ? 'ui-icon-desktop' : record.type === 'audio' ? 'ui-icon-phone' : 'ui-icon-video'" aria-hidden="true"></i>
     <div class="call-history-message__content">
       <strong>{{ presentation.title }}</strong>
       <span>{{ presentation.detail }}</span>
@@ -10,8 +10,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NIcon } from 'naive-ui';
-import { PhoneFilled, ScreenShareFilled, VideocamFilled } from '@vicons/material';
 import type { CallHistoryRecord } from '@/api/message';
 import { getCallHistoryPresentation } from '@/services/callHistory';
 
@@ -51,13 +49,13 @@ const presentation = computed(() => getCallHistoryPresentation(props.record, pro
 }
 
 .call-history-message__content strong {
-  font-size: 14px;
+  font-size: 12px;
   line-height: 20px;
 }
 
 .call-history-message__content span {
   color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 10px;
+  line-height: 16px;
 }
 </style>

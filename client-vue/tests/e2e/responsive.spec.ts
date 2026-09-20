@@ -334,12 +334,12 @@ test.describe('响应式布局', () => {
     await page.getByRole('button', { name: '创建群组' }).first().click();
     const createDialog = page.getByRole('dialog');
     await expect(createDialog).toBeVisible();
-    await expect.poll(async () => (await createDialog.boundingBox())?.width).toBe(500);
+    await expect.poll(async () => (await createDialog.boundingBox())?.width).toBe(448);
     await page.keyboard.press('Escape');
 
     await page.getByText('响应式测试群组').first().click();
     const detailDialog = page.getByRole('dialog');
     await expect(detailDialog).toBeVisible();
-    await expect.poll(async () => (await detailDialog.boundingBox())?.width).toBe(600);
+    await expect.poll(async () => (await detailDialog.boundingBox())?.width).toBe(512);
   });
 });

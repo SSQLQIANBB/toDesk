@@ -1,11 +1,12 @@
 <template>
-  <n-layout has-sider class="h-screen w-full bg-gradient-to-br from-slate-50 to-slate-100">
+  <div class="group-im-page"><n-layout has-sider class="group-im-shell">
+    <button v-if="mobileSidebarOpen" class="group-sidebar-backdrop" aria-label="收起群成员侧栏" @click="mobileSidebarOpen = false"></button>
     <!-- 侧边栏 -->
     <n-layout-sider
       class="group-chat-sider"
       :class="{ 'mobile-open': mobileSidebarOpen }"
       bordered
-      :width="280"
+      :width="320"
       :collapsed-width="0"
       collapse-mode="transform"
       :show-trigger="false"
@@ -13,14 +14,14 @@
     >
       <n-button class="mobile-sidebar-close" secondary @click="mobileSidebarOpen = false">关闭成员列表</n-button>
       <!-- 群组信息卡片 -->
-      <div class="p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white">
+      <div class="p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
         <div class="flex items-center gap-3">
           <n-avatar :size="50" :src="groupInfo?.avatar || undefined">
             <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) || '?' }}</span>
           </n-avatar>
           <div class="flex-1">
             <div class="font-bold text-base">{{ groupInfo?.name || '加载中...' }}</div>
-            <div class="text-xs opacity-90 mt-1">{{ members.length }} 成员在线</div>
+            <div class="text-xs opacity-90 mt-1">{{ onlineCount }} 成员在线</div>
           </div>
         </div>
       </div>
@@ -30,8 +31,8 @@
         群组成员 ({{ members.length }})
       </div>
       <ul class="flex-1 p-3 overflow-y-auto space-y-2">
-        <li 
-          v-for="member in members" 
+        <li
+          v-for="member in members"
           :key="member.id"
           class="flex items-center gap-3 p-3 rounded-lg bg-white border border-gray-200"
         >
@@ -42,17 +43,17 @@
             <div class="font-semibold text-sm">{{ member.nickname || member.username }}</div>
             <div class="flex items-center gap-2 text-xs text-gray-500 mt-1">
               <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
-              <n-tag v-else-if="member.role === 'admin'" type="InfoFilled" size="tiny">管理员</n-tag>
-              <span v-if="member.canSpeak === false" class="text-red-500">🔇 禁言</span>
+              <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
+              <span v-if="member.canSpeak === false" class="text-red-500"><i class="ui-icon ui-icon-microphone" aria-hidden="true"></i> 禁言</span>
             </div>
           </div>
           <div class="w-2 h-2 rounded-full" :class="member.online ? 'bg-green-400' : 'bg-gray-300'"></div>
         </li>
 
-        <n-empty 
-          v-if="members.length === 0" 
-          class="h-full flex items-center justify-center" 
-          description="暂无成员" 
+        <n-empty
+          v-if="members.length === 0"
+          class="h-full flex items-center justify-center"
+          description="暂无成员"
           size="small"
         />
       </ul>
@@ -61,7 +62,7 @@
       <div class="p-3 border-t bg-gray-50 space-y-2">
         <n-button block secondary @click="handleVideoCall">
           <template #icon>
-            <n-icon :component="VideocamFilled" />
+            <i class="ui-icon ui-icon-video" aria-hidden="true"></i>
           </template>
           {{ groupSessionState.getButtonLabel(groupId, 'video') }}
         </n-button>
@@ -70,7 +71,7 @@
         </n-button>
         <n-button block secondary @click="handleScreenShare">
           <template #icon>
-            <n-icon :component="ScreenShareFilled" />
+            <i class="ui-icon ui-icon-desktop" aria-hidden="true"></i>
           </template>
           {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
         </n-button>
@@ -88,7 +89,7 @@
       <div class="h-full w-full flex flex-col bg-white">
         <!-- 聊天头部 -->
         <header class="min-h-16 shadow-sm flex items-center gap-2 px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
-          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开群成员列表" @click="mobileSidebarOpen = true">☰</n-button>
+          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开群成员列表" @click="mobileSidebarOpen = true"><i class="ui-icon ui-icon-bars" aria-hidden="true"></i></n-button>
           <div class="flex items-center gap-3 flex-1 min-w-0">
             <n-avatar :size="40" :src="groupInfo?.avatar || undefined">
               <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
@@ -109,8 +110,8 @@
         <!-- 消息列表 -->
         <n-scrollbar class="flex-1 p-4" ref="scrollbarRef">
           <ul class="space-y-4">
-            <li 
-              v-for="(msg, index) in messages" 
+            <li
+              v-for="(msg, index) in messages"
               :key="index"
               class="flex flex-col"
               :class="msg.isMine ? 'items-end' : 'items-start'"
@@ -133,10 +134,10 @@
                     <span class="text-xs text-gray-400">{{ msg.time }}</span>
                   </div>
                   <div
-                    class="p-3 rounded-lg shadow-sm break-words"
-                    :class="msg.isMine 
-                      ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-br-none' 
-                      : 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800 rounded-bl-none'"
+                    class="group-message-bubble p-3 rounded-2xl shadow-sm break-words"
+                    :class="msg.isMine
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-slate-800 border border-slate-200'"
                   >
                     <ChatMediaMessage
                       v-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
@@ -154,29 +155,29 @@
               </div>
             </li>
 
-            <n-empty 
-              v-if="messages.length === 0" 
-              class="py-20" 
-              description="暂无消息，开始聊天吧" 
+            <n-empty
+              v-if="messages.length === 0"
+              class="py-20"
+              description="暂无消息，开始聊天吧"
               size="large"
             />
           </ul>
         </n-scrollbar>
 
         <!-- 输入框 -->
-        <footer class="p-4 border-t bg-gray-50">
+        <footer class="group-chat-composer p-4 border-t bg-white">
           <ChatMediaComposer :disabled="!canSpeak" :group-id="groupId" @send="sendGroupMedia" />
           <div class="flex gap-2 sm:gap-3 min-w-0">
             <n-input
               v-model:value="inputMessage"
               type="textarea"
               :autosize="{ minRows: 1, maxRows: 4 }"
-              placeholder="输入消息... (Enter发送，Shift+Enter换行)"
+              placeholder="请输入消息..."
               :disabled="!canSpeak"
               @keydown.enter.exact.prevent="handleSend"
             />
-            <n-button 
-              type="primary" 
+            <n-button
+              type="primary"
               :disabled="!inputMessage.trim() || !canSpeak"
               @click="handleSend"
             >
@@ -224,7 +225,7 @@
             <div class="space-y-2">
               <n-button block secondary @click="handleVideoCall">
                 <template #icon>
-                  <n-icon :component="VideocamFilled" />
+                  <i class="ui-icon ui-icon-video" aria-hidden="true"></i>
                 </template>
                 {{ groupSessionState.getButtonLabel(groupId, 'video') }}
               </n-button>
@@ -233,7 +234,7 @@
               </n-button>
               <n-button block secondary @click="handleScreenShare">
                 <template #icon>
-                  <n-icon :component="ScreenShareFilled" />
+                  <i class="ui-icon ui-icon-desktop" aria-hidden="true"></i>
                 </template>
                 {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
               </n-button>
@@ -242,14 +243,14 @@
         </n-spin>
       </n-drawer-content>
     </n-drawer>
-  </n-layout>
+  </n-layout></div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type ScrollbarInst } from 'naive-ui';
-import { ArrowBackFilled, VideocamFilled, ScreenShareFilled, InfoFilled } from '@vicons/material';
+import { ArrowBackFilled, InfoFilled } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuthStore } from '@/stores/auth';
 import { storeToRefs } from 'pinia';
@@ -522,4 +523,18 @@ onUnmounted(() => {
   }
   :deep(.group-chat-sider.mobile-open) { transform: translateX(0); }
 }
+
+.group-im-page { display:flex; justify-content:center; align-items:center; height:100dvh; padding:16px; background:#f1f5f9; }
+.group-im-shell { width:100%; max-width:1152px; height:90dvh; border-radius:16px; box-shadow:0 25px 50px -12px #0004; }
+.group-im-shell :deep(.n-layout-sider-scroll-container) { background:#f8fafc; }
+.group-im-shell :deep(.n-layout-content), .group-im-shell :deep(.n-layout-content > .n-layout-scroll-container > div) { background:#f8fafc; }
+.group-im-shell header { box-shadow:none; background:#fff; }
+.group-im-shell header .font-bold { font-size:14px; }
+.group-im-shell ul > li { border:0; background:transparent; }
+.group-chat-composer :deep(.n-input) { --n-color:#f1f5f9; --n-border:0; border-radius:12px; }
+.group-chat-composer :deep(.n-button) { border-radius:12px; }
+.group-sidebar-backdrop { display:none; position:absolute; inset:0; background:#0f172a80; backdrop-filter:blur(4px); z-index:15; }
+.group-im-shell :deep(.group-chat-sider .n-layout-sider-scroll-container) { display:flex; flex-direction:column; }
+.group-im-shell .mobile-sidebar-close { order:5; }
+@media (max-width:767px) { .group-im-page { padding:0; } .group-im-shell { height:100dvh; border-radius:0; } .group-sidebar-backdrop { display:block; } }
 </style>

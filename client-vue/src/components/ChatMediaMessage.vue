@@ -17,9 +17,9 @@
       @click="togglePlayback"
     >
       <svg class="chat-voice__wave" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 10.5a2.2 2.2 0 0 1 0 3" />
-        <path d="M8 7.5a6.3 6.3 0 0 1 0 9" />
-        <path d="M11 4.5a10.5 10.5 0 0 1 0 15" />
+        <path d="M4 10v4 M20 10v4" />
+        <path d="M8 6v12 M16 7v10" />
+        <path d="M12 3v18" />
       </svg>
       <span class="chat-voice__duration">{{ media.durationSeconds }}″</span>
     </button>

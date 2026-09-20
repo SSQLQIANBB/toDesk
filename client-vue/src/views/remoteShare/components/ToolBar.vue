@@ -1,8 +1,8 @@
 <template>
   <div class="flex gap-2 border-t p-3">
-    <n-button :disabled="!contactUser || calls.busy" @click="start(1)">屏幕共享</n-button>
-    <n-button :disabled="!contactUser || calls.busy" @click="start(0)">视频通话</n-button>
-    <n-button :disabled="!contactUser || calls.busy" @click="start(2)">语音通话</n-button>
+    <n-button :disabled="!contactUser || calls.busy" @click="start(1)"><i class="ui-icon ui-icon-desktop mr-1" aria-hidden="true"></i>屏幕共享</n-button>
+    <n-button :disabled="!contactUser || calls.busy" @click="start(0)"><i class="ui-icon ui-icon-video mr-1" aria-hidden="true"></i>视频通话</n-button>
+    <n-button :disabled="!contactUser || calls.busy" @click="start(2)"><i class="ui-icon ui-icon-microphone mr-1" aria-hidden="true"></i>语音通话</n-button>
   </div>
 </template>
 <script setup lang="ts">

@@ -1,14 +1,15 @@
 <template>
-  <n-layout
+  <div class="im-page"><n-layout
     has-sider
     class="remote-shell h-full w-full"
     :class="{ 'sidebar-open': mobileSidebarOpen }"
   >
+    <button v-if="mobileSidebarOpen" class="sidebar-backdrop" aria-label="关闭联系人列表" @click="mobileSidebarOpen = false"></button>
     <n-layout-sider
       class="remote-sidebar"
       :class="{ 'mobile-open': mobileSidebarOpen }"
       bordered
-      :width="280"
+      :width="320"
       :collapsed-width="0"
       collapse-mode="transform"
       :show-trigger="false"
@@ -18,8 +19,8 @@
       <!-- 用户信息卡片 -->
       <div class="sidebar-profile p-4 text-white">
         <div class="sidebar-profile-main flex items-center gap-3 mb-3">
-          <n-avatar 
-            :size="48" 
+          <n-avatar
+            :size="40"
             :src="authUser?.avatar || undefined"
             class="profile-avatar cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
             @click="goToProfile"
@@ -33,15 +34,15 @@
               <span class="text-xs opacity-90">{{ getStatusText(userStatus) }}</span>
             </div>
           </div>
-          <n-button 
-            class="sidebar-logout"
+          <n-button
+            class="sidebar-logout" title="退出登录" aria-label="退出登录"
             type="error"
-            size="small" 
+            size="small"
             strong
             secondary
             @click="handleLogout"
           >
-            退出登录
+            <i class="ui-icon ui-icon-logout" aria-hidden="true"></i>
           </n-button>
         </div>
         <!-- 快捷操作 -->
@@ -62,16 +63,16 @@
           </div>
           <n-scrollbar class="flex-1 min-h-0">
             <ul class="contact-list p-2 space-y-1">
-              <n-badge 
-                :offset="[-8, 8]" 
-                class="w-full" 
+              <n-badge
+                :offset="[-8, 8]"
+                class="w-full"
                 :value="unReadMessageCount[user.id] || 0"
                 :max="99"
                 :show="!!unReadMessageCount[user.id]"
                 v-for="user in displayUsers"
                 :key="user.id"
               >
-                <li 
+                <li
                   class="contact-item w-full flex items-center gap-3 cursor-pointer transition-all"
                   :class="contactUser?.id === user.id ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
                   @click="selectContact(user)"
@@ -80,16 +81,16 @@
                     <span v-if="!user.avatar">{{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}</span>
                   </n-avatar>
                   <div class="flex-1 w-0">
-                    <div class="font-semibold text-base">{{ user.nickname || user.username || `用户-${user.id}` }}</div>
+                    <div class="font-semibold text-sm">{{ user.nickname || user.username || `用户-${user.id}` }}</div>
                     <div class="text-xs text-gray-500 truncate">{{ user.bio || '人很懒，无简介~' }}</div>
                   </div>
                   <div class="w-2 h-2 rounded-full" :class="getStatusColor(user?.status || 'online')" ></div>
                 </li>
               </n-badge>
 
-              <n-empty 
+              <n-empty
                 v-if="!displayUsers.length"
-                class="h-full flex items-center justify-center py-12" 
+                class="h-full flex items-center justify-center py-12"
                 description="暂无联系人"
                 size="small"
               >
@@ -112,10 +113,10 @@
               <n-button block secondary @click="goToGroups" class="mb-3">
                 + 创建/管理群组
               </n-button>
-              
+
               <div v-if="myGroups.length > 0" class="space-y-2 mt-3">
-                <div 
-                  v-for="group in myGroups" 
+                <div
+                  v-for="group in myGroups"
                   :key="group.id"
                   class="group-item flex items-center gap-3 cursor-pointer transition-all"
                   @click="goToGroupChat(group.id)"
@@ -130,10 +131,10 @@
                   <n-badge :value="unread.groupCounts[group.id] || 0" :max="99" :show="!!unread.groupCounts[group.id]" />
                 </div>
               </div>
-              
-              <n-empty 
-                v-else 
-                description="暂无群组" 
+
+              <n-empty
+                v-else
+                description="暂无群组"
                 size="small"
                 class="py-8"
               >
@@ -153,20 +154,27 @@
       <div v-if="contactUser" class="chat-panel h-full w-full flex flex-col">
         <!-- 聊天头部 -->
         <header class="chat-header min-h-16 flex items-center px-3 sm:px-6 py-2">
-          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开联系人列表" @click="mobileSidebarOpen = true">☰</n-button>
+          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开联系人列表" @click="mobileSidebarOpen = true"><i class="ui-icon ui-icon-bars" aria-hidden="true"></i></n-button>
           <div class="flex items-center gap-3 w-0 flex-grow overflow-hidden">
-            <n-avatar :size="40" :src="contactUser.avatar || undefined" class="flex-shrink-0">
+            <n-avatar :size="36" :src="contactUser.avatar || undefined" class="flex-shrink-0">
               <span v-if="!contactUser.avatar">{{ contactUser.nickname?.charAt(0) || contactUser.username?.charAt(0) || '?' }}</span>
             </n-avatar>
             <div class="flex-grow-1 w-auto overflow-hidden">
-              <div class="font-bold text-base">{{ contactUser.nickname || contactUser.username || `用户-${contactUser.id}` }}</div>
+              <div class="font-bold text-sm">{{ contactUser.nickname || contactUser.username || `用户-${contactUser.id}` }}</div>
               <div class="text-xs text-nowrap text-gray-500 truncate">{{ contactUser.bio || '人很懒，无简介~' }}</div>
             </div>
+          </div>
+          <div class="flex gap-2 text-slate-500">
+            <button class="header-icon" title="语音通话" aria-label="语音通话" :disabled="calls.busy" @click="calls.request = { user: contactUser, type: 2 }"><i class="ui-icon ui-icon-phone" aria-hidden="true"></i></button>
+            <n-dropdown trigger="click" :options="[{ label: '视频通话', key: 0, disabled: calls.busy }, { label: '屏幕共享', key: 1, disabled: calls.busy }]" @select="(type: 0 | 1) => calls.request = { user: contactUser!, type }">
+              <button class="header-icon" aria-label="更多操作"><i class="ui-icon ui-icon-more" aria-hidden="true"></i></button>
+            </n-dropdown>
           </div>
         </header>
         <n-scrollbar class="message-scrollbar grow" ref="scrollbarRef">
           <ul class="message-list space-y-4">
-            <li class="message-item flex flex-col w-full" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="msg.id || msg.clientMessageId || index">
+            <li class="message-item flex flex-col w-full relative" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="msg.id || msg.clientMessageId || index">
+              <n-avatar v-if="msg.fromUserId !== authUser?.id" class="incoming-avatar" :size="32" :src="contactUser.avatar || undefined">{{ (contactUser.nickname || contactUser.username).charAt(0) }}</n-avatar>
               <div
                 class="message-entry"
                 :class="[
@@ -201,30 +209,23 @@
             </li>
           </ul>
         </n-scrollbar>
-        
+
         <div class="message-composer-shell">
           <ToolBar class="chat-toolbar" :contact-user="contactUser" />
           <ChatMediaComposer class="chat-media-actions" @send="sendMedia" />
-          <div class="message-editor-shell h-28">
-            <TextMsg class="message-editor" @send="sendMsg" />
+          <div class="message-editor-shell">
+            <TextMsg placeholder="请输入消息..." class="message-editor" @send="sendMsg" />
           </div>
         </div>
       </div>
-      <div class="chat-empty-state h-full w-full flex flex-col items-center justify-center gap-4" v-else>
-        <n-button class="mobile-sidebar-toggle" secondary @click="mobileSidebarOpen = true">打开联系人列表</n-button>
-        <n-empty description="请从左侧选择一个联系人开始聊天" size="large">
-          <template #icon>
-            <n-icon size="50" color="#b0b0b0" :component="ChatboxEllipsesOutline" />
-          </template>
-          <template #extra>
-            <div class="text-sm text-gray-500 mt-2">
-              您可以发送文字、图片、语音片段，或发起语音/视频通话和屏幕共享
-            </div>
-          </template>
-        </n-empty>
+      <div class="chat-empty-state h-full w-full flex flex-col items-center justify-center" v-else>
+        <div class="empty-icon"><i class="ui-icon regular ui-icon-comments" aria-hidden="true"></i></div>
+        <h3>开启高效远程协作</h3>
+        <p>请从左侧列表选择一个联系人开始聊天。您可以发送文字、语音片段、图片，或者发起高清音视频通话与屏幕共享。</p>
+        <n-button type="primary" @click="activeTab = 'users'; mobileSidebarOpen = true"><template #icon><i class="ui-icon ui-icon-address-book" aria-hidden="true"></i></template>打开联系人列表</n-button>
       </div>
     </n-layout-content>
-    </n-layout>
+    </n-layout></div>
 </template>
 
 <script lang="ts" setup>
@@ -254,8 +255,10 @@ import {
   parseRemoteTab,
   type RemoteTab,
 } from '@/services/remoteTabState';
-import { ChatboxEllipsesOutline, PersonOutline } from '@vicons/ionicons5';
+import { PersonOutline } from '@vicons/ionicons5';
 
+import { usePrivateCallStore } from '@/stores/privateCall';
+const calls = usePrivateCallStore();
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
@@ -358,7 +361,7 @@ function handlePrivateMessage(data: any) {
     message: data.message,
     messageType: data.messageType,
     media: data.media,
-    time: data.time || new Date().toLocaleString(),
+    time: data.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
   });
 
 
@@ -384,7 +387,7 @@ function handlePrivateCallHistory(data: any) {
     message: data.message,
     messageType: data.messageType,
     call: data.call,
-    time: data.time || new Date(data.createdAt).toLocaleString(),
+    time: data.time || new Date(data.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
   });
 
   if (contactId === contactUser.value?.id) {
@@ -426,7 +429,7 @@ async function selectContact(user: User) {
       call: msg.call,
       media: msg.media,
       id: msg.id,
-      time: new Date(msg.createdAt).toLocaleString(),
+      time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
     }));
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
@@ -452,7 +455,7 @@ function sendMsg(v: string) {
     fromUserId: authUser.value.id,
     toUserId: contactUser.value.id,
     message: v,
-    time: new Date().toLocaleString()
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   };
   setMessage(contactUser.value.id, msg)
   void retryPrivateMessage(msg);
@@ -472,7 +475,7 @@ function sendMedia(payload: { type: 'image' | 'voice'; media: ChatMediaPayload }
     message: payload.type === 'image' ? '[图片]' : `[语音] ${payload.media.durationSeconds}秒`,
     messageType: payload.type,
     media: payload.media,
-    time: new Date().toLocaleString(),
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
   };
   setMessage(contactUser.value.id, msg);
   currentMessageList.value = privateMessageMap.get(contactUser.value.id) || [];
@@ -534,7 +537,7 @@ async function loadPendingInvitations() {
   try {
     const res = await getPendingInvitations();
     pendingInvitations.value = res.invitations || [];
-    
+
     if (pendingInvitations.value.length > 0) {
       if (document.hidden) {
         pendingInvitations.value.forEach(inv => {
@@ -560,10 +563,10 @@ async function loadPendingInvitations() {
 // 显示群组邀请对话框
 function showInvitationsDialog() {
   if (pendingInvitations.value.length === 0) return;
-  
+
   const invitation = pendingInvitations.value[0];
   if (!invitation) return;
-  
+
   dialog.warning({
     title: '群组邀请',
     content: `${invitation.inviter?.nickname || invitation.inviter?.username || '某用户'} 邀请您加入群组 "${invitation.group?.name || '未知群组'}"`,
@@ -576,7 +579,7 @@ function showInvitationsDialog() {
         message.success('已加入群组');
         pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
         loadMyGroups(); // 重新加载群组列表
-        
+
         // 如果还有其他邀请，继续显示
         if (pendingInvitations.value.length > 0) {
           setTimeout(() => showInvitationsDialog(), 500);
@@ -591,7 +594,7 @@ function showInvitationsDialog() {
         await rejectInvitation(invitation.id);
         message.info('已拒绝邀请');
         pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
-        
+
         // 如果还有其他邀请，继续显示
         if (pendingInvitations.value.length > 0) {
           setTimeout(() => showInvitationsDialog(), 500);
@@ -790,7 +793,7 @@ onUnmounted(() => {
 .contact-item.bg-blue-100 {
   border-color: #dbeafe;
   background: rgba(239, 246, 255, 0.96);
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.08);
+  box-shadow: none;
 }
 
 .contact-unread-badge {
@@ -821,9 +824,7 @@ onUnmounted(() => {
 
 .message-scrollbar {
   min-height: 0;
-  background:
-    radial-gradient(circle at 78% 18%, rgba(219, 234, 254, 0.56), transparent 32%),
-    #f8fafc;
+  background: #f8fafc;
 }
 
 :deep(.message-scrollbar .n-scrollbar-content) {
@@ -852,14 +853,14 @@ onUnmounted(() => {
 
 .message-entry--mine .message-bubble {
   border-color: #2563eb;
-  border-bottom-right-radius: 5px;
+  border-bottom-right-radius: 16px;
   background: #2563eb;
   color: #fff;
   box-shadow: 0 7px 20px rgba(37, 99, 235, 0.18);
 }
 
 .message-entry--theirs .message-bubble {
-  border-bottom-left-radius: 5px;
+  border-bottom-left-radius: 16px;
 }
 
 .message-bubble--media {
@@ -978,42 +979,6 @@ onUnmounted(() => {
   border-radius: 10px;
 }
 
-.chat-empty-state {
-  padding: 28px;
-  background:
-    radial-gradient(circle at 50% 44%, rgba(219, 234, 254, 0.7), transparent 24%),
-    linear-gradient(145deg, #f8fafc, #f1f5f9);
-}
-
-:deep(.chat-empty-state .n-empty) {
-  max-width: 420px;
-  padding: 34px 40px;
-  border: 1px solid rgba(226, 232, 240, 0.86);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.07);
-  backdrop-filter: blur(12px);
-}
-
-:deep(.chat-empty-state .n-empty__icon) {
-  display: flex;
-  width: 80px;
-  height: 80px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 24px;
-  background: #eff6ff;
-  color: #2563eb !important;
-  box-shadow: inset 0 0 0 1px #dbeafe;
-}
-
-:deep(.chat-empty-state .n-empty__description) {
-  margin-top: 20px;
-  color: #1e293b;
-  font-size: 18px;
-  font-weight: 700;
-}
-
 .mobile-sidebar-toggle,
 .mobile-sidebar-close {
   display: none;
@@ -1024,16 +989,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 767px) {
-  .remote-shell.sidebar-open::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 15;
-    background: rgba(15, 23, 42, 0.52);
-    backdrop-filter: blur(4px);
-    pointer-events: none;
-  }
-
   :deep(.remote-sidebar) {
     position: absolute;
     inset: 0 auto 0 0;
@@ -1043,7 +998,7 @@ onUnmounted(() => {
     max-width: min(80vw, 320px);
     border-right: 0;
     border-radius: 0 18px 18px 0;
-    box-shadow: 18px 0 50px rgba(15, 23, 42, 0.24);
+    box-shadow: none;
     transform: translateX(-104%);
     transition: transform 0.24s ease;
   }
@@ -1099,17 +1054,13 @@ onUnmounted(() => {
   }
 
   .message-editor-shell {
-    height: 104px;
+    height: 40px;
   }
 
   .chat-empty-state {
     padding: 20px;
   }
 
-  :deep(.chat-empty-state .n-empty) {
-    width: 100%;
-    padding: 28px 18px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1118,4 +1069,25 @@ onUnmounted(() => {
     transition: none;
   }
 }
+
+.im-page { height: 100dvh; display:flex; align-items:center; justify-content:center; padding:16px; background:#f1f5f9; }
+.remote-shell { max-width:1152px; height:90dvh; border-radius:16px; box-shadow:0 25px 50px -12px #0004; }
+.header-icon { padding:8px; border-radius:8px; }
+.header-icon:hover { background:#f1f5f9; }
+.sidebar-backdrop { position:absolute; inset:0; z-index:15; background:#0f172a80; backdrop-filter:blur(4px); display:none; }
+.sidebar-section-header { border:0; color:#94a3b8; }
+:deep(.sidebar-logout) { --n-color:transparent !important; --n-border:0 !important; }
+.message-item.items-start { padding-left:44px; }
+.incoming-avatar { position:absolute; left:0; top:0; }
+.message-editor-shell { height:40px; }
+:deep(.message-editor) { display:flex; gap:8px; background:transparent; overflow:visible; }
+:deep(.message-editor [contenteditable="true"]) { flex:1; min-width:0; min-height:40px; padding:9px 16px; border-radius:12px; background:#f1f5f9; }
+:deep(.message-editor > span) { top:9px; left:16px; font-size:14px; }
+:deep(.message-editor .n-button) { position:static; height:40px; min-width:80px; }
+.chat-empty-state { background:#fff; padding:32px; }
+.empty-icon { width:80px; height:80px; display:grid; place-items:center; color:#2563eb; background:#eff6ff; border-radius:24px; font-size:30px; margin-bottom:24px; box-shadow:inset 0 2px 4px #0000000d; }
+.chat-empty-state h3 { font-size:18px; font-weight:700; margin-bottom:8px; }
+.chat-empty-state p { max-width:384px; font-size:12px; color:#94a3b8; line-height:1.625; text-align:center; margin-bottom:24px; }
+.chat-empty-state .n-button { height:40px; padding:0 24px; font-size:12px; box-shadow:0 10px 15px -3px #3b82f633; }
+@media (max-width:767px) { .im-page { padding:0; } .remote-shell { height:100dvh; border-radius:0; } .sidebar-backdrop { display:block; } :deep(.remote-sidebar), :deep(.remote-sidebar-content) { border-radius:0; } }
 </style>

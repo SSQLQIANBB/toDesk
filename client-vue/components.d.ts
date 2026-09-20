@@ -11,16 +11,17 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    CallHistoryMessage: typeof import('./src/components/CallHistoryMessage.vue')['default']
+    ChatMediaComposer: typeof import('./src/components/ChatMediaComposer.vue')['default']
+    ChatMediaMessage: typeof import('./src/components/ChatMediaMessage.vue')['default']
     GlobalMessages: typeof import('./src/components/GlobalMessages.vue')['default']
     GlobalPrivateCall: typeof import('./src/components/GlobalPrivateCall.vue')['default']
     GroupCallInvitations: typeof import('./src/components/GroupCallInvitations.vue')['default']
     MediaRecorder: typeof import('./src/components/MediaRecorder.vue')['default']
     MediaVideo: typeof import('./src/components/MediaVideo.vue')['default']
-    NAlert: typeof import('naive-ui')['NAlert']
     NAvatar: typeof import('naive-ui')['NAvatar']
     NBadge: typeof import('naive-ui')['NBadge']
     NButton: typeof import('naive-ui')['NButton']
-    NButtonGroup: typeof import('naive-ui')['NButtonGroup']
     NCard: typeof import('naive-ui')['NCard']
     NColorPicker: typeof import('naive-ui')['NColorPicker']
     NConfigProvider: typeof import('naive-ui')['NConfigProvider']
@@ -52,7 +53,6 @@ declare module 'vue' {
     NTag: typeof import('naive-ui')['NTag']
     NText: typeof import('naive-ui')['NText']
     NTooltip: typeof import('naive-ui')['NTooltip']
-    NTransfer: typeof import('naive-ui')['NTransfer']
     NUpload: typeof import('naive-ui')['NUpload']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

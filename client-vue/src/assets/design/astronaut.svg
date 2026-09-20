@@ -1,0 +1,26 @@
+<svg viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full drop-shadow-2xl">
+                    <!-- Astronaut Helmet & Body Graphic -->
+                    <circle cx="80" cy="80" r="70" fill="url(#astroGlow)" fill-opacity="0.15"/>
+                    <path d="M50 110 C50 85, 110 85, 110 110 C110 125, 50 125, 50 110 Z" fill="#E2E8F0"/>
+                    <rect x="62" y="100" width="36" height="24" rx="6" fill="#0F172A"/>
+                    <circle cx="70" cy="112" r="3" fill="#10B981"/>
+                    <circle cx="80" cy="112" r="3" fill="#3B82F6"/>
+                    <circle cx="90" cy="112" r="3" fill="#F59E0B"/>
+                    <circle cx="80" cy="58" r="32" fill="#E2E8F0"/>
+                    <path d="M56 56 C56 42, 104 42, 104 56 C104 70, 56 70, 56 56 Z" fill="url(#visorGrad)"/>
+                    <path d="M62 48 C68 44, 82 44, 88 48 C78 50, 70 52, 62 48 Z" fill="white" fill-opacity="0.5"/>
+                    <path d="M38 72 C32 80, 36 96, 46 92 C48 78, 42 74, 38 72 Z" fill="#CBD5E1"/>
+                    <path d="M122 72 C128 80, 124 96, 114 92 C112 78, 118 74, 122 72 Z" fill="#CBD5E1"/>
+                    <!-- Star Sparkle -->
+                    <path d="M135 30 L138 38 L146 41 L138 44 L135 52 L132 44 L124 41 L132 38 Z" fill="#FCE7F3"/>
+                    <defs>
+                        <radialGradient id="astroGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(80 80) rotate(90) scale(70)">
+                            <stop stop-color="#38BDF8"/>
+                            <stop offset="1" stop-color="#38BDF8" stop-opacity="0"/>
+                        </radialGradient>
+                        <linearGradient id="visorGrad" x1="56" y1="42" x2="104" y2="70" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#0284C7"/>
+                            <stop offset="1" stop-color="#0f172a"/>
+                        </linearGradient>
+                    </defs>
+                </svg>

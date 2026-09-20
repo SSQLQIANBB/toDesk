@@ -2,7 +2,7 @@
   <div class="chat-media-composer">
     <input ref="imageInput" class="sr-only" type="file" accept="image/*" @change="handleImageSelected" />
     <n-button size="small" secondary :disabled="disabled || uploading" @click="imageInput?.click()">
-      {{ uploading ? '上传中…' : '发送图片' }}
+      <i class="ui-icon ui-icon-image mr-1" aria-hidden="true"></i>{{ uploading ? '上传中…' : '发送图片' }}
     </n-button>
     <button
       type="button"
@@ -16,7 +16,7 @@
       @keyup.space.prevent="finishRecording"
       @contextmenu.prevent
     >
-      {{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}
+      <i class="ui-icon ui-icon-microphone mr-1" aria-hidden="true"></i>{{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}
     </button>
   </div>
 </template>
