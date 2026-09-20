@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit",
     "dev": "node --env-file=.env.local ./node_modules/nodemon/bin/nodemon.js -r tsconfig-paths/register src/app.ts",
     "env:check": "node --env-file=.env.local -r ts-node/register -r tsconfig-paths/register -e \"require('./src/config/env')\"",
-    "storage:migrate-local": "node -r ts-node/register -r tsconfig-paths/register src/scripts/migrateLocalFilesToQiniu.ts",
     "start": "node -r ts-node/register -r tsconfig-paths/register src/app.ts"
   },
   "keywords": [],

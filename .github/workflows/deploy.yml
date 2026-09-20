@@ -197,8 +197,6 @@ jobs:
               todesk-cert-sync.tar.gz
             docker compose --env-file .env.production -f docker-compose.prod.yml \
               up -d --pull never --remove-orphans
-            docker compose --env-file .env.production -f docker-compose.prod.yml \
-              exec -T backend pnpm storage:migrate-local
             docker image prune -f
             for i in $(seq 1 24); do
               if [ "$(

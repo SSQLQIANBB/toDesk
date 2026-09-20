@@ -278,27 +278,12 @@ https://private-files.sycsq.top/<key>?e=<deadline>&token=<downloadToken>
 - 发送媒体消息时后端会校验文件 ID 属于当前发送者，并校验群文件归属，不能由
   客户端任意提交一个私有对象 key 换取签名。
 
-首次发布包含迁移代码的版本时，GitHub Actions 在新后端启动后自动执行：
+历史本地文件已完成迁移。一次性迁移脚本、包命令及 GitHub Actions 中的自动迁移步骤已移除，后续部署不再执行迁移。
 
-```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml \
-  exec -T backend pnpm storage:migrate-local
-```
+迁移时已更新用户/群头像、单聊消息、群消息及文件记录；源文件保留在
+`todesk-uploads` 卷中，本次清理不删除该数据卷。
 
-迁移脚本只处理 `files.fileUrl` 仍以 `/uploads/` 开头的记录，因此可以安全重跑。
-它会把头像上传到公共空间，其他文件上传到私有空间，并在同一数据库事务中更新
-用户/群头像、单聊消息、群消息及文件记录。源文件只读保留在 `todesk-uploads`
-卷中，不会在迁移时删除。
-
-手动检查迁移结果：
-
-```bash
-cd /opt/todesk
-docker compose --env-file .env.production -f docker-compose.prod.yml \
-  exec -T backend pnpm storage:migrate-local
-```
-
-在 MySQL 中执行：
+如需复核迁移结果，可在 MySQL 中执行：
 
 ```sql
 SELECT COUNT(*) AS pending_local_files
