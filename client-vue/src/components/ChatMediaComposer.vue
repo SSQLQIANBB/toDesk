@@ -1,12 +1,13 @@
 <template>
-  <div class="chat-media-composer">
+  <div class="chat-media-composer" :class="{ compact }">
     <input ref="imageInput" class="sr-only" type="file" accept="image/*" @change="handleImageSelected" />
-    <n-button size="small" secondary :disabled="disabled || uploading" @click="imageInput?.click()">
-      <i class="ui-icon ui-icon-image mr-1" aria-hidden="true"></i>{{ uploading ? '上传中…' : '发送图片' }}
+    <n-button aria-label="发送图片" title="发送图片" size="small" secondary :disabled="disabled || uploading" @click="imageInput?.click()">
+      <i class="ui-icon ui-icon-image mr-1" aria-hidden="true"></i><span :class="{ 'sr-only': compact }">{{ uploading ? '上传中…' : '发送图片' }}</span>
     </n-button>
     <button
       type="button"
       class="hold-to-talk"
+      aria-label="按住说话，松开发送" title="按住说话，松开发送"
       :class="{ 'hold-to-talk--active': recording }"
       :disabled="disabled || uploading"
       @pointerdown.prevent="startRecording"
@@ -16,8 +17,9 @@
       @keyup.space.prevent="finishRecording"
       @contextmenu.prevent
     >
-      <i class="ui-icon ui-icon-microphone mr-1" aria-hidden="true"></i>{{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}
+      <i class="ui-icon ui-icon-microphone mr-1" aria-hidden="true"></i><span :class="{ 'sr-only': compact }">{{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}</span>
     </button>
+    <span v-if="compact && (recording || uploading)" class="recording-status" role="status">{{ uploading ? '发送中…' : `松开发送 ${elapsedSeconds || 1}s` }}</span>
   </div>
 </template>
 
@@ -28,7 +30,7 @@ import { uploadFile } from '@/api/common';
 import type { ChatMediaPayload } from '@/api/message';
 import { getAudioFileExtension, selectAudioMimeType } from '@/services/chatMedia';
 
-const props = defineProps<{ disabled?: boolean; groupId?: number }>();
+const props = defineProps<{ disabled?: boolean; groupId?: number; compact?: boolean }>();
 const emit = defineEmits<{
   send: [payload: { type: 'image' | 'voice'; media: ChatMediaPayload }];
 }>();
@@ -167,4 +169,12 @@ onBeforeUnmount(cancelRecording);
 .hold-to-talk--active { background: #d9d9d9; transform: scale(.99); }
 .hold-to-talk:disabled { color: #aaa; cursor: not-allowed; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.compact { position: relative; display: flex; flex: none; flex-wrap: nowrap; gap: 8px; padding: 0; }
+.compact :deep(.n-button), .compact .hold-to-talk { flex: none; width: 36px; min-width: 0; height: 40px; min-height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #94a3b8; font-size: 20px; }
+.compact :deep(.n-button__border), .compact :deep(.n-button__state-border) { display: none; }
+.compact .ui-icon { margin: 0; }
+.compact .hold-to-talk--active { color: #2563eb; background: #eff6ff; }
+.recording-status { position: absolute; bottom: 48px; left: 0; z-index: 1; padding: 6px 12px; white-space: nowrap; border-radius: 8px; background: #eff6ff; color: #2563eb; }
+@media (max-width: 767px) { .compact { gap: 0; } .compact :deep(.n-button), .compact .hold-to-talk { width: 30px; } }
 </style>

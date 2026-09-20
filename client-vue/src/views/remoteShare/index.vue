@@ -164,12 +164,7 @@
               <div class="text-xs text-nowrap text-gray-500 truncate">{{ contactUser.bio || '人很懒，无简介~' }}</div>
             </div>
           </div>
-          <div class="flex gap-2 text-slate-500">
-            <button class="header-icon" title="语音通话" aria-label="语音通话" :disabled="calls.busy" @click="calls.request = { user: contactUser, type: 2 }"><i class="ui-icon ui-icon-phone" aria-hidden="true"></i></button>
-            <n-dropdown trigger="click" :options="[{ label: '视频通话', key: 0, disabled: calls.busy }, { label: '屏幕共享', key: 1, disabled: calls.busy }]" @select="(type: 0 | 1) => calls.request = { user: contactUser!, type }">
-              <button class="header-icon" aria-label="更多操作"><i class="ui-icon ui-icon-more" aria-hidden="true"></i></button>
-            </n-dropdown>
-          </div>
+
         </header>
         <n-scrollbar class="message-scrollbar grow" ref="scrollbarRef">
           <ul class="message-list space-y-4">
@@ -177,6 +172,7 @@
               <n-avatar v-if="msg.fromUserId !== authUser?.id" class="incoming-avatar" :size="32" :src="contactUser.avatar || undefined">{{ (contactUser.nickname || contactUser.username).charAt(0) }}</n-avatar>
               <div
                 class="message-entry"
+                :title="msg.time"
                 :class="[
                   msg.fromUserId === authUser?.id ? 'message-entry--mine' : 'message-entry--theirs',
                   { 'message-entry--call': msg.messageType === 'call' },
@@ -201,7 +197,6 @@
                 <div v-else class="message-bubble message-bubble--text overflow-hidden text-wrap break-words">
                   {{ msg.message }}
                 </div>
-                <span class="message-time">{{msg.time}}</span>
               </div>
               <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="message-status text-xs mt-1" @click="msg.sendStatus === 'failed' && retryPrivateMessage(msg)">
                 {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
@@ -212,10 +207,11 @@
 
         <div class="message-composer-shell">
           <ToolBar class="chat-toolbar" :contact-user="contactUser" />
-          <ChatMediaComposer class="chat-media-actions" @send="sendMedia" />
-          <div class="message-editor-shell">
-            <TextMsg placeholder="请输入消息..." class="message-editor" @send="sendMsg" />
-          </div>
+          <TextMsg placeholder="请输入消息..." class="message-editor" @send="sendMsg">
+            <template #leading>
+              <ChatMediaComposer compact @send="sendMedia" />
+            </template>
+          </TextMsg>
         </div>
       </div>
       <div class="chat-empty-state h-full w-full flex flex-col items-center justify-center" v-else>
@@ -257,8 +253,6 @@ import {
 } from '@/services/remoteTabState';
 import { PersonOutline } from '@vicons/ionicons5';
 
-import { usePrivateCallStore } from '@/stores/privateCall';
-const calls = usePrivateCallStore();
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
@@ -344,8 +338,14 @@ const currentMessageList = ref<MessageInfo[]>([]);
 const scrollbarRef = ref();
 
 // 退出登录
-async function handleLogout() {
-  await authStore.logout({ navigate: true });
+function handleLogout() {
+  dialog.warning({
+    title: '退出登录？',
+    content: '确认退出当前账号吗？',
+    positiveText: '退出登录',
+    negativeText: '取消',
+    onPositiveClick: () => authStore.logout({ navigate: true }),
+  });
 }
 
 // 私信
@@ -838,7 +838,7 @@ onUnmounted(() => {
 
 .message-bubble {
   min-width: 92px;
-  padding: 11px 14px 27px;
+  padding: 11px 14px;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   background: #fff;
@@ -864,29 +864,12 @@ onUnmounted(() => {
 }
 
 .message-bubble--media {
-  padding: 6px 7px 25px;
+  padding: 6px 7px;
 }
 
-.message-time {
-  position: absolute;
-  right: 10px;
-  bottom: 6px;
-  max-width: calc(100% - 20px);
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 10px;
-  line-height: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.message-entry--mine .message-time {
-  color: rgba(219, 234, 254, 0.78);
-}
 
 .message-entry :deep(.call-history-message) {
   min-width: 220px;
-  padding-bottom: 30px;
   border-radius: 16px;
 }
 
@@ -895,9 +878,6 @@ onUnmounted(() => {
   background: #eff6ff;
 }
 
-.message-entry--call.message-entry--mine .message-time {
-  color: #64748b;
-}
 
 .message-status {
   color: #64748b;
@@ -905,7 +885,7 @@ onUnmounted(() => {
 
 .message-composer-shell {
   flex: none;
-  padding: 0 16px 14px;
+  padding: 0;
   border-top: 1px solid #e2e8f0;
   background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.025);
@@ -914,12 +894,11 @@ onUnmounted(() => {
 :deep(.chat-toolbar) {
   flex-wrap: wrap;
   gap: 8px;
-  padding: 12px 0 4px;
+  padding: 10px 16px;
   border: 0;
 }
 
-:deep(.chat-toolbar .n-button),
-:deep(.chat-media-actions .n-button) {
+:deep(.chat-toolbar .n-button) {
   --n-color: #f1f5f9 !important;
   --n-color-hover: #e2e8f0 !important;
   --n-color-pressed: #cbd5e1 !important;
@@ -931,53 +910,7 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-:deep(.chat-media-actions) {
-  gap: 8px;
-  padding: 5px 0 8px;
-}
-
-:deep(.chat-media-actions .hold-to-talk) {
-  min-height: 36px;
-  border-color: #dbe3ee;
-  border-radius: 11px;
-  background: #f8fafc;
-  color: #334155;
-}
-
-:deep(.chat-media-actions .hold-to-talk:hover) {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-:deep(.chat-media-actions .hold-to-talk--active) {
-  border-color: #93c5fd;
-  background: #dbeafe;
-}
-
-:deep(.message-editor) {
-  border: 0 !important;
-  border-radius: 14px !important;
-  background: #f1f5f9;
-  box-shadow: inset 0 0 0 1px transparent;
-  transition: box-shadow 0.2s ease, background 0.2s ease;
-}
-
-:deep(.message-editor:focus-within) {
-  background: #f8fafc;
-  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.22);
-}
-
-:deep(.message-editor [contenteditable="true"]) {
-  padding: 12px 92px 12px 14px;
-  color: #1e293b;
-  font-size: 14px;
-  line-height: 22px;
-}
-
-:deep(.message-editor .n-button) {
-  min-width: 72px;
-  border-radius: 10px;
-}
+.message-editor { padding: 20px 16px; border-top: 1px solid #e2e8f0; }
 
 .mobile-sidebar-toggle,
 .mobile-sidebar-close {
@@ -1041,7 +974,7 @@ onUnmounted(() => {
   }
 
   .message-composer-shell {
-    padding: 0 12px max(10px, env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   :deep(.chat-toolbar) {
@@ -1053,9 +986,7 @@ onUnmounted(() => {
     padding-inline: 10px;
   }
 
-  .message-editor-shell {
-    height: 40px;
-  }
+  .message-editor { padding: 14px 10px; }
 
   .chat-empty-state {
     padding: 20px;
@@ -1072,18 +1003,11 @@ onUnmounted(() => {
 
 .im-page { height: 100dvh; display:flex; align-items:center; justify-content:center; padding:16px; background:#f1f5f9; }
 .remote-shell { max-width:1152px; height:90dvh; border-radius:16px; box-shadow:0 25px 50px -12px #0004; }
-.header-icon { padding:8px; border-radius:8px; }
-.header-icon:hover { background:#f1f5f9; }
 .sidebar-backdrop { position:absolute; inset:0; z-index:15; background:#0f172a80; backdrop-filter:blur(4px); display:none; }
 .sidebar-section-header { border:0; color:#94a3b8; }
 :deep(.sidebar-logout) { --n-color:transparent !important; --n-border:0 !important; }
 .message-item.items-start { padding-left:44px; }
 .incoming-avatar { position:absolute; left:0; top:0; }
-.message-editor-shell { height:40px; }
-:deep(.message-editor) { display:flex; gap:8px; background:transparent; overflow:visible; }
-:deep(.message-editor [contenteditable="true"]) { flex:1; min-width:0; min-height:40px; padding:9px 16px; border-radius:12px; background:#f1f5f9; }
-:deep(.message-editor > span) { top:9px; left:16px; font-size:14px; }
-:deep(.message-editor .n-button) { position:static; height:40px; min-width:80px; }
 .chat-empty-state { background:#fff; padding:32px; }
 .empty-icon { width:80px; height:80px; display:grid; place-items:center; color:#2563eb; background:#eff6ff; border-radius:24px; font-size:30px; margin-bottom:24px; box-shadow:inset 0 2px 4px #0000000d; }
 .chat-empty-state h3 { font-size:18px; font-weight:700; margin-bottom:8px; }

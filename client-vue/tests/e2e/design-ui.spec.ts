@@ -42,7 +42,23 @@ for (const width of [1440, 375]) {
     await page.locator('.contact-item').first().click();
     await expect(page.getByText('一起开始远程协作吧')).toBeVisible();
     await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('chat.png') });
-    await expect(page.locator('.message-editor [contenteditable]')).toBeVisible();
+    const editor = page.getByRole('textbox', { name: '消息', exact: true });
+    await expect(editor).toBeVisible();
+    await expect(page.locator('.header-icon')).toHaveCount(0);
+    await expect(page.locator('.message-time')).toHaveCount(0);
+    await expect(page.getByText('通话时长 00:15')).toBeVisible();
+    const image = page.getByRole('button', { name: '发送图片', exact: true });
+    const send = page.getByRole('button', { name: '发送', exact: true });
+    const imageBox = (await image.boundingBox())!;
+    const editorBox = (await editor.boundingBox())!;
+    const sendBox = (await send.boundingBox())!;
+    expect(Math.abs(imageBox.y + imageBox.height / 2 - editorBox.y - editorBox.height / 2)).toBeLessThan(2);
+    expect(Math.abs(sendBox.y + sendBox.height / 2 - editorBox.y - editorBox.height / 2)).toBeLessThan(2);
+    await expect(send).toBeDisabled();
+    await editor.fill('测试发送');
+    await send.click();
+    await expect(page.locator('.message-bubble').getByText('测试发送', { exact: true })).toBeVisible();
+    await expect(editor).toBeEmpty();
     await page.goto('/groups');
     await expect(page.locator('.group-card')).toBeVisible();
     await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('groups.png') });
@@ -76,3 +92,35 @@ for (const width of [1440, 375]) {
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }
+
+
+test('退出登录需确认，取消保留会话', async ({ page }) => {
+  await prepare(page);
+  await page.goto('/remote');
+  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await expect(page.getByText('确认退出当前账号吗？')).toBeVisible();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page).toHaveURL(/remote/);
+  await expect(page.locator('.n-dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await page.locator('.n-dialog').getByRole('button', { name: '退出登录', exact: true }).click();
+  await expect(page).toHaveURL(/login/);
+});
+
+test('登录自动填充保持深色输入框', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.locator('.login-card input').first()).toBeVisible();
+  const session = await page.context().newCDPSession(page);
+  await session.send('DOM.enable');
+  await session.send('CSS.enable');
+  const { root } = await session.send('DOM.getDocument');
+  const { nodeId } = await session.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.login-card input' });
+  await session.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: ['autofill'] });
+  await expect.poll(() => page.locator('.login-card input').first().evaluate(input => getComputedStyle(input).webkitTextFillColor)).toBe('rgb(255, 255, 255)');
+  const style = await page.locator('.login-card input').first().evaluate(input => {
+    const style = getComputedStyle(input);
+    return { shadow: style.boxShadow, text: style.webkitTextFillColor };
+  });
+  expect(style.shadow).toContain('rgb(17, 26, 46)');
+  expect(style.text).toBe('rgb(255, 255, 255)');
+});

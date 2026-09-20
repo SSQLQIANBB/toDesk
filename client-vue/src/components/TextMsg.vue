@@ -1,33 +1,15 @@
 <template>
-  <div class="h-full w-full border relative rounded-md overflow-hidden">
-    <!-- 可编辑输入框 -->
-    <div
-      ref="editorRef"
-      class="w-full h-full p-2 outline-none overflow-auto whitespace-pre-wrap break-words"
-      :contenteditable="true"
-      @input="onInput"
-      @keydown="onKeydown"
-      @paste="onPaste"
-    ></div>
-
-    <!-- 占位提示 -->
-    <span
-      v-if="!inputValue"
-      class="text-gray-400 absolute left-2 top-2 pointer-events-none select-none"
-    >
-      {{ placeholder }}
-    </span>
-
-    <!-- 发送按钮 -->
-    <n-button
-      class="absolute bottom-2 right-2"
-      :disabled="!inputValue"
-      size="large"
-      type="primary"
-      @click="handleSend"
-    >
-      发送
-    </n-button>
+  <div class="text-composer">
+    <slot name="leading" />
+    <div class="text-editor-wrap">
+      <div ref="editorRef" class="text-editor" contenteditable="true" role="textbox"
+        aria-label="消息" aria-multiline="true" @input="onInput" @keydown="onKeydown" @paste="onPaste"></div>
+      <span v-if="!inputValue" class="text-placeholder">{{ placeholder }}</span>
+    </div>
+    <button class="send-button" type="button" aria-label="发送" title="发送"
+      :disabled="!inputValue.trim()" @click="handleSend">
+      <i class="ui-icon ui-icon-paper-plane" aria-hidden="true"></i>
+    </button>
   </div>
 </template>
 
@@ -121,7 +103,6 @@ function insertNewLine() {
 
 // 发送事件
 function handleSend() {
-  console.log(inputValue.value)
   const text = inputValue.value.trim()
   if (!text) return
   emits('send', text)
@@ -138,9 +119,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
-div[contenteditable="true"] {
-  min-height: 100px;
-  /* max-height: 240px; */
-  overflow-y: auto;
+.text-composer { display: flex; align-items: center; gap: 12px; }
+.text-editor-wrap { position: relative; flex: 1; min-width: 0; border-radius: 24px; background: #f1f5f9; }
+.text-editor-wrap:focus-within { box-shadow: inset 0 0 0 1px #bfdbfe; }
+.text-editor { min-height: 48px; max-height: 144px; padding: 13px 20px; outline: none; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 22px; color: #1e293b; }
+.text-placeholder { position: absolute; left: 20px; top: 13px; pointer-events: none; color: #94a3b8; }
+.send-button { width: 48px; height: 48px; flex: none; border-radius: 50%; background: #2563eb; color: white; font-size: 18px; box-shadow: 0 2px 5px #0f172a26; }
+.send-button:hover:not(:disabled) { background: #1d4ed8; }
+.send-button:disabled { cursor: not-allowed; }
+@media (max-width: 767px) {
+  .text-composer { gap: 6px; }
+  .text-editor { padding-inline: 14px; }
+  .text-placeholder { left: 14px; }
+  .send-button { width: 40px; height: 40px; }
 }
 </style>

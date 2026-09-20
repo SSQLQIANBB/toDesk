@@ -23,3 +23,5 @@
 .ui-icon-plus::before { content: "\f067"; }
 .ui-icon-warning::before { content: "\f071"; }
 .ui-icon-info::before { content: "\f05a"; }
+
+.ui-icon-paper-plane::before { content: "\f1d8"; }

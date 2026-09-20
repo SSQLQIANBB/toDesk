@@ -397,6 +397,12 @@ async function handleRegister() {
 :deep(.login-card .n-form-item-label__asterisk) { color:#34d399; }
 :deep(.login-card .n-form-item-feedback-wrapper) { min-height:16px; }
 :deep(.login-card .n-input) { --n-color:#0f172a80 !important; --n-color-focus:#0f172a80 !important; --n-text-color:white !important; --n-placeholder-color:#64748b !important; --n-border:1px solid #ffffff1a !important; --n-border-hover:1px solid #10b981 !important; --n-border-focus:1px solid #10b981 !important; --n-box-shadow-focus:0 0 0 1px #10b981 !important; --n-caret-color:#34d399 !important; --n-height:42px !important; border-radius:12px; }
+/* 浏览器自动填充直接绘制在内部 input 上，需要覆盖其背景和文字颜色。 */
+:deep(.login-card input:autofill) {
+  box-shadow: 0 0 0 1000px #111a2e inset;
+  -webkit-text-fill-color: #fff;
+  caret-color: #34d399;
+}
 :deep(.login-card .n-input__prefix), :deep(.login-card .n-input__suffix) { color:#94a3b8; }
 :deep(.login-card .n-button) { border-radius:12px; font-size:12px; }
 :deep(.login-card .n-button--primary-type:not(.login-link)) { --n-color:#10b981 !important; --n-color-hover:#059669 !important; --n-color-pressed:#047857 !important; --n-border:0 !important; --n-border-hover:0 !important; --n-border-pressed:0 !important; --n-border-focus:0 !important; }
