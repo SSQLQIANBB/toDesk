@@ -5,7 +5,7 @@
     'message-bubble--media': (messageType === 'image' || messageType === 'voice') && media,
     'message-bubble--image': messageType === 'image' && media,
   }">
-    <ChatImageMessage v-if="messageType === 'image' && media" :media="media" />
+    <ChatImageMessage v-if="messageType === 'image' && media" :media="media" :is-mine="isMine" />
     <ChatVoiceMessage v-else-if="messageType === 'voice' && media" :media="media" :is-mine="isMine" />
     <ChatTextMessage v-else :text="message" />
   </div>

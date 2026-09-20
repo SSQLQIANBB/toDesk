@@ -20,7 +20,7 @@ const voice = {
 describe('聊天媒体消息', () => {
   it('图片使用 Naive UI 站内预览，不渲染跳转链接', () => {
     const wrapper = shallowMount(ChatImageMessage, {
-      props: { media: image },
+      props: { media: image, isMine: false },
     });
 
     expect(wrapper.find('a').exists()).toBe(false);
