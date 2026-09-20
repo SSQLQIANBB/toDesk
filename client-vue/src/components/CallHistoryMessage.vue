@@ -48,7 +48,7 @@ const presentation = computed(() => getCallHistoryPresentation(props.record, pro
   min-width: 0;
 }
 
-.call-history-message > .iconfont { font-size: 22px; -webkit-text-stroke: .35px currentColor; }
+.call-history-message > .iconfont { font-size: var(--icon-size-control); }
 
 .call-history-message__content strong {
   font-size: 12px;

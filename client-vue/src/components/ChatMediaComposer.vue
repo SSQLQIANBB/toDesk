@@ -213,8 +213,8 @@ onBeforeUnmount(cancelRecording);
 .compact :deep(.n-button), .voice-mode-toggle { flex: none; width: 36px; min-width: 0; height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #94a3b8; font-size: 22px; }
 .voice-mode-toggle--active { color: #2563eb; }
 .voice-mode-toggle:disabled { cursor: not-allowed; }
-.compact :deep(.n-button__icon) { margin: 0; width: 28px; height: 28px; font-size: 28px; }
-.compact :deep(.iconfont), .voice-mode-toggle .iconfont { font-size: 28px; -webkit-text-stroke: .35px currentColor; }
+.compact :deep(.n-button__icon) { margin: 0; width: var(--icon-size-composer); height: var(--icon-size-composer); font-size: var(--icon-size-composer); }
+.compact :deep(.iconfont), .voice-mode-toggle .iconfont { font-size: var(--icon-size-composer); }
 .voice-mode-toggle { display: inline-flex; align-items: center; justify-content: center; }
 .compact :deep(.n-button__border), .compact :deep(.n-button__state-border) { display: none; }
 @media (max-width: 767px) { .compact { gap: 6px; } .compact :deep(.n-button), .voice-mode-toggle { width: 30px; } }

@@ -634,6 +634,9 @@ onUnmounted(() => {
 </script>
 
 <style>
+.group-card-actions .iconfont, .groups-page-actions .iconfont { font-size: var(--icon-size-control); }
+.group-card-meta { display: flex; align-items: center; gap: 4px; }
+.group-card-meta .iconfont { font-size: var(--icon-size-inline); margin: 0; }
 .groups-page {
   background: #f8fafc;
   color: #1e293b;

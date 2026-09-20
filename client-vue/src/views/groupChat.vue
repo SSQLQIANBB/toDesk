@@ -44,7 +44,7 @@
             <div class="flex items-center gap-2 text-xs text-gray-500 mt-1">
               <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
               <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
-              <span v-if="member.canSpeak === false" class="text-red-500"><i class="iconfont icon-microphone" aria-hidden="true"></i> 禁言</span>
+              <span v-if="member.canSpeak === false" class="member-muted text-red-500"><i class="iconfont icon-microphone-off" aria-hidden="true"></i> 禁言</span>
             </div>
           </div>
           <div class="w-2 h-2 rounded-full" :class="member.online ? 'bg-green-400' : 'bg-gray-300'"></div>
@@ -476,7 +476,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.group-action-icon { font-size: 20px; -webkit-text-stroke: .35px currentColor; }
+.member-muted { display: inline-flex; align-items: center; gap: 4px; }
+.member-muted .iconfont { font-size: var(--icon-size-inline); }
+.mobile-sidebar-toggle .iconfont { font-size: var(--icon-size-control); }
+.group-action-icon { font-size: var(--icon-size-control); }
 .mobile-sidebar-toggle { display: none; }
 .mobile-sidebar-close { display: none; }
 @media (max-width: 767px) { .mobile-sidebar-toggle, .mobile-sidebar-close { display: inline-flex; } }

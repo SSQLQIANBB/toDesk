@@ -664,6 +664,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.mobile-sidebar-toggle .iconfont { font-size: var(--icon-size-control); }
 .remote-shell {
   position: relative;
   background: #f1f5f9;
@@ -949,8 +950,8 @@ onUnmounted(() => {
 :deep(.sidebar-logout) { --n-color:transparent !important; --n-border:0 !important; }
 .message-item.items-start { padding-left:44px; }
 .incoming-avatar { position:absolute; left:0; top:0; }
-.sidebar-logout .iconfont { font-size: 24px; -webkit-text-stroke: .4px currentColor; }
-.profile-button .iconfont { font-size: 20px; -webkit-text-stroke: .35px currentColor; }
+.sidebar-logout .iconfont { font-size: var(--icon-size-control); }
+.profile-button .iconfont { font-size: var(--icon-size-control); }
 .chat-empty-state { background:#fff; padding:32px; }
 .empty-icon { width:80px; height:80px; display:grid; place-items:center; color:#2563eb; background:#eff6ff; border-radius:24px; font-size:30px; margin-bottom:24px; box-shadow:inset 0 2px 4px #0000000d; }
 .chat-empty-state h3 { font-size:18px; font-weight:700; margin-bottom:8px; }

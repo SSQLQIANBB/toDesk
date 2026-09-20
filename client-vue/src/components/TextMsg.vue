@@ -128,8 +128,7 @@ onMounted(() => {
 .text-editor-wrap:focus-within { box-shadow: inset 0 0 0 1px #bfdbfe; }
 .text-editor { min-height: 48px; max-height: 144px; padding: 13px 20px; outline: none; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 22px; color: #1e293b; }
 .text-placeholder { position: absolute; left: 20px; top: 13px; pointer-events: none; color: #94a3b8; }
-.send-button { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; flex: none; border-radius: 50%; background: #2563eb; color: white; font-size: 26px; box-shadow: 0 2px 5px #0f172a26; }
-.send-button .iconfont { -webkit-text-stroke: .35px currentColor; }
+.send-button { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; flex: none; border-radius: 50%; background: #2563eb; color: white; font-size: var(--icon-size-composer); box-shadow: 0 2px 5px #0f172a26; }
 .send-button:hover:not(:disabled) { background: #1d4ed8; }
 .send-button:disabled { cursor: not-allowed; }
 @media (max-width: 767px) {

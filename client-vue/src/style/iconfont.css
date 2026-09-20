@@ -4,6 +4,13 @@
   src: url('../assets/iconfont/iconfont.woff2') format('woff2');
   font-display: block;
 }
+/* Sizes describe the control role, independent of surrounding text size. */
+:root {
+  --icon-size-inline: 18px;
+  --icon-size-control: 22px;
+  --icon-size-composer: 28px;
+  --icon-size-call: 28px;
+}
 .iconfont {
   display: inline-flex;
   align-items: center;
@@ -17,9 +24,31 @@
   font-variant: normal;
   line-height: 1;
   text-transform: none;
-  vertical-align: middle;
+  vertical-align: -0.125em;
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+/* Center the glyph box as well as the button slot; do not inherit text baselines. */
+.iconfont::before { display: block; line-height: 1; }
+.n-icon:has(> .iconfont),
+.n-button__icon:has(.iconfont) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.n-button__icon:has(.iconfont) {
+  width: var(--icon-size-control);
+  height: var(--icon-size-control);
+  font-size: var(--icon-size-control);
+}
+.n-input__prefix > .iconfont { font-size: var(--icon-size-inline); }
+/* Only strengthen outline glyphs; filled glyphs must keep their interior spacing. */
+.iconfont:is(.icon-desktop, .icon-video, .icon-microphone, .icon-user, .icon-gear,
+  .icon-message, .icon-info, .icon-id-card, .icon-search, .icon-video-off,
+  .icon-microphone-off, .icon-arrow-left, .icon-plus, .icon-close) {
+  -webkit-text-stroke: .018em currentColor;
 }
 .icon-desktop::before { content: "\e8dd"; }
 .icon-video::before { content: "\e617"; }

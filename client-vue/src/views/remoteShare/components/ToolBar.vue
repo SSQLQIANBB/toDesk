@@ -16,5 +16,5 @@ function start(type: 0 | 1 | 2) {
 </script>
 
 <style scoped>
-.iconfont { font-size: 20px; -webkit-text-stroke: .35px currentColor; }
+.iconfont { font-size: var(--icon-size-control); }
 </style>

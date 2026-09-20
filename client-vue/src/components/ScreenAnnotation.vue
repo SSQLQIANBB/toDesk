@@ -538,7 +538,7 @@ watch(
 .toolbar-close { flex: none; }
 .toolbar-tools { display: flex; gap: 6px; overflow-x: auto; padding: 1px 0 8px; scrollbar-width: thin; }
 .toolbar-tool { flex: none; }
-.tool-glyph { display: inline-block; min-width: 16px; margin-right: 5px; font-size: 17px; line-height: 1; text-align: center; }
+.tool-glyph { margin-right: 6px; font-size: var(--icon-size-inline); }
 .toolbar-footer { flex-wrap: wrap; gap: 10px 16px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .toolbar-setting { gap: 8px; min-width: 0; }
 .toolbar-setting--color { flex: none; }
