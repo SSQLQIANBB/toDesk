@@ -1,3 +1,5 @@
+import { callTones, messageTones, readSoundPreferences, type SoundKind, type SoundPreferences } from './notificationSounds';
+
 /**
  * 通知服务 - 管理桌面通知、声音提醒等
  */
@@ -32,7 +34,8 @@ export interface NotificationOptions {
 class NotificationService {
   private permission: NotificationPermission = 'default';
   private enabled: boolean = true;
-  private soundEnabled: boolean = true;
+  private soundPreferences = readSoundPreferences();
+  private defaultSoundSources = { message: '', call: '' };
   private notificationSound: HTMLAudioElement | null = null;
   private callRingtone: HTMLAudioElement | null = null;
   private activeCallRingtones = new Set<string>();
@@ -51,15 +54,7 @@ class NotificationService {
 
     // 从 localStorage 读取用户设置
     const savedEnabled = localStorage.getItem('notification_enabled');
-    const savedSoundEnabled = localStorage.getItem('notification_sound_enabled');
-
-    if (savedEnabled !== null) {
-      this.enabled = savedEnabled === 'true';
-    }
-
-    if (savedSoundEnabled !== null) {
-      this.soundEnabled = savedSoundEnabled === 'true';
-    }
+    if (savedEnabled !== null) this.enabled = savedEnabled === 'true';
 
     try {
       const saved = JSON.parse(localStorage.getItem('notify_settings') || '{}');
@@ -73,6 +68,8 @@ class NotificationService {
     // 初始化音频
     this.initAudio();
     this.initCallRingtone();
+    this.defaultSoundSources = { message: this.notificationSound?.src || '', call: this.callRingtone?.src || '' };
+    this.applySoundSources();
   }
 
   /** 在浏览器内生成原创的短旋律，循环播放时无需额外下载音频文件。 */
@@ -231,7 +228,7 @@ class NotificationService {
   }
 
   startCallRingtone(key: string) {
-    if (!this.soundEnabled || !this.shouldNotify('call') || !this.callRingtone) return;
+    if (!this.soundPreferences.callEnabled || !this.shouldNotify('call') || !this.callRingtone) return;
     if (this.activeCallRingtones.has(key)) return;
     const alreadyPlaying = this.activeCallRingtones.size > 0;
     this.activeCallRingtones.add(key);
@@ -260,7 +257,7 @@ class NotificationService {
    * 播放提示音
    */
   private playSound(type?: NotificationType) {
-    if (!this.soundEnabled || !this.notificationSound) {
+    if (!this.soundPreferences.messageEnabled || !this.notificationSound) {
       return;
     }
 
@@ -378,22 +375,36 @@ class NotificationService {
     localStorage.setItem('notification_enabled', 'false');
   }
 
-  /**
-   * 启用声音
-   */
-  enableSound() {
-    this.soundEnabled = true;
-    localStorage.setItem('notification_sound_enabled', 'true');
-    this.playSound('system');
+  getSoundPreferences(): SoundPreferences { return { ...this.soundPreferences }; }
+
+  getSoundSource(kind: SoundKind): string {
+    return kind === 'message'
+      ? messageTones.find(tone => tone.value === this.soundPreferences.messageTone)!.src || this.defaultSoundSources.message
+      : callTones.find(tone => tone.value === this.soundPreferences.callTone)!.src || this.defaultSoundSources.call;
   }
 
-  /**
-   * 禁用声音
-   */
-  disableSound() {
-    this.soundEnabled = false;
-    localStorage.setItem('notification_sound_enabled', 'false');
-    this.stopAllCallRingtones();
+  private applySoundSources() {
+    if (this.notificationSound) this.notificationSound.src = this.getSoundSource('message');
+    if (this.callRingtone) this.callRingtone.src = this.getSoundSource('call');
+  }
+
+  updateSoundPreferences(value: Partial<SoundPreferences>) {
+    const previous = this.soundPreferences;
+    this.soundPreferences = { ...previous, ...value };
+    localStorage.setItem('notification_sounds', JSON.stringify(this.soundPreferences));
+    if (previous.messageTone !== this.soundPreferences.messageTone && this.notificationSound) {
+      this.notificationSound.pause();
+      this.notificationSound.src = this.getSoundSource('message');
+    }
+    if (!this.soundPreferences.messageEnabled) this.notificationSound?.pause();
+    if (!this.soundPreferences.callEnabled) this.stopAllCallRingtones();
+    if (previous.callTone !== this.soundPreferences.callTone && this.callRingtone) {
+      this.callRingtone.pause();
+      this.callRingtone.src = this.getSoundSource('call');
+      if (this.activeCallRingtones.size > 0) {
+        void this.callRingtone.play().catch(error => console.warn('播放来电音失败:', error));
+      }
+    }
   }
 
   /**
@@ -401,13 +412,6 @@ class NotificationService {
    */
   isEnabled(): boolean {
     return this.enabled && this.getPermission() === 'granted';
-  }
-
-  /**
-   * 获取声音是否启用
-   */
-  isSoundEnabled(): boolean {
-    return this.soundEnabled;
   }
 
   /**

@@ -1,6 +1,51 @@
 import { expect, test, type Page } from '@playwright/test';
 
 for (const width of [1440, 375]) {
+  test(`通知声音独立设置与试听 ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await prepare(page);
+    await page.addInitScript(() => {
+      const originalPlay = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        (window as unknown as { lastPlayed: HTMLMediaElement }).lastPlayed = this;
+        return originalPlay.call(this);
+      };
+    });
+    await page.goto('/profile');
+    await page.getByText('通知设置', { exact: true }).click();
+    await page.getByRole('switch', { name: '消息提示音', exact: true }).click();
+    await expect(page.getByRole('switch', { name: '来电铃声', exact: true })).toHaveAttribute('aria-checked', 'true');
+    const cards = page.locator('.sound-setting');
+    await cards.nth(0).locator('.n-select').click();
+    await page.getByText('清脆提示', { exact: true }).click();
+    await cards.nth(1).locator('.n-select').click();
+    await page.getByText('经典电话', { exact: true }).click();
+    await page.getByRole('button', { name: '试听来电铃声' }).click();
+    await expect.poll(() => page.evaluate(() => {
+      const audio = (window as unknown as { lastPlayed: HTMLMediaElement }).lastPlayed;
+      return audio && !audio.paused && audio.duration > 0 && audio.src.includes('classic-ring');
+    })).toBe(true);
+    await page.getByRole('button', { name: '试听来电铃声' }).click();
+    expect(await page.evaluate(() => (window as unknown as { lastPlayed: HTMLMediaElement }).lastPlayed.paused)).toBe(true);
+    await page.getByRole('button', { name: '试听消息提示音' }).click();
+    await expect.poll(() => page.evaluate(() => {
+      const audio = (window as unknown as { lastPlayed: HTMLMediaElement }).lastPlayed;
+      return audio.duration > 0 && audio.src.includes('happy-beep');
+    })).toBe(true);
+    await expect(cards.nth(0).getByRole('button')).toHaveText('试听');
+    await page.screenshot({ path: testInfo.outputPath('notification-sounds.png'), fullPage: true });
+    await page.reload();
+    await page.getByText('通知设置', { exact: true }).click();
+    await expect(page.getByRole('switch', { name: '消息提示音', exact: true })).toHaveAttribute('aria-checked', 'false');
+    await expect(cards.nth(0)).toContainText('清脆提示');
+    await expect(cards.nth(1)).toContainText('经典电话');
+    await page.getByRole('button', { name: '试听来电铃声' }).click();
+    await page.getByText('基本信息', { exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { lastPlayed: HTMLMediaElement }).lastPlayed.paused)).toBe(true);
+  });
+}
+
+for (const width of [1440, 375]) {
   test(`群聊发言人与共用消息样式 ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await prepare(page);

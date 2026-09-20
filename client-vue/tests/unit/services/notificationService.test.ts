@@ -29,6 +29,49 @@ beforeEach(() => {
 });
 
 describe('通知设置', () => {
+  it('消息静音不影响来电，来电静音不影响消息', async () => {
+    const { default: service } = await import('../../../src/services/notificationService');
+    service.updateSoundPreferences({ messageEnabled: false });
+    service.playAlert('private');
+    expect(play).not.toHaveBeenCalled();
+    service.startCallRingtone('private:one');
+    expect(play).toHaveBeenCalledOnce();
+    service.updateSoundPreferences({ messageEnabled: true, callEnabled: false });
+    service.startCallRingtone('private:two');
+    expect(play).toHaveBeenCalledOnce();
+    service.playAlert('group');
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it('迁移旧版静音并恢复独立开关与音效选择', async () => {
+    localStorage.setItem('notification_sound_enabled', 'false');
+    const { default: service } = await import('../../../src/services/notificationService');
+    expect(service.getSoundPreferences()).toMatchObject({ messageEnabled: false, callEnabled: false });
+    service.updateSoundPreferences({ messageEnabled: true, messageTone: 'happy', callTone: 'classic' });
+    expect(sounds[0]!.src).toContain('happy-beep.mp3');
+    expect(sounds[1]!.src).toContain('classic-ring.mp3');
+    vi.resetModules();
+    const { default: restored } = await import('../../../src/services/notificationService');
+    expect(restored.getSoundPreferences()).toEqual(service.getSoundPreferences());
+    expect(restored.getSoundSource('message')).toContain('happy-beep.mp3');
+    expect(restored.getSoundSource('call')).toContain('classic-ring.mp3');
+  });
+
+  it('无效存储中的铃声使用默认值，不破坏已保存的静音设置', async () => {
+    localStorage.setItem('notification_sounds', JSON.stringify({ messageEnabled: false, callTone: 'unknown', messageTone: null }));
+    const { default: service } = await import('../../../src/services/notificationService');
+    expect(service.getSoundPreferences()).toEqual({ messageEnabled: false, callEnabled: true, messageTone: 'default', callTone: 'default' });
+  });
+
+  it('响铃期间切换铃声保留邀请状态，结束邀请仍会停止', async () => {
+    const { default: service } = await import('../../../src/services/notificationService');
+    service.startCallRingtone('private:one');
+    service.updateSoundPreferences({ callTone: 'classic' });
+    expect(sounds[1]!.src).toContain('classic-ring.mp3');
+    expect(play).toHaveBeenCalledTimes(2);
+    service.stopCallRingtone('private:one');
+    expect(pause).toHaveBeenCalledTimes(2);
+  });
   it('来电旋律循环播放，同期邀请共用音频，全部结束或静音后停止', async () => {
     const { default: service } = await import('../../../src/services/notificationService');
     expect(atob(sounds[1]!.src.split(',')[1]!).slice(0, 4)).toBe('RIFF');
@@ -42,8 +85,8 @@ describe('通知设置', () => {
     expect(pause).toHaveBeenCalledOnce();
     service.startCallRingtone('private:bob');
     expect(play).toHaveBeenCalledTimes(2);
-    service.disableSound();
-    expect(pause).toHaveBeenCalledTimes(2);
+    service.updateSoundPreferences({ messageEnabled: false, callEnabled: false });
+    expect(pause).toHaveBeenCalledTimes(3);
     service.startCallRingtone('private:carol');
     expect(play).toHaveBeenCalledTimes(2);
   });
@@ -63,7 +106,7 @@ describe('通知设置', () => {
     expect(await service.showGroupMessage('测试群', '小红', '群内秘密')).toBe(false);
     expect(created).toHaveLength(1);
 
-    service.disableSound();
+    service.updateSoundPreferences({ messageEnabled: false, callEnabled: false });
     service.updatePreferences({ notifyGroupMessage: true });
     expect(await service.showGroupMessage('测试群', '小红', '群内秘密')).toBe(true);
     expect(created[1]?.options.body).toBe('收到一条群组消息');

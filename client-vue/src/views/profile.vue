@@ -203,19 +203,7 @@
                 </div>
               </div>
 
-              <!-- 声音提醒 -->
-              <div class="p-4 bg-gray-50 rounded-lg">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h3 class="font-semibold text-gray-800">声音提醒</h3>
-                    <p class="text-sm text-gray-500 mt-1">收到消息、来电或邀请时播放提示音</p>
-                  </div>
-                  <n-switch 
-                    v-model:value="soundEnabled" 
-                    @update:value="handleSoundToggle"
-                  />
-                </div>
-              </div>
+              <NotificationSoundSettings />
 
               <!-- 消息预览 -->
               <div class="p-4 bg-gray-50 rounded-lg">
@@ -326,6 +314,7 @@ import { bindEmail, changePassword, getCurrentUser, getVerifiedEmail, sendEmailC
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
+import NotificationSoundSettings from '@/components/NotificationSoundSettings.vue';
 import { uploadFile } from '@/api/common';
 import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '@/utils/passwordPolicy';
@@ -474,7 +463,7 @@ const lastLoginTime = computed(() => {
 // 通知设置
 const notificationPermission = ref<NotificationPermission>('default');
 const notificationEnabled = ref(false);
-const soundEnabled = ref(true);
+
 const messagePreview = ref(true);
 const notifyPrivateMessage = ref(true);
 const notifyGroupMessage = ref(true);
@@ -485,7 +474,7 @@ const notifyInvitation = ref(true);
 function initNotificationSettings() {
   notificationPermission.value = notificationService.getPermission();
   notificationEnabled.value = notificationService.isEnabled();
-  soundEnabled.value = notificationService.isSoundEnabled();
+
   const settings = notificationService.getPreferences();
   messagePreview.value = settings.messagePreview;
   notifyPrivateMessage.value = settings.notifyPrivateMessage;
@@ -528,17 +517,6 @@ function handleNotificationToggle(value: boolean) {
   } else {
     notificationService.disable();
     message.success('桌面通知已关闭');
-  }
-}
-
-// 切换声音开关
-function handleSoundToggle(value: boolean) {
-  if (value) {
-    notificationService.enableSound();
-    message.success('声音提醒已开启');
-  } else {
-    notificationService.disableSound();
-    message.success('声音提醒已关闭');
   }
 }
 
