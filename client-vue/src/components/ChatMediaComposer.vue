@@ -1,17 +1,22 @@
 <template>
   <div class="chat-media-composer" :class="{ compact }">
     <input ref="imageInput" class="sr-only" type="file" accept="image/*" @change="handleImageSelected" />
-    <n-button aria-label="发送图片" title="发送图片" size="small" secondary :disabled="disabled || uploading" @click="imageInput?.click()">
-      <i class="ui-icon ui-icon-image mr-1" aria-hidden="true"></i><span :class="{ 'sr-only': compact }">{{ uploading ? '上传中…' : '发送图片' }}</span>
+    <n-button aria-label="发送图片" title="发送图片" size="small" secondary :loading="uploadingType === 'image'" :disabled="disabled || uploading || recording" @click="imageInput?.click()">
+      <template #icon><i class="ui-icon ui-icon-image" aria-hidden="true"></i></template>
+      <span v-if="!compact">发送图片</span>
     </n-button>
     <button
       type="button"
       class="hold-to-talk"
       aria-label="按住说话，松开发送" title="按住说话，松开发送"
-      :class="{ 'hold-to-talk--active': recording }"
+      :class="{ 'hold-to-talk--active': recording, 'hold-to-talk--cancel': cancelIntent }"
       :disabled="disabled || uploading"
       @pointerdown.prevent="startRecording"
       @pointerup.prevent="finishRecording"
+      @pointermove="updateCancelIntent"
+      @lostpointercapture="isPressing && cancelRecording()"
+      @keydown.esc.prevent="cancelRecording"
+      @blur="isPressing && cancelRecording()"
       @pointercancel="cancelRecording"
       @keydown.space.prevent="startRecording"
       @keyup.space.prevent="finishRecording"
@@ -19,12 +24,19 @@
     >
       <i class="ui-icon ui-icon-microphone mr-1" aria-hidden="true"></i><span :class="{ 'sr-only': compact }">{{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}</span>
     </button>
-    <span v-if="compact && (recording || uploading)" class="recording-status" role="status">{{ uploading ? '发送中…' : `松开发送 ${elapsedSeconds || 1}s` }}</span>
+    <div v-if="recording || uploadingType === 'voice'" class="recording-status" :class="{ 'recording-status--cancel': cancelIntent, 'recording-status--uploading': uploading }" role="status">
+      <span class="recording-capsule">
+        <span class="recording-wave" aria-hidden="true"><i v-for="bar in 4" :key="bar"></i></span>
+        <span>{{ uploading ? '语音发送中…' : cancelIntent ? '松开取消' : '松开发送' }}</span>
+        <strong v-if="recording">{{ elapsedSeconds || 1 }}s</strong>
+      </span>
+      <span v-if="recording" class="recording-hint">{{ cancelIntent ? '移回继续录音' : elapsedSeconds >= 50 ? `还可录制 ${60 - elapsedSeconds}s · 上滑取消` : '上滑取消发送' }}</span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { NButton, useMessage } from 'naive-ui';
 import { uploadFile } from '@/api/common';
 import type { ChatMediaPayload } from '@/api/message';
@@ -37,8 +49,11 @@ const emit = defineEmits<{
 
 const message = useMessage();
 const imageInput = ref<HTMLInputElement | null>(null);
-const uploading = ref(false);
+const uploadingType = ref<'image' | 'voice' | null>(null);
+const uploading = computed(() => uploadingType.value !== null);
 const recording = ref(false);
+const cancelIntent = ref(false);
+let pressStartY = 0;
 const elapsedSeconds = ref(0);
 let recorder: MediaRecorder | null = null;
 let recordingStream: MediaStream | null = null;
@@ -49,7 +64,7 @@ let discardRecording = false;
 let isPressing = false;
 
 async function uploadMedia(file: File, type: 'image' | 'voice', durationSeconds?: number) {
-  uploading.value = true;
+  uploadingType.value = type;
   try {
     const form = new FormData();
     form.append('file', file);
@@ -70,7 +85,7 @@ async function uploadMedia(file: File, type: 'image' | 'voice', durationSeconds?
   } catch (error: any) {
     message.error(`上传失败: ${error.message}`);
   } finally {
-    uploading.value = false;
+    uploadingType.value = null;
   }
 }
 
@@ -93,6 +108,7 @@ async function startRecording(event?: PointerEvent | KeyboardEvent) {
 
   isPressing = true;
   if (event && 'pointerId' in event) {
+    pressStartY = event.clientY;
     (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
   }
   try {
@@ -124,16 +140,25 @@ async function startRecording(event?: PointerEvent | KeyboardEvent) {
   }
 }
 
+function updateCancelIntent(event: PointerEvent) {
+  if (isPressing) cancelIntent.value = pressStartY - event.clientY >= 48;
+}
+
 function finishRecording() {
+  if (cancelIntent.value) {
+    cancelRecording();
+    return;
+  }
   isPressing = false;
   if (recorder?.state === 'recording') recorder.stop();
 }
 
 function cancelRecording() {
+  if (!isPressing && !recording.value) return;
   isPressing = false;
   discardRecording = true;
   if (recorder?.state === 'recording') recorder.stop();
-  else releaseRecordingResources();
+  else if (!recorder) releaseRecordingResources();
 }
 
 function handleRecordingStopped() {
@@ -156,6 +181,7 @@ function releaseRecordingResources() {
   recorder = null;
   chunks = [];
   recording.value = false;
+  cancelIntent.value = false;
   elapsedSeconds.value = 0;
 }
 
@@ -163,7 +189,7 @@ onBeforeUnmount(cancelRecording);
 </script>
 
 <style scoped>
-.chat-media-composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+.chat-media-composer { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
 .hold-to-talk { flex: 1; min-width: 150px; min-height: 34px; padding: 5px 18px; border: 1px solid #d9d9d9; border-radius: 6px; color: #333; background: #f7f7f7; font-size: 14px; font-weight: 500; user-select: none; touch-action: none; cursor: pointer; }
 .hold-to-talk:hover { background: #eee; }
 .hold-to-talk--active { background: #d9d9d9; transform: scale(.99); }
@@ -172,9 +198,26 @@ onBeforeUnmount(cancelRecording);
 
 .compact { position: relative; display: flex; flex: none; flex-wrap: nowrap; gap: 8px; padding: 0; }
 .compact :deep(.n-button), .compact .hold-to-talk { flex: none; width: 36px; min-width: 0; height: 40px; min-height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #94a3b8; font-size: 20px; }
+.compact :deep(.n-button__icon) { margin: 0; }
 .compact :deep(.n-button__border), .compact :deep(.n-button__state-border) { display: none; }
 .compact .ui-icon { margin: 0; }
 .compact .hold-to-talk--active { color: #2563eb; background: #eff6ff; }
-.recording-status { position: absolute; bottom: 48px; left: 0; z-index: 1; padding: 6px 12px; white-space: nowrap; border-radius: 8px; background: #eff6ff; color: #2563eb; }
+.compact .hold-to-talk { background: #eff6ff; color: #2563eb; transition: background .2s, color .2s, transform .2s; }
+.compact .hold-to-talk:hover { background: #dbeafe; }
+.compact .hold-to-talk--active { background: #fef2f2; color: #dc2626; }
+.compact .hold-to-talk--cancel { background: #fee2e2; color: #b91c1c; }
+.recording-status { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 1; display: flex; align-items: center; gap: 8px; width: max-content; max-width: calc(100vw - 40px); padding: 4px; border-radius: 20px; background: #fff; }
+.recording-capsule { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border: 1px solid #fecaca; border-radius: 999px; background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 3px #dc26260d; }
+.recording-capsule strong { font-family: monospace; font-variant-numeric: tabular-nums; }
+.recording-status--cancel .recording-capsule { color: #fff; background: #dc2626; border-color: #dc2626; }
+.recording-status--uploading .recording-capsule { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+.recording-hint { color: #94a3b8; font-size: 11px; }
+.recording-wave { display: flex; align-items: center; gap: 2px; height: 16px; }
+.recording-wave i { width: 2px; height: 12px; border-radius: 2px; background: currentColor; animation: recording-wave 1.2s infinite ease-in-out; }
+.recording-wave i:nth-child(2) { animation-delay: .2s; }
+.recording-wave i:nth-child(3) { animation-delay: .4s; }
+.recording-wave i:nth-child(4) { animation-delay: .1s; }
+@keyframes recording-wave { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .recording-wave i { animation: none; } }
 @media (max-width: 767px) { .compact { gap: 0; } .compact :deep(.n-button), .compact .hold-to-talk { width: 30px; } }
 </style>

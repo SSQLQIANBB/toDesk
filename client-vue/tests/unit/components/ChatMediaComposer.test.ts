@@ -89,3 +89,36 @@ describe('聊天语音录制', () => {
     expect(mocks.uploadFile).not.toHaveBeenCalled();
   });
 });
+
+
+for (const moveBack of [false, true]) {
+  it(moveBack ? '移回后恢复发送提示，卸载取消录音' : '上滑后松手取消发送', async () => {
+    const wrapper = mount(ChatMediaComposer, {
+      props: { compact: true },
+      global: { stubs: { NButton: { template: '<button><slot /></button>' } } },
+    });
+    const button = wrapper.get('.hold-to-talk');
+    const pointer = async (type: string, clientY: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperties(event, { clientY: { value: clientY }, pointerId: { value: 1 } });
+      button.element.dispatchEvent(event);
+      await wrapper.vm.$nextTick();
+    };
+    await pointer('pointerdown', 200);
+    await flushPromises();
+    await pointer('pointermove', 140);
+    expect(wrapper.get('.recording-status').text()).toContain('松开取消');
+    if (moveBack) {
+      await pointer('pointermove', 190);
+      expect(wrapper.get('.recording-status').text()).toContain('松开发送');
+      wrapper.unmount();
+    } else {
+      await pointer('pointerup', 140);
+      expect(wrapper.find('.recording-status').exists()).toBe(false);
+      wrapper.unmount();
+    }
+    await flushPromises();
+    expect(mocks.uploadFile).not.toHaveBeenCalled();
+    expect(mocks.stopTrack).toHaveBeenCalledOnce();
+  });
+}
