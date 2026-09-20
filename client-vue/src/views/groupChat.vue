@@ -44,7 +44,7 @@
             <div class="flex items-center gap-2 text-xs text-gray-500 mt-1">
               <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
               <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
-              <span v-if="member.canSpeak === false" class="text-red-500"><i class="ui-icon ui-icon-microphone" aria-hidden="true"></i> 禁言</span>
+              <span v-if="member.canSpeak === false" class="text-red-500"><i class="iconfont icon-microphone" aria-hidden="true"></i> 禁言</span>
             </div>
           </div>
           <div class="w-2 h-2 rounded-full" :class="member.online ? 'bg-green-400' : 'bg-gray-300'"></div>
@@ -62,7 +62,7 @@
       <div class="p-3 border-t bg-gray-50 space-y-2">
         <n-button block secondary @click="handleVideoCall">
           <template #icon>
-            <i class="ui-icon ui-icon-video" aria-hidden="true"></i>
+            <i class="iconfont icon-video" aria-hidden="true"></i>
           </template>
           {{ groupSessionState.getButtonLabel(groupId, 'video') }}
         </n-button>
@@ -71,13 +71,13 @@
         </n-button>
         <n-button block secondary @click="handleScreenShare">
           <template #icon>
-            <i class="ui-icon ui-icon-desktop" aria-hidden="true"></i>
+            <i class="iconfont icon-desktop" aria-hidden="true"></i>
           </template>
           {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
         </n-button>
         <n-button block secondary @click="goBack">
           <template #icon>
-            <n-icon :component="ArrowBackFilled" />
+            <n-icon><i class="iconfont icon-arrow-left" aria-hidden="true"></i></n-icon>
           </template>
           返回
         </n-button>
@@ -89,7 +89,7 @@
       <div class="h-full w-full flex flex-col bg-white">
         <!-- 聊天头部 -->
         <header class="min-h-16 shadow-sm flex items-center gap-2 px-3 sm:px-6 py-2 bg-gradient-to-r from-white to-gray-50 border-b">
-          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开群成员列表" @click="mobileSidebarOpen = true"><i class="ui-icon ui-icon-bars" aria-hidden="true"></i></n-button>
+          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开群成员列表" @click="mobileSidebarOpen = true"><i class="iconfont icon-bars" aria-hidden="true"></i></n-button>
           <div class="flex items-center gap-3 flex-1 min-w-0">
             <n-avatar :size="40" :src="groupInfo?.avatar || undefined">
               <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
@@ -101,7 +101,7 @@
           </div>
           <n-button secondary @click="showGroupDetail = true">
             <template #icon>
-              <n-icon :component="InfoFilled" />
+              <n-icon><i class="iconfont icon-info" aria-hidden="true"></i></n-icon>
             </template>
             群组详情
           </n-button>
@@ -225,7 +225,7 @@
             <div class="space-y-2">
               <n-button block secondary @click="handleVideoCall">
                 <template #icon>
-                  <i class="ui-icon ui-icon-video" aria-hidden="true"></i>
+                  <i class="iconfont icon-video" aria-hidden="true"></i>
                 </template>
                 {{ groupSessionState.getButtonLabel(groupId, 'video') }}
               </n-button>
@@ -234,7 +234,7 @@
               </n-button>
               <n-button block secondary @click="handleScreenShare">
                 <template #icon>
-                  <i class="ui-icon ui-icon-desktop" aria-hidden="true"></i>
+                  <i class="iconfont icon-desktop" aria-hidden="true"></i>
                 </template>
                 {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
               </n-button>
@@ -250,7 +250,6 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type ScrollbarInst } from 'naive-ui';
-import { ArrowBackFilled, InfoFilled } from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { useAuthStore } from '@/stores/auth';
 import { storeToRefs } from 'pinia';

@@ -8,7 +8,7 @@
     </div>
     <button class="send-button" type="button" aria-label="发送" title="发送"
       :disabled="!inputValue.trim()" @click="handleSend">
-      <i class="ui-icon ui-icon-paper-plane" aria-hidden="true"></i>
+      <i class="iconfont icon-paper-plane" aria-hidden="true"></i>
     </button>
   </div>
 </template>

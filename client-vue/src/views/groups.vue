@@ -10,13 +10,13 @@
         <div class="groups-page-actions flex flex-wrap gap-2 sm:gap-3">
         <n-button class="back-button" @click="goBack" secondary>
           <template #icon>
-            <i class="ui-icon ui-icon-arrow-left" aria-hidden="true"></i>
+            <i class="iconfont icon-arrow-left" aria-hidden="true"></i>
           </template>
           返回
         </n-button>
         <n-button class="create-group-button" type="primary" @click="showCreateModal = true">
           <template #icon>
-            <i class="ui-icon ui-icon-plus" aria-hidden="true"></i>
+            <i class="iconfont icon-plus" aria-hidden="true"></i>
           </template>
           创建群组
         </n-button>
@@ -47,10 +47,10 @@
                   <n-tag v-else-if="group.role === 'admin'" type="info" size="small">管理员</n-tag>
                   <n-tag v-else size="small">成员</n-tag>
                 </div>
-                <div class="group-card-meta text-xs mt-1"><i class="ui-icon regular ui-icon-user mr-1" aria-hidden="true"></i>{{ group.memberCount }} 位成员</div>
+                <div class="group-card-meta text-xs mt-1"><i class="iconfont regular icon-user mr-1" aria-hidden="true"></i>{{ group.memberCount }} 位成员</div>
               </div>
               <n-dropdown v-if="group.role === 'owner' || group.role === 'admin'" trigger="click" :options="getGroupOptions(group)" @select="(key: string | number) => handleGroupAction(String(key), group)">
-                <button aria-label="更多群组操作" class="p-1.5 text-slate-400" @click.stop><i class="ui-icon ui-icon-more" aria-hidden="true"></i></button>
+                <button aria-label="更多群组操作" class="p-1.5 text-slate-400" @click.stop><i class="iconfont icon-more" aria-hidden="true"></i></button>
               </n-dropdown>
             </div>
             <p class="group-card-description">{{ group.description || '暂无简介，点击可编辑添加团队协作与讨论说明...' }}</p>
@@ -60,13 +60,13 @@
                 :class="group.role === 'owner' || group.role === 'admin' ? 'group-card-actions--four' : 'group-card-actions--three'"
               >
                 <n-button size="small" secondary aria-label="聊天" @click.stop="handleChatClick(group)">
-                  <i class="ui-icon ui-icon-message sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">聊天</span>
+                  <i class="iconfont icon-message sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">聊天</span>
                 </n-button>
                 <n-button size="small" secondary aria-label="视频" @click.stop="handleVideoCall(group)">
-                  <i class="ui-icon ui-icon-video sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">{{ groupSessionState.getSession(group.id, 'video') ? '加入视频' : '视频' }}</span>
+                  <i class="iconfont icon-video sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">{{ groupSessionState.getSession(group.id, 'video') ? '加入视频' : '视频' }}</span>
                 </n-button>
                 <n-button size="small" secondary aria-label="共享" @click.stop="handleScreenShare(group)">
-                  <i class="ui-icon ui-icon-desktop sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">{{ groupSessionState.getSession(group.id, 'screen') ? '加入共享' : '共享' }}</span>
+                  <i class="iconfont icon-desktop sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">{{ groupSessionState.getSession(group.id, 'screen') ? '加入共享' : '共享' }}</span>
                 </n-button>
                 <n-dropdown
                   v-if="group.role === 'owner' || group.role === 'admin'"
@@ -75,7 +75,7 @@
                   @select="(key: string | number) => handleGroupAction(String(key), group)"
                 >
                   <n-button size="small" secondary aria-label="管理" @click.stop>
-                    <i class="ui-icon ui-icon-gear sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">管理</span>
+                    <i class="iconfont icon-gear sm:mr-1" aria-hidden="true"></i><span class="hidden sm:inline">管理</span>
                   </n-button>
                 </n-dropdown>
               </div>
@@ -171,7 +171,7 @@
                 <span class="text-xs font-semibold text-slate-500">小组成员列表</span>
                 <n-button type="primary" size="small" @click="showInviteModal = true">
                   <template #icon>
-                    <i class="ui-icon ui-icon-user-plus" aria-hidden="true"></i>
+                    <i class="iconfont icon-user-plus" aria-hidden="true"></i>
                   </template>
                   邀请成员
                 </n-button>
@@ -261,7 +261,7 @@
       >
         <n-spin :show="usersLoading">
           <div class="invite-search">
-            <n-input v-model:value="inviteSearch" placeholder="搜索联系人姓名..." clearable><template #prefix><i class="ui-icon ui-icon-search" aria-hidden="true"></i></template></n-input>
+            <n-input v-model:value="inviteSearch" placeholder="搜索联系人姓名..." clearable><template #prefix><i class="iconfont icon-search" aria-hidden="true"></i></template></n-input>
             <div class="selected-members"><span>已选:</span><n-tag v-for="user in selectedInviteUsers" :key="user.value" closable size="small" type="info" @close="inviteUserIds = inviteUserIds.filter(id => id !== user.value)">{{ user.label }}</n-tag></div>
           </div>
           <div class="invite-list">

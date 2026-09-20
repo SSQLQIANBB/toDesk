@@ -28,7 +28,7 @@
                   @keyup.enter="handleLogin"
                 >
                   <template #prefix>
-                    <n-icon :component="PersonOutline" />
+                    <n-icon><i class="iconfont icon-user" aria-hidden="true"></i></n-icon>
                   </template>
                 </n-input>
               </n-form-item>
@@ -42,7 +42,7 @@
                   @keyup.enter="handleLogin"
                 >
                   <template #prefix>
-                    <n-icon :component="LockClosedOutline" />
+                    <n-icon><i class="iconfont icon-lock" aria-hidden="true"></i></n-icon>
                   </template>
                 </n-input>
               </n-form-item>
@@ -89,7 +89,7 @@
                   placeholder="设置登录账号"
                 >
                   <template #prefix>
-                    <n-icon :component="PersonOutline" />
+                    <n-icon><i class="iconfont icon-user" aria-hidden="true"></i></n-icon>
                   </template>
                 </n-input>
               </n-form-item>
@@ -102,7 +102,7 @@
                   placeholder="至少 6 位，包含大小写字母和数字"
                 >
                   <template #prefix>
-                    <n-icon :component="LockClosedOutline" />
+                    <n-icon><i class="iconfont icon-lock" aria-hidden="true"></i></n-icon>
                   </template>
                 </n-input>
               </n-form-item>
@@ -115,7 +115,7 @@
                   placeholder="请再次输入密码"
                 >
                   <template #prefix>
-                    <n-icon :component="LockClosedOutline" />
+                    <n-icon><i class="iconfont icon-lock" aria-hidden="true"></i></n-icon>
                   </template>
                 </n-input>
               </n-form-item>
@@ -182,7 +182,6 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
-import { PersonOutline, LockClosedOutline } from '@vicons/ionicons5';
 import { register, resetPassword, sendEmailCode, type LoginCredentials, type User } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { createLoginController } from '@/services/loginController';

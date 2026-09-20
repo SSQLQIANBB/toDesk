@@ -73,7 +73,7 @@
   >
     <div class="text-center py-4">
       <n-icon size="60" color="#18a058" class="mb-4">
-        <Video16Filled />
+        <i class="iconfont icon-video" aria-hidden="true"></i>
       </n-icon>
       <p class="text-lg">
         <span class="font-bold">{{ incomingCallFrom }}</span>
@@ -84,7 +84,6 @@
 </template>
 
 <script lang="ts" setup>
-import { Video16Filled } from '@vicons/fluent'
 import { nextTick, ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useSocketStore } from '@/stores/socket';
 import { usePrivateCallStore } from '@/stores/privateCall';

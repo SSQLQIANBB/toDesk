@@ -25,7 +25,7 @@
               :disabled="!canSpeak"
             >
               <template #icon>
-                <n-icon :component="isMicMuted ? MicOffFilled : MicFilled" />
+                <n-icon><i class="iconfont" :class="isMicMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i></n-icon>
               </template>
             </n-button>
           </template>
@@ -43,9 +43,7 @@
             >
               <template #icon>
                 <n-icon>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                  </svg>
+                  <i class="iconfont icon-pen" aria-hidden="true"></i>
                 </n-icon>
               </template>
             </n-button>
@@ -65,7 +63,7 @@
         <n-dropdown :options="qualityOptions" @select="handleQualityChange">
           <n-button circle>
             <template #icon>
-              <n-icon :component="TuneFilled" />
+              <n-icon><i class="iconfont icon-tune" aria-hidden="true"></i></n-icon>
             </template>
           </n-button>
         </n-dropdown>
@@ -73,20 +71,20 @@
         <!-- 群成员列表；麦克风控制仍仅群主可用 -->
         <n-button circle aria-label="群成员" @click="showMemberControl = true">
           <template #icon>
-            <n-icon :component="PeopleFilled" />
+            <n-icon><i class="iconfont icon-users" aria-hidden="true"></i></n-icon>
           </template>
         </n-button>
 
         <!-- 开始/停止共享 -->
         <n-button v-if="!isSharing && !sharer" type="primary" @click="startScreenShare">
           <template #icon>
-            <n-icon :component="ScreenShareFilled" />
+            <n-icon><i class="iconfont icon-screen-share" aria-hidden="true"></i></n-icon>
           </template>
           开始共享
         </n-button>
         <n-button v-if="isSharing" type="warning" @click="stopScreenShare">
           <template #icon>
-            <n-icon :component="CancelPresentationFilled" />
+            <n-icon><i class="iconfont icon-screen-stop" aria-hidden="true"></i></n-icon>
           </template>
           停止共享
         </n-button>
@@ -94,7 +92,7 @@
         <!-- 退出 -->
         <n-button type="error" @click="handleExit">
           <template #icon>
-            <n-icon :component="CallEndFilled" />
+            <n-icon><i class="iconfont icon-hangup" aria-hidden="true"></i></n-icon>
           </template>
           <span class="hidden sm:inline">退出</span>
         </n-button>
@@ -135,7 +133,7 @@
 
           <!-- 无共享提示 -->
           <div v-if="!isSharing && !sharer" class="absolute inset-0 flex flex-col items-center justify-center text-white">
-            <n-icon :component="ScreenShareFilled" :size="80" class="text-gray-600 mb-4" />
+            <n-icon :size="80" class="text-gray-600 mb-4"><i class="iconfont icon-screen-share" aria-hidden="true"></i></n-icon>
             <h3 class="text-xl font-bold mb-2">等待屏幕共享</h3>
             <p class="text-gray-400">暂无成员共享屏幕</p>
           </div>
@@ -190,7 +188,7 @@
                 >
                   {{ isMemberParticipating(member.id) ? '参与中' : '未参与' }}
                 </n-tag>
-                <n-icon v-if="member.isMicMuted" :component="MicOffFilled" :size="14" color="#ef4444" />
+                <n-icon v-if="member.isMicMuted"  :size="14" color="#ef4444"><i class="iconfont icon-microphone-off" aria-hidden="true"></i></n-icon>
               </div>
             </div>
           </div>
@@ -248,15 +246,6 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
-import {
-  MicFilled,
-  MicOffFilled,
-  CallEndFilled,
-  ScreenShareFilled,
-  CancelPresentationFilled,
-  TuneFilled,
-  PeopleFilled
-} from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useAuthStore } from '@/stores/auth';

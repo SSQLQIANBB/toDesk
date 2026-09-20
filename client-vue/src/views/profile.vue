@@ -9,7 +9,7 @@
         </div>
         <n-button @click="goBack" secondary>
           <template #icon>
-            <n-icon :component="ArrowBackFilled" />
+            <n-icon><i class="iconfont icon-arrow-left" aria-hidden="true"></i></n-icon>
           </template>
           返回
         </n-button>
@@ -322,7 +322,6 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules, type UploadCustomRequestOptions } from 'naive-ui';
-import { ArrowBackFilled } from '@vicons/material';
 import { bindEmail, changePassword, getCurrentUser, getVerifiedEmail, sendEmailCode, updateUser } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';

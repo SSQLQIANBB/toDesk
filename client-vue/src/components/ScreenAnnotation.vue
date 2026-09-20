@@ -34,7 +34,7 @@
           size="small"
           @click="currentTool = tool.value"
         >
-          <span class="tool-glyph" aria-hidden="true">{{ tool.icon }}</span>{{ tool.label }}
+          <i class="tool-glyph iconfont" :class="`icon-${tool.icon}`" aria-hidden="true"></i>{{ tool.label }}
         </n-button>
       </div>
 
@@ -189,13 +189,13 @@ const textPosition = ref<AnnotationPoint>({ x: 0, y: 0 });
 
 // 颜色预设
 const toolOptions: { value: AnnotationTool; label: string; icon: string }[] = [
-  { value: 'pen', label: '画笔', icon: '✎' },
-  { value: 'line', label: '直线', icon: '╱' },
-  { value: 'arrow', label: '箭头', icon: '↗' },
-  { value: 'rect', label: '矩形', icon: '□' },
-  { value: 'circle', label: '圆形', icon: '○' },
-  { value: 'text', label: '文字', icon: 'T' },
-  { value: 'eraser', label: '橡皮', icon: '⌫' },
+  { value: 'pen', label: '画笔', icon: 'pen' },
+  { value: 'line', label: '直线', icon: 'line' },
+  { value: 'arrow', label: '箭头', icon: 'arrow' },
+  { value: 'rect', label: '矩形', icon: 'rectangle' },
+  { value: 'circle', label: '圆形', icon: 'circle' },
+  { value: 'text', label: '文字', icon: 'text' },
+  { value: 'eraser', label: '橡皮', icon: 'eraser' },
 ];
 
 const colorSwatches = [

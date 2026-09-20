@@ -1,6 +1,6 @@
 <template>
   <div class="call-history-message" :class="{ 'call-history-message--mine': isMine }">
-    <i class="ui-icon text-blue-600" :class="record.type === 'screen' ? 'ui-icon-desktop' : record.type === 'audio' ? 'ui-icon-phone' : 'ui-icon-video'" aria-hidden="true"></i>
+    <i class="iconfont text-blue-600" :class="record.type === 'screen' ? 'icon-desktop' : record.type === 'audio' ? 'icon-phone' : 'icon-video'" aria-hidden="true"></i>
     <div class="call-history-message__content">
       <strong>{{ presentation.title }}</strong>
       <span>{{ presentation.detail }}</span>

@@ -23,7 +23,7 @@
               :disabled="!canSpeak"
             >
               <template #icon>
-                <n-icon :component="isMicMuted ? MicOffFilled : MicFilled" />
+                <n-icon><i class="iconfont" :class="isMicMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i></n-icon>
               </template>
             </n-button>
           </template>
@@ -39,7 +39,7 @@
               @click="toggleCamera"
             >
               <template #icon>
-                <n-icon :component="isCameraOff ? VideocamOffFilled : VideocamFilled" />
+                <n-icon><i class="iconfont" :class="isCameraOff ? 'icon-video-off' : 'icon-video'" aria-hidden="true"></i></n-icon>
               </template>
             </n-button>
           </template>
@@ -64,14 +64,14 @@
         <!-- 群成员列表；成员控制操作仍仅群主可用 -->
         <n-button circle aria-label="群成员" @click="showMemberControl = true">
           <template #icon>
-            <n-icon :component="PeopleFilled" />
+            <n-icon><i class="iconfont icon-users" aria-hidden="true"></i></n-icon>
           </template>
         </n-button>
 
         <!-- 退出通话 -->
         <n-button type="error" @click="handleHangup">
           <template #icon>
-            <n-icon :component="CallEndFilled" />
+            <n-icon><i class="iconfont icon-hangup" aria-hidden="true"></i></n-icon>
           </template>
           <span class="hidden sm:inline">退出通话</span>
         </n-button>
@@ -100,7 +100,7 @@
             </n-avatar>
           </div>
           <div v-if="isMicMuted" class="absolute top-3 right-3 bg-red-500 p-2 rounded-full">
-            <n-icon :component="MicOffFilled" :size="16" color="white" />
+            <n-icon :size="16" color="white"><i class="iconfont icon-microphone-off" aria-hidden="true"></i></n-icon>
           </div>
         </div>
 
@@ -123,7 +123,7 @@
             </n-avatar>
           </div>
           <div v-if="peer.isMicMuted" class="absolute top-3 right-3 bg-red-500 p-2 rounded-full">
-            <n-icon :component="MicOffFilled" :size="16" color="white" />
+            <n-icon :size="16" color="white"><i class="iconfont icon-microphone-off" aria-hidden="true"></i></n-icon>
           </div>
         </div>
       </div>
@@ -179,14 +179,6 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
-import {
-  MicFilled,
-  MicOffFilled,
-  VideocamFilled,
-  VideocamOffFilled,
-  CallEndFilled,
-  PeopleFilled,
-} from '@vicons/material';
 import { getGroupDetail, type GroupMember } from '@/api/group';
 import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useAuthStore } from '@/stores/auth';

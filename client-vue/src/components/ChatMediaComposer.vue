@@ -2,7 +2,7 @@
   <div class="chat-media-composer" :class="{ compact }">
     <input ref="imageInput" class="sr-only" type="file" accept="image/*" @change="handleImageSelected" />
     <n-button aria-label="发送图片" title="发送图片" size="small" secondary :loading="uploadingType === 'image'" :disabled="disabled || uploading || recording" @click="imageInput?.click()">
-      <template #icon><i class="ui-icon ui-icon-image" aria-hidden="true"></i></template>
+      <template #icon><i class="iconfont icon-image" aria-hidden="true"></i></template>
       <span v-if="!compact">发送图片</span>
     </n-button>
     <button
@@ -22,7 +22,7 @@
       @keyup.space.prevent="finishRecording"
       @contextmenu.prevent
     >
-      <i class="ui-icon ui-icon-microphone mr-1" aria-hidden="true"></i><span :class="{ 'sr-only': compact }">{{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}</span>
+      <i class="iconfont icon-microphone mr-1" aria-hidden="true"></i><span :class="{ 'sr-only': compact }">{{ uploading ? '发送中…' : recording ? `松开发送 ${elapsedSeconds || 1}s` : '按住 说话' }}</span>
     </button>
     <div v-if="recording || uploadingType === 'voice'" class="recording-status" :class="{ 'recording-status--cancel': cancelIntent, 'recording-status--uploading': uploading }" role="status">
       <span class="recording-capsule">
@@ -200,7 +200,7 @@ onBeforeUnmount(cancelRecording);
 .compact :deep(.n-button), .compact .hold-to-talk { flex: none; width: 36px; min-width: 0; height: 40px; min-height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #94a3b8; font-size: 20px; }
 .compact :deep(.n-button__icon) { margin: 0; }
 .compact :deep(.n-button__border), .compact :deep(.n-button__state-border) { display: none; }
-.compact .ui-icon { margin: 0; }
+.compact .iconfont { margin: 0; }
 .compact .hold-to-talk--active { color: #2563eb; background: #eff6ff; }
 .compact .hold-to-talk { background: #eff6ff; color: #2563eb; transition: background .2s, color .2s, transform .2s; }
 .compact .hold-to-talk:hover { background: #dbeafe; }

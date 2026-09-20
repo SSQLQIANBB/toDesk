@@ -11,9 +11,7 @@
     >
       <template #icon>
         <n-icon size="24">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="12" r="8"/>
-          </svg>
+          <i class="iconfont icon-record" aria-hidden="true"></i>
         </n-icon>
       </template>
     </n-button>
@@ -23,9 +21,7 @@
       <n-tag type="error" size="large">
         <template #icon>
           <n-icon>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="12" r="8"/>
-            </svg>
+            <i class="iconfont icon-record" aria-hidden="true"></i>
           </n-icon>
         </template>
         {{ formatTime(recordingTime) }}
@@ -39,14 +35,10 @@
       >
         <template #icon>
           <n-icon v-if="isPaused" size="20">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
+            <i class="iconfont icon-play" aria-hidden="true"></i>
           </n-icon>
           <n-icon v-else size="20">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-            </svg>
+            <i class="iconfont icon-pause" aria-hidden="true"></i>
           </n-icon>
         </template>
       </n-button>
@@ -59,9 +51,7 @@
       >
         <template #icon>
           <n-icon size="20">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 6h12v12H6z"/>
-            </svg>
+            <i class="iconfont icon-stop" aria-hidden="true"></i>
           </n-icon>
         </template>
       </n-button>
@@ -105,9 +95,7 @@
           <n-button type="primary" @click="downloadRecording">
             <template #icon>
               <n-icon>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-                </svg>
+                <i class="iconfont icon-download" aria-hidden="true"></i>
               </n-icon>
             </template>
             下载

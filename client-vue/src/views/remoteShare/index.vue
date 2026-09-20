@@ -42,7 +42,7 @@
             secondary
             @click="handleLogout"
           >
-            <i class="ui-icon ui-icon-logout" aria-hidden="true"></i>
+            <i class="iconfont icon-logout" aria-hidden="true"></i>
           </n-button>
         </div>
         <!-- 快捷操作 -->
@@ -95,7 +95,7 @@
                 size="small"
               >
                 <template #icon>
-                  <n-icon size="32" color="#d0d0d0" :component="PersonOutline" />
+                  <n-icon size="32" color="#d0d0d0"><i class="iconfont icon-user" aria-hidden="true"></i></n-icon>
                 </template>
               </n-empty>
             </ul>
@@ -154,7 +154,7 @@
       <div v-if="contactUser" class="chat-panel h-full w-full flex flex-col">
         <!-- 聊天头部 -->
         <header class="chat-header min-h-16 flex items-center px-3 sm:px-6 py-2">
-          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开联系人列表" @click="mobileSidebarOpen = true"><i class="ui-icon ui-icon-bars" aria-hidden="true"></i></n-button>
+          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开联系人列表" @click="mobileSidebarOpen = true"><i class="iconfont icon-bars" aria-hidden="true"></i></n-button>
           <div class="flex items-center gap-3 w-0 flex-grow overflow-hidden">
             <n-avatar :size="36" :src="contactUser.avatar || undefined" class="flex-shrink-0">
               <span v-if="!contactUser.avatar">{{ contactUser.nickname?.charAt(0) || contactUser.username?.charAt(0) || '?' }}</span>
@@ -215,10 +215,10 @@
         </div>
       </div>
       <div class="chat-empty-state h-full w-full flex flex-col items-center justify-center" v-else>
-        <div class="empty-icon"><i class="ui-icon regular ui-icon-comments" aria-hidden="true"></i></div>
+        <div class="empty-icon"><i class="iconfont regular icon-comments" aria-hidden="true"></i></div>
         <h3>开启高效远程协作</h3>
         <p>请从左侧列表选择一个联系人开始聊天。您可以发送文字、语音片段、图片，或者发起高清音视频通话与屏幕共享。</p>
-        <n-button type="primary" @click="activeTab = 'users'; mobileSidebarOpen = true"><template #icon><i class="ui-icon ui-icon-address-book" aria-hidden="true"></i></template>打开联系人列表</n-button>
+        <n-button type="primary" @click="activeTab = 'users'; mobileSidebarOpen = true"><template #icon><i class="iconfont icon-address-book" aria-hidden="true"></i></template>打开联系人列表</n-button>
       </div>
     </n-layout-content>
     </n-layout></div>
@@ -251,7 +251,6 @@ import {
   parseRemoteTab,
   type RemoteTab,
 } from '@/services/remoteTabState';
-import { PersonOutline } from '@vicons/ionicons5';
 
 const router = useRouter();
 const route = useRoute();

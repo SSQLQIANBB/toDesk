@@ -6,9 +6,7 @@
         <n-button circle>
           <template #icon>
             <n-icon size="20">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM5 17l3.5-4.5 2.5 3.01L14.5 11l4.5 6H5z"/>
-              </svg>
+              <i class="iconfont icon-image" aria-hidden="true"></i>
             </n-icon>
           </template>
         </n-button>
@@ -26,10 +24,7 @@
         >
           <div class="option-content">
             <n-icon size="32">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                <path d="M3.5 3.5l17 17"/>
-              </svg>
+              <i class="iconfont icon-none" aria-hidden="true"></i>
             </n-icon>
             <n-text>无效果</n-text>
           </div>
@@ -64,9 +59,7 @@
         >
           <div class="option-content">
             <n-icon size="32">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-              </svg>
+              <i class="iconfont icon-image" aria-hidden="true"></i>
             </n-icon>
             <n-text>图片背景</n-text>
           </div>
