@@ -62,22 +62,23 @@
       <div class="p-3 border-t bg-gray-50 space-y-2">
         <n-button block secondary @click="handleVideoCall">
           <template #icon>
-            <i class="iconfont icon-video" aria-hidden="true"></i>
+            <i class="iconfont group-action-icon icon-video" aria-hidden="true"></i>
           </template>
           {{ groupSessionState.getButtonLabel(groupId, 'video') }}
         </n-button>
         <n-button block secondary @click="handleAudioCall">
+          <template #icon><i class="iconfont group-action-icon icon-microphone" aria-hidden="true"></i></template>
           {{ groupSessionState.getButtonLabel(groupId, 'audio') }}
         </n-button>
         <n-button block secondary @click="handleScreenShare">
           <template #icon>
-            <i class="iconfont icon-desktop" aria-hidden="true"></i>
+            <i class="iconfont group-action-icon icon-desktop" aria-hidden="true"></i>
           </template>
           {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
         </n-button>
         <n-button block secondary @click="goBack">
           <template #icon>
-            <n-icon><i class="iconfont icon-arrow-left" aria-hidden="true"></i></n-icon>
+            <i class="iconfont group-action-icon icon-arrow-left" aria-hidden="true"></i>
           </template>
           返回
         </n-button>
@@ -101,7 +102,7 @@
           </div>
           <n-button secondary @click="showGroupDetail = true">
             <template #icon>
-              <n-icon><i class="iconfont icon-info" aria-hidden="true"></i></n-icon>
+              <i class="iconfont group-action-icon icon-info" aria-hidden="true"></i>
             </template>
             群组详情
           </n-button>
@@ -116,38 +117,22 @@
               class="flex flex-col"
               :class="msg.isMine ? 'items-end' : 'items-start'"
             >
-              <span v-if="msg.messageType === 'call' && msg.call" class="text-xs text-gray-400 mb-1">{{ msg.time }}</span>
-              <CallHistoryMessage
-                v-if="msg.messageType === 'call' && msg.call"
-                :record="msg.call"
-                :is-mine="msg.isMine"
-              />
-              <div v-else class="flex items-end gap-2 max-w-[88%] sm:max-w-[70%]" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
-                <n-avatar :size="32" :src="msg.user?.avatar || undefined">
+              <div class="group-message-row flex items-start gap-2 max-w-[88%] sm:max-w-[70%]" :title="msg.time">
+                <n-avatar v-if="!msg.isMine" class="group-message-avatar shrink-0" :size="32" :src="msg.user?.avatar || undefined">
                   <span v-if="!msg.user?.avatar">{{ msg.user?.nickname?.charAt(0) || msg.user?.username?.charAt(0) || '?' }}</span>
                 </n-avatar>
-                <div>
-                  <div class="flex items-center gap-2 mb-1" :class="msg.isMine ? 'flex-row-reverse' : 'flex-row'">
-                    <span class="text-xs font-semibold text-gray-600">
-                      {{ msg.user?.nickname || msg.user?.username || '未知用户' }}
-                    </span>
-                    <span class="text-xs text-gray-400">{{ msg.time }}</span>
+                <div class="min-w-0">
+                  <div v-if="!msg.isMine" class="group-message-sender text-xs font-semibold text-gray-600 mb-1">
+                    {{ msg.user?.nickname || msg.user?.username || '未知用户' }}
                   </div>
-                  <div
-                    class="group-message-bubble p-3 rounded-2xl shadow-sm break-words"
-                    :class="msg.isMine
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-slate-800 border border-slate-200'"
-                  >
-                    <ChatMediaMessage
-                      v-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
-                      :type="msg.messageType"
-                      :media="msg.media"
-                      :is-mine="msg.isMine"
-                      @loaded="scrollToBottom('auto')"
-                    />
-                    <template v-else>{{ msg.message }}</template>
-                  </div>
+                  <ChatMessageContent
+                    class="group-message-bubble"
+                    :message="msg.message"
+                    :message-type="msg.messageType"
+                    :media="msg.media"
+                    :call="msg.call"
+                    :is-mine="msg.isMine"
+                  />
                   <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="text-xs mt-1 text-gray-500" @click="msg.sendStatus === 'failed' && retryGroupMessage(msg)">
                     {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
                   </button>
@@ -210,16 +195,17 @@
             <div class="space-y-2">
               <n-button block secondary @click="handleVideoCall">
                 <template #icon>
-                  <i class="iconfont icon-video" aria-hidden="true"></i>
+                  <i class="iconfont group-action-icon icon-video" aria-hidden="true"></i>
                 </template>
                 {{ groupSessionState.getButtonLabel(groupId, 'video') }}
               </n-button>
               <n-button block secondary @click="handleAudioCall">
+          <template #icon><i class="iconfont group-action-icon icon-microphone" aria-hidden="true"></i></template>
                 {{ groupSessionState.getButtonLabel(groupId, 'audio') }}
               </n-button>
               <n-button block secondary @click="handleScreenShare">
                 <template #icon>
-                  <i class="iconfont icon-desktop" aria-hidden="true"></i>
+                  <i class="iconfont group-action-icon icon-desktop" aria-hidden="true"></i>
                 </template>
                 {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
               </n-button>
@@ -245,10 +231,9 @@ import { getGroupMessages, type ChatMediaPayload } from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
 import { applyMessageAck } from '@/services/messageDeliveryState';
 import { groupSessionState } from '@/services/groupSessionState';
-import CallHistoryMessage from '@/components/CallHistoryMessage.vue';
 import TextMsg from '@/components/TextMsg.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
-import ChatMediaMessage from '@/components/ChatMediaMessage.vue';
+import ChatMessageContent from '@/components/ChatMessageContent.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -491,6 +476,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.group-action-icon { font-size: 20px; -webkit-text-stroke: .35px currentColor; }
 .mobile-sidebar-toggle { display: none; }
 .mobile-sidebar-close { display: none; }
 @media (max-width: 767px) { .mobile-sidebar-toggle, .mobile-sidebar-close { display: inline-flex; } }

@@ -5,7 +5,9 @@
   font-display: block;
 }
 .iconfont {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   width: 1em;
   height: 1em;
@@ -15,7 +17,7 @@
   font-variant: normal;
   line-height: 1;
   text-transform: none;
-  vertical-align: -.125em;
+  vertical-align: middle;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

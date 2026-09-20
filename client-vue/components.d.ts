@@ -13,8 +13,11 @@ declare module 'vue' {
   export interface GlobalComponents {
     AudioWaveform: typeof import('./src/components/AudioWaveform.vue')['default']
     CallHistoryMessage: typeof import('./src/components/CallHistoryMessage.vue')['default']
+    ChatImageMessage: typeof import('./src/components/ChatImageMessage.vue')['default']
     ChatMediaComposer: typeof import('./src/components/ChatMediaComposer.vue')['default']
-    ChatMediaMessage: typeof import('./src/components/ChatMediaMessage.vue')['default']
+    ChatMessageContent: typeof import('./src/components/ChatMessageContent.vue')['default']
+    ChatTextMessage: typeof import('./src/components/ChatTextMessage.vue')['default']
+    ChatVoiceMessage: typeof import('./src/components/ChatVoiceMessage.vue')['default']
     GlobalMessages: typeof import('./src/components/GlobalMessages.vue')['default']
     GlobalPrivateCall: typeof import('./src/components/GlobalPrivateCall.vue')['default']
     GroupCallInvitations: typeof import('./src/components/GroupCallInvitations.vue')['default']

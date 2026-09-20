@@ -26,10 +26,10 @@ const presentation = computed(() => getCallHistoryPresentation(props.record, pro
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 190px;
+  min-width: 220px;
   padding: 12px 14px;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 16px;
   background: #fff;
   color: #334155;
   box-shadow: 0 2px 8px rgb(15 23 42 / 8%);
@@ -47,6 +47,8 @@ const presentation = computed(() => getCallHistoryPresentation(props.record, pro
   gap: 2px;
   min-width: 0;
 }
+
+.call-history-message > .iconfont { font-size: 22px; -webkit-text-stroke: .35px currentColor; }
 
 .call-history-message__content strong {
   font-size: 12px;

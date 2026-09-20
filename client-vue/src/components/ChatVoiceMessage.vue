@@ -1,49 +1,35 @@
 <template>
-  <n-image
-    v-if="type === 'image'"
-    class="chat-image"
+  <button
+    type="button"
+    class="chat-voice"
+    :class="{ 'chat-voice--mine': isMine, 'chat-voice--playing': playing }"
+    :style="{ width: voiceWidth }"
+    :aria-label="playing ? '暂停语音' : `播放 ${media.durationSeconds} 秒语音`"
+    @click="togglePlayback"
+  >
+    <span class="chat-voice__wave" aria-hidden="true"><i v-for="bar in 3" :key="bar"></i></span>
+    <span class="chat-voice__duration">{{ media.durationSeconds }}″</span>
+  </button>
+  <audio
+    ref="audioRef"
     :src="resolvedUrl"
-    :alt="media.fileName || '聊天图片'"
-    object-fit="contain"
-    @load="emit('loaded')"
+    preload="metadata"
+    hidden
+    @play="playing = true"
+    @pause="playing = false"
+    @ended="handleEnded"
   />
-  <template v-else>
-    <button
-      type="button"
-      class="chat-voice"
-      :class="{ 'chat-voice--mine': isMine, 'chat-voice--playing': playing }"
-      :style="{ width: voiceWidth }"
-      :aria-label="playing ? '暂停语音' : `播放 ${media.durationSeconds} 秒语音`"
-      @click="togglePlayback"
-    >
-      <span class="chat-voice__wave" aria-hidden="true"><i v-for="bar in 3" :key="bar"></i></span>
-      <span class="chat-voice__duration">{{ media.durationSeconds }}″</span>
-    </button>
-    <audio
-      ref="audioRef"
-      :src="resolvedUrl"
-      preload="metadata"
-      hidden
-      @loadedmetadata="emit('loaded')"
-      @play="playing = true"
-      @pause="playing = false"
-      @ended="handleEnded"
-    />
-  </template>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NImage } from 'naive-ui';
 import type { ChatMediaPayload } from '@/api/message';
 import { resolveChatMediaUrl } from '@/services/chatMedia';
 
 const props = withDefaults(defineProps<{
-  type: 'image' | 'voice';
   media: ChatMediaPayload;
   isMine?: boolean;
 }>(), { isMine: false });
-const emit = defineEmits<{ loaded: [] }>();
 
 const resolvedUrl = computed(() => resolveChatMediaUrl(props.media.url));
 const audioRef = ref<HTMLAudioElement | null>(null);
@@ -67,8 +53,6 @@ function handleEnded() {
 </script>
 
 <style scoped>
-.chat-image { display: block; max-width: min(320px, 70vw); }
-.chat-image :deep(img) { display: block; width: auto; max-width: 100%; max-height: 320px; border-radius: 10px; object-fit: contain; }
 .chat-voice { display: flex; align-items: center; gap: 8px; min-width: 86px; min-height: 36px; padding: 0; border: 0; color: inherit; background: transparent; cursor: pointer; }
 .chat-voice--mine { flex-direction: row-reverse; }
 

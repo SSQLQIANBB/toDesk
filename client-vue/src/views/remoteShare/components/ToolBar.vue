@@ -1,8 +1,8 @@
 <template>
   <div class="flex gap-2 border-t p-3">
-    <n-button :disabled="!contactUser || calls.busy" @click="start(1)"><i class="iconfont icon-desktop mr-1" aria-hidden="true"></i>屏幕共享</n-button>
-    <n-button :disabled="!contactUser || calls.busy" @click="start(0)"><i class="iconfont icon-video mr-1" aria-hidden="true"></i>视频通话</n-button>
-    <n-button :disabled="!contactUser || calls.busy" @click="start(2)"><i class="iconfont icon-microphone mr-1" aria-hidden="true"></i>语音通话</n-button>
+    <n-button :disabled="!contactUser || calls.busy" @click="start(1)"><template #icon><i class="iconfont icon-desktop" aria-hidden="true"></i></template>屏幕共享</n-button>
+    <n-button :disabled="!contactUser || calls.busy" @click="start(0)"><template #icon><i class="iconfont icon-video" aria-hidden="true"></i></template>视频通话</n-button>
+    <n-button :disabled="!contactUser || calls.busy" @click="start(2)"><template #icon><i class="iconfont icon-microphone" aria-hidden="true"></i></template>语音通话</n-button>
   </div>
 </template>
 <script setup lang="ts">
@@ -14,3 +14,7 @@ function start(type: 0 | 1 | 2) {
   if (props.contactUser) calls.request = { user: props.contactUser, type };
 }
 </script>
+
+<style scoped>
+.iconfont { font-size: 20px; -webkit-text-stroke: .35px currentColor; }
+</style>

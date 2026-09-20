@@ -48,6 +48,7 @@
         <!-- 快捷操作 -->
         <div class="flex gap-2">
           <n-button class="profile-button" size="small" secondary block @click="goToProfile">
+            <template #icon><i class="iconfont icon-id-card" aria-hidden="true"></i></template>
             个人中心
           </n-button>
         </div>
@@ -178,25 +179,13 @@
                   { 'message-entry--call': msg.messageType === 'call' },
                 ]"
               >
-                <CallHistoryMessage
-                  v-if="msg.messageType === 'call' && msg.call"
-                  :record="msg.call"
+                <ChatMessageContent
+                  :message="msg.message"
+                  :message-type="msg.messageType"
+                  :media="msg.media"
+                  :call="msg.call"
                   :is-mine="msg.fromUserId === authUser?.id"
                 />
-                <div
-                  v-else-if="(msg.messageType === 'image' || msg.messageType === 'voice') && msg.media"
-                  class="message-bubble message-bubble--media"
-                >
-                  <ChatMediaMessage
-                    :type="msg.messageType"
-                    :media="msg.media"
-                    :is-mine="msg.fromUserId === authUser?.id"
-                    @loaded="scrollToBottom('auto')"
-                  />
-                </div>
-                <div v-else class="message-bubble message-bubble--text overflow-hidden text-wrap break-words">
-                  {{ msg.message }}
-                </div>
               </div>
               <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="message-status text-xs mt-1" @click="msg.sendStatus === 'failed' && retryPrivateMessage(msg)">
                 {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
@@ -238,9 +227,8 @@ import { sendReliableMessage } from '@/services/reliableMessage';
 import { applyMessageAck } from '@/services/messageDeliveryState';
 import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
-import CallHistoryMessage from '@/components/CallHistoryMessage.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
-import ChatMediaMessage from '@/components/ChatMediaMessage.vue';
+import ChatMessageContent from '@/components/ChatMessageContent.vue';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
 import { mergeContactPresence } from '@/services/contactPresence';
@@ -833,49 +821,6 @@ onUnmounted(() => {
   max-width: min(68%, 680px);
 }
 
-.message-bubble {
-  min-width: 92px;
-  padding: 11px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  background: #fff;
-  color: #334155;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.message-bubble:hover {
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.09);
-}
-
-.message-entry--mine .message-bubble {
-  border-color: #2563eb;
-  border-bottom-right-radius: 16px;
-  background: #2563eb;
-  color: #fff;
-  box-shadow: 0 7px 20px rgba(37, 99, 235, 0.18);
-}
-
-.message-entry--theirs .message-bubble {
-  border-bottom-left-radius: 16px;
-}
-
-.message-bubble--media {
-  padding: 6px 7px;
-}
-
-
-.message-entry :deep(.call-history-message) {
-  min-width: 220px;
-  border-radius: 16px;
-}
-
-.message-entry--mine :deep(.call-history-message) {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-
 .message-status {
   color: #64748b;
 }
@@ -992,8 +937,7 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :deep(.remote-sidebar),
-  .message-bubble {
+  :deep(.remote-sidebar) {
     transition: none;
   }
 }
@@ -1005,6 +949,8 @@ onUnmounted(() => {
 :deep(.sidebar-logout) { --n-color:transparent !important; --n-border:0 !important; }
 .message-item.items-start { padding-left:44px; }
 .incoming-avatar { position:absolute; left:0; top:0; }
+.sidebar-logout .iconfont { font-size: 24px; -webkit-text-stroke: .4px currentColor; }
+.profile-button .iconfont { font-size: 20px; -webkit-text-stroke: .35px currentColor; }
 .chat-empty-state { background:#fff; padding:32px; }
 .empty-icon { width:80px; height:80px; display:grid; place-items:center; color:#2563eb; background:#eff6ff; border-radius:24px; font-size:30px; margin-bottom:24px; box-shadow:inset 0 2px 4px #0000000d; }
 .chat-empty-state h3 { font-size:18px; font-weight:700; margin-bottom:8px; }

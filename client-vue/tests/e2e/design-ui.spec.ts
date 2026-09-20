@@ -1,4 +1,93 @@
 import { expect, test, type Page } from '@playwright/test';
+
+for (const width of [1440, 375]) {
+  test(`群聊发言人与共用消息样式 ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page);
+    const kinds = ['text', 'image', 'voice', 'audio', 'video', 'screen'];
+    const messages = [false, true].flatMap(isMine => kinds.map((kind, index) => ({
+      id: (isMine ? 20 : 10) + index, userId: isMine ? 1 : 4, fromUserId: isMine ? 1 : 4,
+      toUserId: isMine ? 4 : 1, groupId: 7, isRead: true,
+      sender: { id: isMine ? 1 : 4, username: isMine ? 'owner' : 'monkey', nickname: isMine ? '本人' : '群友甲' },
+      message: '测试消息', createdAt: '2026-09-20T04:00:00Z',
+      messageType: index < 3 ? kind : 'call',
+      media: kind === 'image' || kind === 'voice' ? { url: `https://chat-images.test/${kind}`, mimeType: kind === 'image' ? 'image/png' : 'audio/wav', durationSeconds: 4 } : undefined,
+      call: index >= 3 ? { type: kind, status: 'completed', durationSeconds: 15 } : undefined,
+    })));
+    await page.route(/\/api\/messages\/(private\?|group\/7\?)/, route => route.fulfill({ json: { messages, hasMore: false } }));
+    await page.route('https://chat-images.test/**', route => route.fulfill({ status: 404 }));
+    await page.goto('/group-chat/7');
+    const incoming = page.locator('li.items-start:has(.group-message-row)');
+    const outgoing = page.locator('li.items-end:has(.group-message-row)');
+    await expect(incoming).toHaveCount(6);
+    await expect(outgoing).toHaveCount(6);
+    await expect(incoming.locator('.group-message-sender')).toHaveText(Array(6).fill('群友甲'));
+    await expect(incoming.locator('.group-message-avatar')).toHaveCount(6);
+    await expect(outgoing.locator('.group-message-sender, .group-message-avatar')).toHaveCount(0);
+    await expect(incoming.locator('.call-history-message')).toHaveCount(3);
+    await expect(outgoing.locator('.call-history-message')).toHaveCount(3);
+    const voiceStyles = () => page.locator('.chat-voice').evaluateAll(nodes => nodes.map(node => {
+      const bubble = getComputedStyle(node.closest('.message-bubble')!);
+      const voice = getComputedStyle(node);
+      return { padding: bubble.padding, background: bubble.backgroundColor, color: bubble.color, radius: bubble.borderRadius, height: voice.height, width: voice.width, direction: voice.flexDirection };
+    }));
+    const groupStyles = await voiceStyles();
+    await page.goto('/remote');
+    await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
+    await page.locator('.contact-item').first().click();
+    await expect(page.locator('.chat-voice')).toHaveCount(2);
+    expect(await voiceStyles()).toEqual(groupStyles);
+  });
+}
+
+for (const width of [1440, 375]) {
+  for (const chat of ['private', 'group']) {
+    test(`图片加载占位 ${chat} ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await prepare(page);
+      await page.route(/\/api\/messages\/(private\?|group\/7\?)/, route => route.fulfill({ json: {
+        messages: [0, 1, 2].map(index => ({
+          id: 100 + index, fromUserId: 4, toUserId: 1, userId: 4, groupId: 7,
+          sender: { id: 4, username: 'monkey' },
+          message: '', messageType: 'image', createdAt: '2026-09-20T04:00:00Z', isRead: true,
+          media: { url: `https://chat-images.test/${index}.svg`, mimeType: 'image/svg+xml' },
+        })), hasMore: false,
+      } }));
+      let releaseImages!: () => void;
+      const pendingImages = new Promise<void>(resolve => { releaseImages = resolve; });
+      await page.route('https://chat-images.test/**', async route => {
+        await pendingImages;
+        const index = Number(route.request().url().split('/').pop()!.split('.')[0]);
+        if (index === 2) { await route.fulfill({ status: 404 }); return; }
+        await route.fulfill({ contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="${index ? 200 : 800}" height="${index ? 800 : 200}"><rect width="100%" height="100%" fill="#93c5fd"/></svg>` });
+      });
+      await page.goto(chat === 'private' ? '/remote' : '/group-chat/7');
+      if (chat === 'private') {
+        await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
+        await page.locator('.contact-item').first().click();
+      }
+      const images = page.locator('.chat-image');
+      await expect(images).toHaveCount(3);
+      const sizes = () => images.evaluateAll(nodes => nodes.map(node => ({ width: node.clientWidth, height: node.clientHeight })));
+      const before = await sizes();
+      await images.first().evaluate(node => { node.closest('.n-scrollbar-container')!.scrollTop = 0; });
+      const positionBefore = await images.first().boundingBox();
+      try {
+        expect(before.every(size => size.height > 80 && size.width <= 320)).toBe(true);
+      } finally { releaseImages(); }
+      await expect(images.nth(0).locator('img')).toHaveJSProperty('naturalWidth', 800);
+      await expect(images.nth(1).locator('img')).toHaveJSProperty('naturalHeight', 800);
+      await expect(images.nth(2)).toContainText('图片加载失败');
+      await expect(images.nth(2).getByText('图片加载中…')).toBeHidden();
+      expect(await sizes()).toEqual(before);
+      expect(await images.first().boundingBox()).toEqual(positionBefore);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath('image-loaded.png') });
+      await images.first().locator('img').click();
+      await expect(page.locator('.n-image-preview')).toBeVisible();
+    });
+  }
+}
 test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
 
 async function prepare(page: Page) {
