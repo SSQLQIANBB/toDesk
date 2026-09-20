@@ -130,18 +130,17 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', blurOnOutsideP
 </script>
 
 <style scoped>
-.text-composer { display: flex; align-items: center; gap: 12px; }
+.text-composer { display: flex; align-items: center; gap: 10px; }
 .text-editor-wrap { position: relative; flex: 1; min-width: 0; border-radius: 24px; background: #f1f5f9; }
 .text-editor-wrap:focus-within { box-shadow: inset 0 0 0 1px #bfdbfe; }
 .text-editor { min-height: 48px; max-height: 144px; padding: 13px 20px; outline: none; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 22px; color: #1e293b; }
 .text-placeholder { position: absolute; left: 20px; top: 13px; pointer-events: none; color: #94a3b8; }
-.send-button { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; flex: none; border-radius: 50%; background: #2563eb; color: white; font-size: var(--icon-size-composer); box-shadow: 0 2px 5px #0f172a26; }
+.send-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; flex: none; border-radius: 50%; background: #2563eb; color: white; font-size: 22px; box-shadow: 0 2px 5px #0f172a26; }
 .send-button:hover:not(:disabled) { background: #1d4ed8; }
 .send-button:disabled { cursor: not-allowed; }
 @media (max-width: 767px) {
-  .text-composer { gap: 6px; }
+  .text-composer { gap: 8px; }
   .text-editor { padding-inline: 14px; font-size: 16px; }
   .text-placeholder { left: 14px; }
-  .send-button { width: 40px; height: 40px; }
 }
 </style>

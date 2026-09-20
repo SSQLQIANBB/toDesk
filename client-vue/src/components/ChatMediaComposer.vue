@@ -208,14 +208,14 @@ onBeforeUnmount(cancelRecording);
 .hold-to-talk:disabled { color: #94a3b8; cursor: not-allowed; }
 .hold-to-talk small { font-size: 12px; font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.compact { flex-wrap: nowrap; gap: 12px; }
+.compact { --icon-size-composer: 24px; flex-wrap: nowrap; gap: 8px; }
 .text-mode { flex: 1; min-width: 0; }
-.compact :deep(.n-button), .voice-mode-toggle { flex: none; width: 36px; min-width: 0; height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #94a3b8; font-size: 22px; }
+.compact :deep(.n-button), .voice-mode-toggle { flex: none; width: 44px; min-width: 0; height: 44px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: #94a3b8; font-size: 24px; }
 .voice-mode-toggle--active { color: #2563eb; }
 .voice-mode-toggle:disabled { cursor: not-allowed; }
 .compact :deep(.n-button__icon) { margin: 0; width: var(--icon-size-composer); height: var(--icon-size-composer); font-size: var(--icon-size-composer); }
 .compact :deep(.iconfont), .voice-mode-toggle .iconfont { font-size: var(--icon-size-composer); }
 .voice-mode-toggle { display: inline-flex; align-items: center; justify-content: center; }
 .compact :deep(.n-button__border), .compact :deep(.n-button__state-border) { display: none; }
-@media (max-width: 767px) { .compact { gap: 6px; } .compact :deep(.n-button), .voice-mode-toggle { width: 30px; } }
+@media (max-width: 767px) { .compact { gap: 4px; } }
 </style>
