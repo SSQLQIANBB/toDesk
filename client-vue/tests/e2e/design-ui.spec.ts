@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
 
 async function prepare(page: Page) {
   const user = { id: 1, username: 'owner', nickname: 'Prometheus', status: 'online' };
@@ -124,3 +125,71 @@ test('登录自动填充保持深色输入框', async ({ page }) => {
   expect(style.shadow).toContain('rgb(17, 26, 46)');
   expect(style.text).toBe('rgb(255, 255, 255)');
 });
+
+
+test.describe('语音输入', () => {
+
+
+test('语音模式与按住录音展示', async ({ page }, testInfo) => {
+  await prepare(page);
+  await page.goto('/remote');
+  await page.locator('.contact-item').first().click();
+  const editor = page.getByRole('textbox', { name: '消息', exact: true });
+  await editor.fill('保留草稿');
+  await page.screenshot({ path: testInfo.outputPath('text-mode.png') });
+  await page.getByRole('button', { name: '切换语音输入' }).click();
+  await expect(editor).toBeHidden();
+  await expect(page.getByRole('button', { name: '发送', exact: true })).toBeHidden();
+  const hold = page.locator('.hold-to-talk');
+  await expect(hold).toHaveText('按住 说话');
+  await page.screenshot({ path: testInfo.outputPath('voice-mode.png') });
+  const box = (await hold.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(hold.locator('.audio-waveform')).toBeVisible();
+  await expect(hold).toContainText('松开 发送');
+  await expect(hold.locator('.audio-waveform__side i')).toHaveCount(6);
+  await page.screenshot({ path: testInfo.outputPath('recording.png') });
+  await page.mouse.move(box.x + box.width / 2, box.y - 60);
+  await expect(hold).toContainText('松开取消');
+  await page.mouse.up();
+  await expect(hold).toHaveText('按住 说话');
+  await page.getByRole('button', { name: '切换文字输入' }).click();
+  await expect(editor).toHaveText('保留草稿');
+});
+
+});
+
+
+for (const width of [1440, 375]) {
+  test(`群聊输入区与禁言 ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page);
+    await page.goto('/group-chat/7');
+    const composer = page.locator('.group-chat-composer');
+    const editor = composer.getByRole('textbox', { name: '消息', exact: true });
+    await expect(editor).toBeVisible();
+    await editor.fill('群聊测试消息');
+    await composer.getByRole('button', { name: '发送', exact: true }).click();
+    await expect(page.getByText('群聊测试消息', { exact: true })).toBeVisible();
+    await expect(editor).toBeEmpty();
+    await page.screenshot({ path: testInfo.outputPath('group-text.png') });
+    await composer.getByRole('button', { name: '切换语音输入' }).click();
+    await expect(editor).toBeHidden();
+    await expect(composer.locator('.hold-to-talk')).toHaveText('按住 说话');
+    await page.screenshot({ path: testInfo.outputPath('group-voice.png') });
+    await composer.getByRole('button', { name: '切换文字输入' }).click();
+    await expect(editor).toBeVisible();
+    await page.route('**/api/groups/7', route => route.fulfill({ json: {
+      group: { id: 7, name: '同学群', ownerId: 2 },
+      members: [{ id: 1, username: 'owner', canSpeak: false, role: 'member' }],
+      myRole: 'member', myCanSpeak: false,
+    } }));
+    await page.reload();
+    await expect(page.getByText('您已被禁言，无法发送消息')).toBeVisible();
+    await expect(editor).toHaveAttribute('contenteditable', 'false');
+    await expect(composer.getByRole('button', { name: '发送', exact: true })).toBeDisabled();
+    await expect(composer.getByRole('button', { name: '发送图片', exact: true })).toBeDisabled();
+    await expect(composer.getByRole('button', { name: '切换语音输入' })).toBeDisabled();
+  });
+}

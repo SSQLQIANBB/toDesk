@@ -2,12 +2,12 @@
   <div class="text-composer">
     <slot name="leading" />
     <div class="text-editor-wrap">
-      <div ref="editorRef" class="text-editor" contenteditable="true" role="textbox"
+      <div ref="editorRef" class="text-editor" :contenteditable="!disabled" :aria-disabled="disabled" role="textbox"
         aria-label="消息" aria-multiline="true" @input="onInput" @keydown="onKeydown" @paste="onPaste"></div>
       <span v-if="!inputValue" class="text-placeholder">{{ placeholder }}</span>
     </div>
     <button class="send-button" type="button" aria-label="发送" title="发送"
-      :disabled="!inputValue.trim()" @click="handleSend">
+      :disabled="disabled || !inputValue.trim()" @click="handleSend">
       <i class="iconfont icon-paper-plane" aria-hidden="true"></i>
     </button>
   </div>
@@ -21,6 +21,7 @@ type MsgValue = string
 const props = withDefaults(
   defineProps<{
     value?: MsgValue
+    disabled?: boolean
     placeholder?: string
   }>(),
   {
@@ -65,6 +66,7 @@ function onInput() {
 
 // 粘贴时过滤富文本样式
 function onPaste(e: ClipboardEvent) {
+  if (props.disabled) return
   e.preventDefault()
   const text = e.clipboardData?.getData('text/plain')
   if (text) document.execCommand('insertText', false, text)
@@ -72,6 +74,7 @@ function onPaste(e: ClipboardEvent) {
 
 // 键盘事件：Enter 发送，Shift+Enter 换行
 function onKeydown(e: KeyboardEvent) {
+  if (props.disabled || e.isComposing) return
   if (e.key === 'Enter') {
     if (e.shiftKey) {
       // Shift + Enter → 换行
@@ -103,6 +106,7 @@ function insertNewLine() {
 
 // 发送事件
 function handleSend() {
+  if (props.disabled) return
   const text = inputValue.value.trim()
   if (!text) return
   emits('send', text)

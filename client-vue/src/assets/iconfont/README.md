@@ -1,20 +1,20 @@
 # 项目图标
 
-当前使用 Remix Icon v4.6.0 字体版，固定版本并本地托管，不依赖第三方 CDN。
-这是本地 icon font，不是 Iconfont.cn 上创建的私有项目。
+当前界面使用 Iconfont「to desk」项目导出的本地字体。
 
-- 上游：https://github.com/Remix-Design/RemixIcon/tree/v4.6.0
-- 字体：https://raw.githubusercontent.com/Remix-Design/RemixIcon/v4.6.0/fonts/remixicon.woff2
-- 编码表：https://raw.githubusercontent.com/Remix-Design/RemixIcon/v4.6.0/fonts/remixicon.css
-- 授权：本目录 LICENSE（此版本为 Apache-2.0）
-- 业务映射：../../style/iconfont.css
+- 项目：https://www.iconfont.cn/manage/index?manage_type=myprojects&projectId=5236601
+- 字体：iconfont.woff2
+- 图标清单及编码：iconfont.json（48 个图标）
+- 业务类名映射：../../style/iconfont.css（44 个业务图标）
 
 使用 `<i class="iconfont icon-microphone" aria-hidden="true"></i>`。
-图标继承所在控件的字号、颜色；纯图标按钮须提供 aria-label 或可访问名称。
-动态图标通过 class 切换，例如麦克风的 icon-microphone / icon-microphone-off。
+保留现有业务类名，图标继承控件字号和颜色；纯图标按钮须提供 aria-label。
+入口继续引入 style/iconfont.css，不直接引入下载包 CSS，避免固定 16px 字号影响布局。
+下载包中的 CSS、JS 和 demo 保留供查阅，不在应用入口加载。
 
-新增图标时从上述版本编码表选择语义一致的字形，在 iconfont.css 中添加业务名称映射。
-如改用 Iconfont.cn 项目导出包，替换字体文件及编码映射，保留业务类名即可。
-Naive UI 内置的加载、输入框与弹窗图标仍由组件库管理；语音波形属于动态状态绘制。
+更新时覆盖导出文件，并根据 iconfont.json 同步业务映射中的 Unicode。
+挂断图标已为横向，不需要额外旋转。Naive UI 内置图标仍由组件库管理，动态语音波形由组件绘制。
 
-浏览器标签图标 public/favicon.svg 使用同版本 computer-line 字形，添加蓝色圆角背景。
+public/favicon.svg 仍采用 Remix Icon v4.6.0 的 computer-line 字形。
+LICENSE 为此 favicon 素材的 Apache-2.0 授权，不代表 Iconfont 商城图标的授权。
+商城图标来源及授权以 Iconfont 项目和原作者说明为准。

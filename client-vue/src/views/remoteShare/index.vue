@@ -207,11 +207,9 @@
 
         <div class="message-composer-shell">
           <ToolBar class="chat-toolbar" :contact-user="contactUser" />
-          <TextMsg placeholder="请输入消息..." class="message-editor" @send="sendMsg">
-            <template #leading>
-              <ChatMediaComposer compact @send="sendMedia" />
-            </template>
-          </TextMsg>
+          <ChatMediaComposer compact class="message-editor" @send="sendMedia">
+            <TextMsg placeholder="请输入消息..." @send="sendMsg" />
+          </ChatMediaComposer>
         </div>
       </div>
       <div class="chat-empty-state h-full w-full flex flex-col items-center justify-center" v-else>

@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AudioWaveform: typeof import('./src/components/AudioWaveform.vue')['default']
     CallHistoryMessage: typeof import('./src/components/CallHistoryMessage.vue')['default']
     ChatMediaComposer: typeof import('./src/components/ChatMediaComposer.vue')['default']
     ChatMediaMessage: typeof import('./src/components/ChatMediaMessage.vue')['default']

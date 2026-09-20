@@ -51,14 +51,14 @@ beforeEach(() => {
 describe('聊天语音录制', () => {
   it('按住开始录音，松开后上传并发送语音', async () => {
     const wrapper = mount(ChatMediaComposer, {
-      global: { stubs: { NButton: { template: '<button><slot /></button>' } } },
+      global: { stubs: { NButton: { template: '<button><slot /></button>' }, AudioWaveform: { template: '<span><slot /></span>' } } },
     });
     const button = wrapper.find('.hold-to-talk');
 
     expect(button.text()).toContain('按住');
     await button.trigger('pointerdown');
     await flushPromises();
-    expect(button.text()).toContain('松开发送');
+    expect(button.text()).toContain('松开 发送');
 
     await button.trigger('pointerup');
     await flushPromises();
@@ -74,7 +74,7 @@ describe('聊天语音录制', () => {
     let allowMicrophone!: (stream: MediaStream) => void;
     vi.mocked(navigator.mediaDevices.getUserMedia).mockReturnValueOnce(new Promise(resolve => { allowMicrophone = resolve; }) as Promise<MediaStream>);
     const wrapper = mount(ChatMediaComposer, {
-      global: { stubs: { NButton: { template: '<button><slot /></button>' } } },
+      global: { stubs: { NButton: { template: '<button><slot /></button>' }, AudioWaveform: { template: '<span><slot /></span>' } } },
     });
     const button = wrapper.find('.hold-to-talk');
 
@@ -95,8 +95,9 @@ for (const moveBack of [false, true]) {
   it(moveBack ? '移回后恢复发送提示，卸载取消录音' : '上滑后松手取消发送', async () => {
     const wrapper = mount(ChatMediaComposer, {
       props: { compact: true },
-      global: { stubs: { NButton: { template: '<button><slot /></button>' } } },
+      global: { stubs: { NButton: { template: '<button><slot /></button>' }, AudioWaveform: { template: '<span><slot /></span>' } } },
     });
+    await wrapper.get('.voice-mode-toggle').trigger('click');
     const button = wrapper.get('.hold-to-talk');
     const pointer = async (type: string, clientY: number) => {
       const event = new Event(type, { bubbles: true });
@@ -107,14 +108,14 @@ for (const moveBack of [false, true]) {
     await pointer('pointerdown', 200);
     await flushPromises();
     await pointer('pointermove', 140);
-    expect(wrapper.get('.recording-status').text()).toContain('松开取消');
+    expect(wrapper.get('.hold-to-talk').text()).toContain('松开取消');
     if (moveBack) {
       await pointer('pointermove', 190);
-      expect(wrapper.get('.recording-status').text()).toContain('松开发送');
+      expect(wrapper.get('.hold-to-talk').text()).toContain('松开 发送');
       wrapper.unmount();
     } else {
       await pointer('pointerup', 140);
-      expect(wrapper.find('.recording-status').exists()).toBe(false);
+      expect(wrapper.get('.hold-to-talk').text()).toContain('按住 说话');
       wrapper.unmount();
     }
     await flushPromises();
@@ -122,3 +123,18 @@ for (const moveBack of [false, true]) {
     expect(mocks.stopTrack).toHaveBeenCalledOnce();
   });
 }
+
+
+it('点击麦克风只切换模式，不申请权限，再次点击恢复文字草稿', async () => {
+  const wrapper = mount(ChatMediaComposer, {
+    props: { compact: true }, slots: { default: '<input value="保留的草稿" />' },
+    global: { stubs: { NButton: { template: '<button><slot /></button>' } } },
+  });
+  expect(wrapper.find('.hold-to-talk').exists()).toBe(false);
+  await wrapper.get('.voice-mode-toggle').trigger('click');
+  expect(wrapper.get('.hold-to-talk').text()).toContain('按住 说话');
+  expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  await wrapper.get('.voice-mode-toggle').trigger('click');
+  expect(wrapper.get('input[value]').element.getAttribute('value')).toBe('保留的草稿');
+  wrapper.unmount();
+});

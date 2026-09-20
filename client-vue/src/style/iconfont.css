@@ -1,7 +1,7 @@
-/* Remix Icon v4.6.0 · Apache-2.0. See ../assets/iconfont/LICENSE. */
+/* Iconfont project 5236601. Business aliases match assets/iconfont/iconfont.json. */
 @font-face {
   font-family: 'ToDesk Iconfont';
-  src: url('../assets/iconfont/remixicon.woff2') format('woff2');
+  src: url('../assets/iconfont/iconfont.woff2') format('woff2');
   font-display: block;
 }
 .iconfont {
@@ -19,47 +19,47 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-.icon-desktop::before { content: "\ebca"; }
-.icon-video::before { content: "\f288"; }
-.icon-microphone::before { content: "\ef50"; }
-.icon-phone::before { content: "\efec"; }
-.icon-image::before { content: "\ee4b"; }
-.icon-bars::before { content: "\ef3e"; }
-.icon-logout::before { content: "\eeda"; }
-.icon-id-card::before { content: "\f4e9"; }
-.icon-comments::before { content: "\eb51"; }
-.icon-address-book::before { content: "\ebce"; }
-.icon-message::before { content: "\eb4d"; }
-.icon-gear::before { content: "\f0e6"; }
-.icon-user::before { content: "\f264"; }
-.icon-user-plus::before { content: "\f25e"; }
-.icon-search::before { content: "\f0d1"; }
-.icon-close::before { content: "\eb99"; }
-.icon-more::before { content: "\ef76"; }
-.icon-arrow-left::before { content: "\ea60"; }
-.icon-plus::before { content: "\ea13"; }
-.icon-warning::before { content: "\eca1"; }
-.icon-info::before { content: "\ee59"; }
-.icon-paper-plane::before { content: "\f0d9"; }
-.icon-lock::before { content: "\eece"; }
-.icon-microphone-off::before { content: "\ef52"; }
-.icon-video-off::before { content: "\f51c"; }
-.icon-hangup::before { content: "\efe9"; }
-.icon-users::before { content: "\ede3"; }
-.icon-screen-share::before { content: "\eb3f"; }
-.icon-screen-stop::before { content: "\eb97"; }
-.icon-tune::before { content: "\ec9d"; }
-.icon-pen::before { content: "\ec86"; }
-.icon-line::before { content: "\f1af"; }
-.icon-arrow::before { content: "\ea70"; }
-.icon-rectangle::before { content: "\f3d7"; }
-.icon-circle::before { content: "\f3c2"; }
-.icon-text::before { content: "\f201"; }
-.icon-eraser::before { content: "\ec9f"; }
-.icon-record::before { content: "\f059"; }
-.icon-play::before { content: "\f00a"; }
-.icon-pause::before { content: "\efd7"; }
-.icon-stop::before { content: "\f1a0"; }
-.icon-download::before { content: "\ec5a"; }
-.icon-none::before { content: "\f3a1"; }
-.icon-hangup { transform: rotate(135deg); }
+.icon-desktop::before { content: "\e8dd"; }
+.icon-video::before { content: "\e617"; }
+.icon-microphone::before { content: "\e8c2"; }
+.icon-phone::before { content: "\e8be"; }
+.icon-image::before { content: "\e8d3"; }
+.icon-bars::before { content: "\e8dc"; }
+.icon-logout::before { content: "\e8d8"; }
+.icon-id-card::before { content: "\e91c"; }
+.icon-comments::before { content: "\e8bc"; }
+.icon-address-book::before { content: "\e610"; }
+.icon-message::before { content: "\e8bd"; }
+.icon-gear::before { content: "\e8b7"; }
+.icon-user::before { content: "\e8c8"; }
+.icon-user-plus::before { content: "\e8ca"; }
+.icon-search::before { content: "\e8b8"; }
+.icon-close::before { content: "\e8e7"; }
+.icon-more::before { content: "\e8c4"; }
+.icon-arrow-left::before { content: "\e8f4"; }
+.icon-plus::before { content: "\e8e1"; }
+.icon-warning::before { content: "\e8ed"; }
+.icon-info::before { content: "\e8e8"; }
+.icon-paper-plane::before { content: "\e893"; }
+.icon-lock::before { content: "\e8d4"; }
+.icon-microphone-off::before { content: "\e629"; }
+.icon-video-off::before { content: "\e6f0"; }
+.icon-hangup::before { content: "\e67f"; }
+.icon-users::before { content: "\e8c9"; }
+.icon-screen-share::before { content: "\e746"; }
+.icon-screen-stop::before { content: "\e75f"; }
+.icon-tune::before { content: "\e78c"; }
+.icon-pen::before { content: "\e8cc"; }
+.icon-line::before { content: "\e653"; }
+.icon-arrow::before { content: "\eb6b"; }
+.icon-rectangle::before { content: "\e609"; }
+.icon-circle::before { content: "\ea97"; }
+.icon-text::before { content: "\e620"; }
+.icon-eraser::before { content: "\e646"; }
+.icon-record::before { content: "\e67b"; }
+.icon-play::before { content: "\e645"; }
+.icon-pause::before { content: "\ea6d"; }
+.icon-stop::before { content: "\e611"; }
+.icon-download::before { content: "\e8c6"; }
+.icon-none::before { content: "\e60f"; }
+.icon-keyboard::before { content: "\e8cf"; }

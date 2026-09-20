@@ -166,24 +166,9 @@
 
         <!-- 输入框 -->
         <footer class="group-chat-composer p-4 border-t bg-white">
-          <ChatMediaComposer :disabled="!canSpeak" :group-id="groupId" @send="sendGroupMedia" />
-          <div class="flex gap-2 sm:gap-3 min-w-0">
-            <n-input
-              v-model:value="inputMessage"
-              type="textarea"
-              :autosize="{ minRows: 1, maxRows: 4 }"
-              placeholder="请输入消息..."
-              :disabled="!canSpeak"
-              @keydown.enter.exact.prevent="handleSend"
-            />
-            <n-button
-              type="primary"
-              :disabled="!inputMessage.trim() || !canSpeak"
-              @click="handleSend"
-            >
-              发送
-            </n-button>
-          </div>
+          <ChatMediaComposer compact :disabled="!canSpeak" :group-id="groupId" @send="sendGroupMedia">
+            <TextMsg placeholder="请输入消息..." :disabled="!canSpeak" @send="handleSend" />
+          </ChatMediaComposer>
           <div v-if="!canSpeak" class="text-xs text-red-500 mt-2">
             您已被禁言，无法发送消息
           </div>
@@ -261,6 +246,7 @@ import { sendReliableMessage } from '@/services/reliableMessage';
 import { applyMessageAck } from '@/services/messageDeliveryState';
 import { groupSessionState } from '@/services/groupSessionState';
 import CallHistoryMessage from '@/components/CallHistoryMessage.vue';
+import TextMsg from '@/components/TextMsg.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
 import ChatMediaMessage from '@/components/ChatMediaMessage.vue';
 
@@ -283,7 +269,6 @@ const showGroupDetail = ref(false);
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { online?: boolean })[]>([]);
 const messages = ref<any[]>([]);
-const inputMessage = ref('');
 
 // 当前用户是否可以发言
 const canSpeak = computed(() => {
@@ -385,8 +370,7 @@ function handleGroupMessage(data: any) {
 }
 
 // 发送消息
-function handleSend() {
-  if (!inputMessage.value.trim()) return;
+function handleSend(text: string) {
   if (!canSpeak.value) {
     message.warning('您已被禁言');
     return;
@@ -394,7 +378,7 @@ function handleSend() {
 
   const msg = {
     clientMessageId: crypto.randomUUID(),
-    message: inputMessage.value,
+    message: text,
     time: new Date().toLocaleString(),
     user: {
       id: currentUser.value?.id,
@@ -409,7 +393,6 @@ function handleSend() {
   messages.value.push(msg);
   void retryGroupMessage(msg);
 
-  inputMessage.value = '';
   scrollToBottom();
 }
 
@@ -530,8 +513,7 @@ onUnmounted(() => {
 .group-im-shell header { box-shadow:none; background:#fff; }
 .group-im-shell header .font-bold { font-size:14px; }
 .group-im-shell ul > li { border:0; background:transparent; }
-.group-chat-composer :deep(.n-input) { --n-color:#f1f5f9; --n-border:0; border-radius:12px; }
-.group-chat-composer :deep(.n-button) { border-radius:12px; }
+.group-chat-composer :deep(.chat-media-composer) { padding: 4px 0; }
 .group-sidebar-backdrop { display:none; position:absolute; inset:0; background:#0f172a80; backdrop-filter:blur(4px); z-index:15; }
 .group-im-shell :deep(.group-chat-sider .n-layout-sider-scroll-container) { display:flex; flex-direction:column; }
 .group-im-shell .mobile-sidebar-close { order:5; }
