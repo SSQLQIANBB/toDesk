@@ -26,12 +26,15 @@
       </div>
     </div>
 
-    <div class="relative z-20 w-full max-w-md">
+    <div class="login-content relative z-20 w-full max-w-md">
       <n-card class="login-card shadow-2xl">
         <template #header>
-          <div class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">ToDesk</h1>
-            <p class="text-sm text-gray-500 mt-2">远程协作平台</p>
+          <div class="login-brand text-center">
+            <div class="login-brand-lockup">
+              <span class="login-brand-mark" aria-hidden="true">T</span>
+              <h1 class="login-brand-title">ToDesk</h1>
+            </div>
+            <p class="login-brand-subtitle">远程协作平台</p>
           </div>
         </template>
 
@@ -190,6 +193,8 @@
           </n-tab-pane>
         </n-tabs>
       </n-card>
+
+      <footer class="icp-record">浙ICP备2026052797号-1</footer>
     </div>
   </div>
 </template>
@@ -395,10 +400,67 @@ async function handleRegister() {
 <style scoped>
 .login-page {
   isolation: isolate;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
   background:
-    radial-gradient(circle at 18% 18%, rgba(95, 195, 255, 0.34), transparent 30%),
-    radial-gradient(circle at 80% 18%, rgba(135, 92, 255, 0.32), transparent 28%),
-    linear-gradient(135deg, #07111f 0%, #101a3d 46%, #1d1442 100%);
+    radial-gradient(circle at 15% 20%, rgba(30, 64, 175, 0.35) 0%, transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(124, 58, 237, 0.25) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.12) 0%, transparent 60%),
+    linear-gradient(180deg, #070913 0%, #0d1127 100%);
+}
+
+.login-content {
+  padding-bottom: 44px;
+}
+
+.login-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.login-brand-mark {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1;
+  background: linear-gradient(135deg, #10b981, #2dd4bf);
+  box-shadow: 0 10px 26px rgba(16, 185, 129, 0.28);
+}
+
+.login-brand-title {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.login-brand-subtitle {
+  margin: 9px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+}
+
+.icp-record {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  color: rgba(203, 213, 225, 0.66);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  letter-spacing: 0.04em;
 }
 
 .login-scene {
@@ -705,21 +767,112 @@ async function handleRegister() {
 
 :deep(.login-card) {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.88);
+  --n-color: rgba(18, 24, 43, 0.74) !important;
+  --n-text-color: #cbd5e1 !important;
+  --n-title-text-color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: rgba(18, 24, 43, 0.74);
   box-shadow:
-    0 28px 90px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px);
+    0 25px 50px -12px rgba(0, 0, 0, 0.55),
+    0 0 36px rgba(16, 185, 129, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 :deep(.login-card .n-card-header) {
-  padding-top: 30px;
+  padding: 30px 30px 18px;
 }
 
 :deep(.login-card .n-card__content) {
-  padding-bottom: 30px;
+  padding: 0 30px 30px;
+}
+
+:deep(.login-card .n-tabs-rail) {
+  --n-tab-color-segment: rgba(2, 6, 23, 0.46) !important;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.46);
+}
+
+:deep(.login-card .n-tabs-capsule) {
+  border-radius: 10px;
+  background: linear-gradient(135deg, #10b981, #0d9488);
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.22);
+}
+
+:deep(.login-card .n-tabs-tab) {
+  --n-tab-text-color: #94a3b8 !important;
+  --n-tab-text-color-hover: #e2e8f0 !important;
+  --n-tab-text-color-active: #fff !important;
+  min-height: 36px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+:deep(.login-card .n-form-item-label) {
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:deep(.login-card .n-input) {
+  --n-color: rgba(2, 6, 23, 0.4) !important;
+  --n-color-focus: rgba(2, 6, 23, 0.58) !important;
+  --n-text-color: #f8fafc !important;
+  --n-placeholder-color: #64748b !important;
+  --n-border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  --n-border-hover: 1px solid rgba(16, 185, 129, 0.72) !important;
+  --n-border-focus: 1px solid #10b981 !important;
+  --n-box-shadow-focus: 0 0 0 2px rgba(16, 185, 129, 0.15) !important;
+  --n-caret-color: #34d399 !important;
+  min-height: 40px;
+  border-radius: 11px;
+}
+
+:deep(.login-card .n-input .n-icon) {
+  color: #64748b;
+}
+
+:deep(.login-card .n-button) {
+  border-radius: 11px;
+}
+
+:deep(.login-card .n-button--primary-type) {
+  --n-color: #10b981 !important;
+  --n-color-hover: #059669 !important;
+  --n-color-pressed: #047857 !important;
+  --n-color-focus: #059669 !important;
+  --n-border: 1px solid #10b981 !important;
+  --n-border-hover: 1px solid #059669 !important;
+  --n-border-pressed: 1px solid #047857 !important;
+  --n-border-focus: 1px solid #059669 !important;
+  --n-ripple-color: #6ee7b7 !important;
+  box-shadow: 0 10px 24px rgba(16, 185, 129, 0.2);
+}
+
+:deep(.login-card .n-button--default-type) {
+  --n-color: rgba(15, 23, 42, 0.72) !important;
+  --n-color-hover: rgba(30, 41, 59, 0.9) !important;
+  --n-color-pressed: rgba(15, 23, 42, 0.92) !important;
+  --n-text-color: #cbd5e1 !important;
+  --n-text-color-hover: #f8fafc !important;
+  --n-text-color-pressed: #f8fafc !important;
+  --n-border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  --n-border-hover: 1px solid rgba(16, 185, 129, 0.55) !important;
+  --n-border-pressed: 1px solid rgba(16, 185, 129, 0.7) !important;
+}
+
+:deep(.login-card .n-button--text-type) {
+  --n-text-color-text: #34d399 !important;
+  --n-text-color-text-hover: #6ee7b7 !important;
+  --n-text-color-text-pressed: #10b981 !important;
+}
+
+:deep(.login-card .n-form-item-feedback-wrapper) {
+  color: #fca5a5;
 }
 
 @keyframes star-fall {
@@ -780,11 +933,19 @@ async function handleRegister() {
 
   :deep(.login-card) {
     border-radius: 22px;
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(18, 24, 43, 0.82);
   }
 
   :deep(.login-card .n-card-header) {
-    padding-top: 24px;
+    padding: 24px 22px 16px;
+  }
+
+  :deep(.login-card .n-card__content) {
+    padding: 0 22px 24px;
+  }
+
+  .login-brand-title {
+    font-size: 27px;
   }
 }
 
