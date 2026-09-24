@@ -61,6 +61,9 @@
     <n-modal
       v-model:show="showSaveDialog"
       preset="card"
+      :mask-closable="!saving"
+      :close-on-esc="!saving"
+      :closable="!saving"
       title="录制完成"
       style="width: min(600px, calc(100vw - 24px))"
     >
@@ -91,8 +94,8 @@
 
       <template #footer>
         <n-space justify="end">
-          <n-button @click="discardRecording">丢弃</n-button>
-          <n-button type="primary" @click="downloadRecording">
+          <n-button :disabled="saving" @click="discardRecording">丢弃</n-button>
+          <n-button type="primary" :loading="saving" @click="downloadRecording">
             <template #icon>
               <n-icon>
                 <i class="iconfont icon-download" aria-hidden="true"></i>
@@ -109,6 +112,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useMessage } from 'naive-ui';
+import { saveFile } from '@/services/saveFile';
 
 interface MediaRecorderProps {
   stream?: MediaStream | null;
@@ -126,6 +130,7 @@ const emit = defineEmits<{
 }>();
 
 const message = useMessage();
+const saving = ref(false);
 
 // 录制状态
 const isRecording = ref(false);
@@ -246,28 +251,23 @@ function handleRecordingStop() {
 }
 
 // 下载录制文件
-function downloadRecording() {
-  if (!recordedBlob.value) return;
-
-  const url = URL.createObjectURL(recordedBlob.value);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${fileName.value}.webm`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  message.success('下载成功');
-  showSaveDialog.value = false;
-  resetRecording();
+async function downloadRecording() {
+  if (!recordedBlob.value || saving.value) return;
+  saving.value = true;
+  try {
+    if (!await saveFile(recordedBlob.value, `${fileName.value}.webm`)) return;
+    message.success('保存成功');
+    showSaveDialog.value = false;
+    resetRecording();
+  } catch {
+    message.error('保存失败，请重试');
+  } finally {
+    saving.value = false;
+  }
 }
 
 // 丢弃录制
 function discardRecording() {
-  if (recordedUrl.value) {
-    URL.revokeObjectURL(recordedUrl.value);
-  }
   showSaveDialog.value = false;
   resetRecording();
   message.info('已丢弃录制');
@@ -275,6 +275,7 @@ function discardRecording() {
 
 // 重置录制状态
 function resetRecording() {
+  if (recordedUrl.value) URL.revokeObjectURL(recordedUrl.value);
   recordedChunks.value = [];
   recordedBlob.value = null;
   recordedUrl.value = '';

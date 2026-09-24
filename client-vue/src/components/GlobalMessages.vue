@@ -5,6 +5,7 @@
   </button>
 </template>
 <script setup lang="ts">
+import { isAppInBackground } from '@/services/appVisibility';
 import { computed, h, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNotification } from 'naive-ui';
@@ -85,7 +86,7 @@ async function catchUpGroups(userId: number, groupIds: number[], cursors: Record
           afterId = item.id;
           advanceGroupCursor(userId, groupId, item.id);
           if (item.userId === userId) continue;
-          const active = currentPath.value === `/group-chat/${groupId}` && !document.hidden;
+          const active = currentPath.value === `/group-chat/${groupId}` && !isAppInBackground();
           unread.receiveGroup(item.id, groupId, active);
         }
         if (!result.hasMore || !result.messages.length) { completed = true; break; }
@@ -106,13 +107,13 @@ function handlePrivate(data: any) {
   const senderId = Number(data.fromUserId);
   if (!senderId) return;
   const active = router.currentRoute.value.path === '/remote'
-    && unread.activePrivateUserId === senderId && !document.hidden;
+    && unread.activePrivateUserId === senderId && !isAppInBackground();
   unread.rememberSender(data.sender);
   if (active && data.id) void markMessagesAsRead([Number(data.id)]);
   if (!unread.receivePrivate(Number(data.id), senderId, active) || active) return;
   const sender = data.sender || socketStore.userList.find(user => user.id === senderId);
   if (!notificationService.shouldNotify('private')) return;
-  if (document.hidden) void notificationService.showMessage(sender?.nickname || sender?.username || '联系人', data.message, sender?.avatar,
+  if (isAppInBackground()) void notificationService.showMessage(sender?.nickname || sender?.username || '联系人', data.message, sender?.avatar,
     () => { void router.push({ path: '/remote', query: { tab: 'users', contact: String(senderId) } }); });
   else notificationService.playAlert('private');
   notification.create({
@@ -130,10 +131,10 @@ function handleGroup(data: any) {
     if (catchingUp.has(groupId)) liveDuringCatchUp.set(groupId, Math.max(liveDuringCatchUp.get(groupId) || 0, Number(data.id) || 0));
     else advanceGroupCursor(authStore.currentUser.id, groupId, Number(data.id));
   }
-  const active = router.currentRoute.value.path === `/group-chat/${groupId}` && !document.hidden;
+  const active = router.currentRoute.value.path === `/group-chat/${groupId}` && !isAppInBackground();
   if (!unread.receiveGroup(Number(data.id), groupId, active) || active) return;
   if (!notificationService.shouldNotify('group')) return;
-  if (document.hidden) void notificationService.showGroupMessage('群组消息', data.user?.nickname || data.user?.username || '群成员', data.message, data.user?.avatar,
+  if (isAppInBackground()) void notificationService.showGroupMessage('群组消息', data.user?.nickname || data.user?.username || '群成员', data.message, data.user?.avatar,
     () => { void router.push(`/group-chat/${groupId}`); });
   else notificationService.playAlert('group');
   notification.create({

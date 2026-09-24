@@ -166,6 +166,10 @@
 
           <!-- 通知设置 -->
           <n-tab-pane name="notification" tab="通知设置">
+            <div v-if="desktop" class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+              关闭窗口后 ToDesk 会留在系统托盘，继续接收消息和通话。点击托盘图标可返回，右键选择“退出 ToDesk”可结束应用。
+              系统通知由 Windows 通知设置控制；收到通知后可从托盘回到聊天。
+            </div>
             <p v-if="notificationSettings.error" role="alert" class="text-red-600 mb-4">
               {{ notificationSettings.error }}
               <n-button v-if="notificationSettings.status === 'error'" text type="primary" @click="notificationSettings.load(authStore.currentUser!.id)">重试</n-button>
@@ -322,7 +326,9 @@ import AvatarCropper from '@/components/AvatarCropper.vue';
 import { useNotificationSettingsStore } from '@/stores/notificationSettings';
 import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '@/utils/passwordPolicy';
+import { isTauri } from '@tauri-apps/api/core';
 
+const desktop = isTauri();
 const router = useRouter();
 const message = useMessage();
 const authStore = useAuthStore();

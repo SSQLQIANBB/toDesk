@@ -101,6 +101,7 @@
 </template>
 
 <script lang="ts" setup>
+import { isAppInBackground } from '@/services/appVisibility';
 import { nextTick, ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useSocketStore } from '@/stores/socket';
 import { usePrivateCallStore } from '@/stores/privateCall';
@@ -528,7 +529,7 @@ function handleIncomingCall(data: { from: string; callId?: string; deviceType: D
       tone: notificationService.getSoundPreferences().callTone,
     });
   }
-  if (document.hidden) {
+  if (isAppInBackground()) {
     const type = data.deviceType === DEVICE_TYPE.SCREEN ? 'screen' : data.deviceType === DEVICE_TYPE.AUDIO ? 'audio' : 'video';
     void notificationService.showCall(incomingCallFrom.value, type, data.user?.avatar, () => window.focus());
   }

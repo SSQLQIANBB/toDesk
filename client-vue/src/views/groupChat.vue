@@ -218,6 +218,7 @@
 </template>
 
 <script setup lang="ts">
+import { isAppInBackground } from '@/services/appVisibility';
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type ScrollbarInst } from 'naive-ui';
@@ -454,12 +455,13 @@ async function retryGroupMessage(msg: any) {
 }
 
 function clearVisibleUnread() {
-  if (!document.hidden) unread.readGroup(groupId.value);
+  if (!isAppInBackground()) unread.readGroup(groupId.value);
 }
 
 onMounted(async () => {
-  unread.readGroup(groupId.value);
+  clearVisibleUnread();
   document.addEventListener('visibilitychange', clearVisibleUnread);
+  window.addEventListener('focus', clearVisibleUnread);
   await loadGroupDetail();
   await loadGroupHistory();
   initSocket();
@@ -467,6 +469,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', clearVisibleUnread);
+  window.removeEventListener('focus', clearVisibleUnread);
   socket.value?.off('group_members', handleGroupMembers);
   socket.value?.off('group_member_joined', handleGroupMemberJoined);
   socket.value?.off('group_member_left', handleGroupMemberLeft);

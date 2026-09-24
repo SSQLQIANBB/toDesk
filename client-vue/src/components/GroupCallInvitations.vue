@@ -1,6 +1,7 @@
 <template><span v-if="false" /></template>
 
 <script setup lang="ts">
+import { isAppInBackground } from '@/services/appVisibility';
 import { onBeforeUnmount, watch } from 'vue';
 import { useDialog, type DialogReactive } from 'naive-ui';
 import { useRouter } from 'vue-router';
@@ -67,7 +68,7 @@ function handleStarted(data: GroupSession & {
     maskClosable: false,
   }));
   notificationService.startCallRingtone(`group:${eventId}`);
-  if (document.hidden) void notificationService.showCall(data.user?.nickname || data.user?.username || '群成员', type, undefined, () => window.focus());
+  if (isAppInBackground()) void notificationService.showCall(data.user?.nickname || data.user?.username || '群成员', type, undefined, () => window.focus());
 }
 
 function handleEnded(data: { groupId: number; type?: string; deviceType?: number }) {

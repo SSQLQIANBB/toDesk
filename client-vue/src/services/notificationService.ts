@@ -1,4 +1,5 @@
 import { callTones, messageTones, readSoundPreferences, type SoundKind, type SoundPreferences } from './notificationSounds';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 /**
  * 通知服务 - 管理桌面通知、声音提醒等
@@ -170,10 +171,18 @@ class NotificationService {
   async show(options: NotificationOptions): Promise<boolean> {
     if (!this.shouldNotify(options.type || 'system')) return false;
     this.playAlert(options.type || 'system', options.silent);
-    if (!this.enabled || this.getPermission() !== 'granted') return false;
+    if (!this.enabled) return false;
 
     // 创建通知
     try {
+      if (isTauri()) {
+        const { isPermissionGranted } = await import('@tauri-apps/plugin-notification');
+        if (!await isPermissionGranted()) return false;
+        // 桌面插件不实现 Web Notification 的 close/onclick，通知生命周期由 Windows 管理。
+        await invoke('plugin:notification|notify', { options: { title: options.title, body: options.body } });
+        return true;
+      }
+      if (this.getPermission() !== 'granted') return false;
       const notification = new Notification(options.title, {
         body: options.body,
         icon: options.icon || '/favicon.ico',
