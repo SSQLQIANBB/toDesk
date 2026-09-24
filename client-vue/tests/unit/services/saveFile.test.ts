@@ -15,7 +15,7 @@ beforeEach(() => {
 
 describe('桌面录制保存', () => {
   const arrayBuffer = vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
-  const blob = { arrayBuffer } as unknown as Blob;
+  const blob = { type: 'video/webm', arrayBuffer } as unknown as Blob;
 
   it('只写入用户选择的路径', async () => {
     save.mockResolvedValue('C:\\Users\\test\\Videos\\meeting.webm');
@@ -23,6 +23,12 @@ describe('桌面录制保存', () => {
     expect(await saveFile(blob, 'meeting.webm')).toBe(true);
     expect(save).toHaveBeenCalledWith({ defaultPath: 'meeting.webm', filters: [{ name: 'WebM 视频', extensions: ['webm'] }] });
     expect(writeFile).toHaveBeenCalledWith('C:\\Users\\test\\Videos\\meeting.webm', new Uint8Array([1, 2, 3]));
+  });
+
+  it('macOS MP4 录制使用匹配的保存类型', async () => {
+    save.mockResolvedValue('/tmp/meeting.mp4');
+    expect(await saveFile({ ...blob, type: 'video/mp4' } as Blob, 'meeting.mp4')).toBe(true);
+    expect(save).toHaveBeenCalledWith({ defaultPath: 'meeting.mp4', filters: [{ name: 'MP4 视频', extensions: ['mp4'] }] });
   });
 
   it('取消后不读取或写入数据', async () => {

@@ -10,9 +10,11 @@ export function selectAudioMimeType() {
     'audio/webm;codecs=opus',
     'audio/webm',
     'audio/ogg;codecs=opus',
+    'audio/mp4',
   ].find(type => MediaRecorder.isTypeSupported(type)) || '';
 }
 
 export function getAudioFileExtension(mimeType: string) {
+  if (mimeType.includes('mp4')) return 'm4a';
   return mimeType.includes('ogg') ? 'ogg' : 'webm';
 }

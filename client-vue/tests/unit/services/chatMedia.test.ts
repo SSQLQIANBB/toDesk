@@ -7,6 +7,13 @@ describe('聊天媒体工具', () => {
     expect(resolveChatMediaUrl('/uploads/a.png')).toMatch(/\/uploads\/a\.png$/);
   });
 
+  it('支持 macOS 的 MP4 语音格式', () => {
+    vi.stubGlobal('MediaRecorder', { isTypeSupported: (type: string) => type === 'audio/mp4' });
+    expect(selectAudioMimeType()).toBe('audio/mp4');
+    expect(getAudioFileExtension('audio/mp4')).toBe('m4a');
+    vi.unstubAllGlobals();
+  });
+
   it('选择浏览器支持的录音格式和扩展名', () => {
     vi.stubGlobal('MediaRecorder', { isTypeSupported: (type: string) => type === 'audio/webm' });
     expect(selectAudioMimeType()).toBe('audio/webm');

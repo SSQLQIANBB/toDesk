@@ -17,7 +17,9 @@ fn show_main(app: &tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| show_main(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            show_main(app)
+        }))
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 // 托盘退出时窗口可能隐藏或最小化，重新启动必须能看到主窗口。
@@ -35,7 +37,7 @@ fn main() {
                 .icon(app.default_window_icon().expect("missing app icon").clone())
                 .tooltip("ToDesk · 关闭窗口后仍在后台运行")
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(cfg!(target_os = "macos"))
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
                     "quit" => app.exit(0),
@@ -62,6 +64,15 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run ToDesk desktop");
+        .build(tauri::generate_context!())
+        .expect("failed to build ToDesk desktop")
+        .run(|app, event| {
+            // macOS 关闭窗口后，点击 Dock 图标重新显示主窗口。
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                show_main(app);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

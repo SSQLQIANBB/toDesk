@@ -88,7 +88,7 @@
           v-model:value="fileName"
           placeholder="请输入文件名"
         >
-          <template #suffix>.webm</template>
+          <template #suffix>.{{ recordingExtension }}</template>
         </n-input>
       </n-space>
 
@@ -113,6 +113,7 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { useMessage } from 'naive-ui';
 import { saveFile } from '@/services/saveFile';
+import { selectVideoMimeType, getVideoFileExtension } from '@/services/recordingFormat';
 
 interface MediaRecorderProps {
   stream?: MediaStream | null;
@@ -146,8 +147,10 @@ let mediaRecorder: MediaRecorder | null = null;
 let timerInterval: number | null = null;
 
 // 是否可以录制
+const recordingMimeType = computed(() => selectVideoMimeType(props.mimeType));
+const recordingExtension = computed(() => getVideoFileExtension(recordedBlob.value?.type || recordingMimeType.value));
 const canRecord = computed(() => {
-  return props.stream && MediaRecorder.isTypeSupported(props.mimeType);
+  return props.stream && !!recordingMimeType.value;
 });
 
 // 开始录制
@@ -160,7 +163,7 @@ async function startRecording() {
   try {
     // 创建 MediaRecorder
     const options: MediaRecorderOptions = {
-      mimeType: props.mimeType,
+      mimeType: recordingMimeType.value,
       videoBitsPerSecond: 2500000, // 2.5 Mbps
     };
 
@@ -238,7 +241,7 @@ function togglePause() {
 // 处理录制停止
 function handleRecordingStop() {
   // 创建 Blob
-  recordedBlob.value = new Blob(recordedChunks.value, { type: props.mimeType });
+  recordedBlob.value = new Blob(recordedChunks.value, { type: mediaRecorder?.mimeType || recordingMimeType.value });
   
   // 创建预览 URL
   recordedUrl.value = URL.createObjectURL(recordedBlob.value);
@@ -255,7 +258,7 @@ async function downloadRecording() {
   if (!recordedBlob.value || saving.value) return;
   saving.value = true;
   try {
-    if (!await saveFile(recordedBlob.value, `${fileName.value}.webm`)) return;
+    if (!await saveFile(recordedBlob.value, `${fileName.value}.${recordingExtension.value}`)) return;
     message.success('保存成功');
     showSaveDialog.value = false;
     resetRecording();

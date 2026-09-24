@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build --bundles nsis",
+    "desktop:build": "tauri build",
     "desktop:check": "tauri info",
     "desktop:web:dev": "vite --config vite.desktop.config.ts --mode desktop",
     "desktop:web:build": "vue-tsc -b && vite build --config vite.desktop.config.ts --mode desktop"
