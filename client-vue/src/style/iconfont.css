@@ -45,18 +45,18 @@
 }
 .n-input__prefix > .iconfont { font-size: var(--icon-size-inline); }
 /* Only strengthen outline glyphs; filled glyphs must keep their interior spacing. */
-.iconfont:is(.icon-desktop, .icon-video, .icon-microphone, .icon-user, .icon-gear,
+.iconfont:is(.icon-desktop, .icon-video, .icon-user, .icon-gear,
   .icon-message, .icon-info, .icon-id-card, .icon-search, .icon-video-off,
   .icon-microphone-off, .icon-arrow-left, .icon-plus, .icon-close) {
   -webkit-text-stroke: .018em currentColor;
 }
 .icon-desktop::before { content: "\e8dd"; }
-.icon-video::before { content: "\e617"; }
-.icon-microphone::before { content: "\e8c2"; }
+.icon-video::before { content: "\e634"; }
+.icon-microphone::before { content: "\e68e"; }
 .icon-phone::before { content: "\e8be"; }
-.icon-image::before { content: "\e8d3"; }
+.icon-image::before { content: "\e6d5"; }
 .icon-bars::before { content: "\e8dc"; }
-.icon-logout::before { content: "\e8d8"; }
+.icon-logout::before { content: "\e7ed"; }
 .icon-id-card::before { content: "\e91c"; }
 .icon-comments::before { content: "\e8bc"; }
 .icon-address-book::before { content: "\e610"; }
@@ -71,7 +71,7 @@
 .icon-plus::before { content: "\e8e1"; }
 .icon-warning::before { content: "\e8ed"; }
 .icon-info::before { content: "\e8e8"; }
-.icon-paper-plane::before { content: "\e893"; }
+.icon-paper-plane::before { content: "\e888"; }
 .icon-lock::before { content: "\e8d4"; }
 .icon-microphone-off::before { content: "\e629"; }
 .icon-video-off::before { content: "\e6f0"; }

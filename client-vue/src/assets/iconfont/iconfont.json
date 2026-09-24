@@ -6,6 +6,41 @@
   "description": "",
   "glyphs": [
     {
+      "icon_id": "16921565",
+      "name": "退出",
+      "font_class": "tuichu",
+      "unicode": "e7ed",
+      "unicode_decimal": 59373
+    },
+    {
+      "icon_id": "755560",
+      "name": "视频",
+      "font_class": "video",
+      "unicode": "e634",
+      "unicode_decimal": 58932
+    },
+    {
+      "icon_id": "5428409",
+      "name": "image",
+      "font_class": "image",
+      "unicode": "e6d5",
+      "unicode_decimal": 59093
+    },
+    {
+      "icon_id": "10972031",
+      "name": "mic",
+      "font_class": "mic",
+      "unicode": "e68e",
+      "unicode_decimal": 59022
+    },
+    {
+      "icon_id": "36209392",
+      "name": "send-fill",
+      "font_class": "send-fill",
+      "unicode": "e888",
+      "unicode_decimal": 59528
+    },
+    {
       "icon_id": "755616",
       "name": "直线",
       "font_class": "line",
