@@ -34,13 +34,15 @@ const photo = new Image();
 const sourceUrl = URL.createObjectURL(props.file);
 let disposed = false;
 const { transform, handlers } = useImageGestures(canvas, {
+  minScale: 0.25,
   maxScale: 3,
   enabled: () => ready.value && !uploading.value,
   constrain: value => {
     const side = canvas.value!.getBoundingClientRect().width;
     const fit = side / Math.min(photo.naturalWidth, photo.naturalHeight);
-    const maxX = (photo.naturalWidth * fit * value.scale - side) / 2;
-    const maxY = (photo.naturalHeight * fit * value.scale - side) / 2;
+    // 图片大于裁剪框时限制露白，小于裁剪框时允许在框内调整位置。
+    const maxX = Math.abs(photo.naturalWidth * fit * value.scale - side) / 2;
+    const maxY = Math.abs(photo.naturalHeight * fit * value.scale - side) / 2;
     return { scale: value.scale, x: Math.max(-maxX, Math.min(maxX, value.x)), y: Math.max(-maxY, Math.min(maxY, value.y)) };
   },
 });

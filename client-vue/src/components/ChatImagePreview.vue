@@ -39,6 +39,7 @@ const fitted = computed(() => {
   return { width: width * ratio, height: height * ratio };
 });
 const { transform, handlers, reset } = useImageGestures(viewport, {
+  minScale: 1,
   maxScale: 5,
   enabled: () => ready.value,
   constrain: value => {

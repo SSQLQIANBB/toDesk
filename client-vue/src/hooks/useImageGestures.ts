@@ -6,6 +6,7 @@ interface Point { x: number; y: number }
 export function useImageGestures(
   target: Ref<HTMLElement | null>,
   options: {
+    minScale: number;
     maxScale: number;
     enabled: () => boolean;
     constrain: (transform: ImageTransform) => ImageTransform;
@@ -21,7 +22,7 @@ export function useImageGestures(
 
   function update(ratio: number, from: Point, to: Point) {
     const current = transform.value;
-    const scale = Math.max(1, Math.min(options.maxScale, current.scale * ratio));
+    const scale = Math.max(options.minScale, Math.min(options.maxScale, current.scale * ratio));
     const factor = scale / current.scale;
     // 保持两指中点下的图像位置，缩放时允许同时平移。
     transform.value = options.constrain({

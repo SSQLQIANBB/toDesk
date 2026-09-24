@@ -98,6 +98,32 @@ for (const width of [1440, 390]) {
     await page.mouse.down(); await page.mouse.move(bounds.x + 170, bounds.y + 100); await page.mouse.up();
     expect(await crop.locator('canvas').evaluate(canvas => Array.from((canvas as HTMLCanvasElement).getContext('2d')!.getImageData(256, 256, 1, 1).data))).toEqual([37, 99, 235, 255]);
     await page.screenshot({ path: testInfo.outputPath('avatar-crop.png') });
+    await pinch(page, canvas, 200, 40);
+    await pinch(page, canvas, 200, 80);
+    const smallImageBounds = () => canvas.evaluate(node => {
+      const pixels = (node as HTMLCanvasElement).getContext('2d')!.getImageData(0, 0, 512, 512).data;
+      let left = 512, right = 0, top = 512, bottom = 0;
+      for (let y = 0; y < 512; y++) {
+        for (let x = 0; x < 512; x++) {
+          const index = (y * 512 + x) * 4;
+          if (pixels[index] === 255 && pixels[index + 1] === 255 && pixels[index + 2] === 255) continue;
+          left = Math.min(left, x); right = Math.max(right, x);
+          top = Math.min(top, y); bottom = Math.max(bottom, y);
+        }
+      }
+      return { left, top, width: right - left + 1, height: bottom - top + 1 };
+    });
+    const small = await smallImageBounds();
+    expect(small.width).toBeGreaterThanOrEqual(256);
+    expect(small.width).toBeLessThanOrEqual(257);
+    expect(small.height).toBe(128);
+    await page.mouse.move(bounds.x + 140, bounds.y + 140);
+    await page.mouse.down(); await page.mouse.move(bounds.x + 140, bounds.y + 180); await page.mouse.up();
+    const moved = await smallImageBounds();
+    expect(moved.top).toBeGreaterThan(small.top);
+    expect(moved.height).toBeGreaterThanOrEqual(128);
+    expect(moved.height).toBeLessThanOrEqual(129);
+    await page.screenshot({ path: testInfo.outputPath('avatar-crop-small.png') });
     expectedJpeg = Buffer.from(await canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL('image/jpeg', .9).split(',')[1]!), 'base64');
     await crop.getByRole('button', { name: '确认裁剪并上传' }).click();
     await expect(crop).toHaveCount(0);

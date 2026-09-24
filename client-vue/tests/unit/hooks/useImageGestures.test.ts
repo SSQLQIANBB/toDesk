@@ -2,20 +2,32 @@ import { ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { useImageGestures } from '../../../src/hooks/useImageGestures';
 
-function setup() {
+function setup(minScale = 1) {
   const element = document.createElement('div');
   element.getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 300 }) as DOMRect;
   element.setPointerCapture = vi.fn();
   element.hasPointerCapture = () => false;
   const enabled = ref(true);
   const gestures = useImageGestures(ref(element), {
-    maxScale: 3, enabled: () => enabled.value, constrain: value => value,
+    minScale, maxScale: 3, enabled: () => enabled.value, constrain: value => value,
   });
   const event = (pointerId: number, x: number, y = 150) => ({ pointerId, clientX: x, clientY: y, button: 0 }) as PointerEvent;
   return { ...gestures, enabled, event };
 }
 
 describe('图片手势', () => {
+  it('头像可缩小至初始尺寸的四分之一，并可继续放大', () => {
+    const { handlers, transform, event } = setup(0.25);
+    handlers.pointerdown(event(1, 50));
+    handlers.pointerdown(event(2, 250));
+    handlers.pointermove(event(2, 100));
+    expect(transform.value.scale).toBe(0.25);
+    handlers.pointermove(event(2, 75));
+    expect(transform.value.scale).toBe(0.25);
+    handlers.pointermove(event(2, 100));
+    expect(transform.value.scale).toBe(0.5);
+  });
+
   it('围绕双指中点缩放，抬起一指后继续拖动不会跳位', () => {
     const { handlers, transform, event } = setup();
     handlers.pointerdown(event(1, 100));
