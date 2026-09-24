@@ -68,7 +68,7 @@ pnpm desktop:build
 pnpm --filter client-vue exec playwright test --config playwright.native.config.ts
 ```
 
-Chrome 测试验证桌面前端产物的 hash 路由、刷新、服务地址、CSP 及页面。Windows CI 还会启动 Release 程序，验证 WebView2 登录页、刷新、原生通知权限 IPC 和重复启动的单实例行为，截图随 `Windows-validation` artifact 保存。原生测试仅在测试进程中启用本地调试端口，不改动发布配置；实现参照 [Playwright WebView2 文档](https://playwright.dev/docs/webview2)。安装后仍需检查：
+Chrome 测试验证桌面前端产物的 hash 路由、刷新、服务地址、CSP 及页面。Windows CI 先生成正式安装包，再构建启用本地调试端口的 Release 测试程序，验证 WebView2 登录页、刷新、原生通知权限 IPC、媒体 API 可用性和重复启动的单实例行为，截图随 `Windows-validation` artifact 保存。测试配置由工作流临时生成，保留正式窗口配置，仅追加调试参数和独立数据目录；不进入已生成的安装包。WebView2 150+ 会忽略管理员进程的调试环境变量，因此通过窗口 `additionalBrowserArgs` 配置传入，参见 [上游说明](https://github.com/tauri-apps/wry/issues/1782) 与 [Playwright WebView2 文档](https://playwright.dev/docs/webview2)。本地运行原生测试前也需按工作流的 `Build native test binary` 步骤构建测试程序。安装后仍需检查：
 
 1. 启动、重复启动、缩放、最大化、关闭到托盘、恢复、退出后重新进入。
 2. 登录后私聊/群聊收发、断网重连、切换账号，确认通知设置按账号恢复。
@@ -79,4 +79,4 @@ Chrome 测试验证桌面前端产物的 hash 路由、刷新、服务地址、C
 
 ## 本次环境限制
 
-当前开发机缺少 MSVC / Windows SDK，安装 Build Tools 被执行策略拒绝；Rust 安装下载也未完成。原生编译、安装包产出、真实 WebView2 音视频/屏幕共享和系统通知验收需在具备上述依赖的 Windows 环境完成，不能据前端测试宣称已通过。
+当前开发机缺少 MSVC / Windows SDK，安装 Build Tools 被自动审批拒绝；Rust 安装下载也未完成。已通过 GitHub Windows CI 完成 Rust 编译与 NSIS 安装包构建。真实设备的音视频、屏幕共享、安装后的系统通知和上述人工验收项仍需验证，不能据前端测试或 API 可用性检查宣称已通过。

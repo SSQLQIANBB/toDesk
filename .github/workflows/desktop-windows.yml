@@ -41,6 +41,17 @@ jobs:
       - run: pnpm --filter client-vue test
       - run: cargo check --manifest-path client-vue/src-tauri/Cargo.toml
       - run: pnpm desktop:build
+      - name: Build native test binary
+        shell: pwsh
+        run: |
+          # WebView2 150+ ignores debugging environment variables on elevated runners.
+          # Build the test binary separately; the already bundled installer stays unchanged.
+          $config = Get-Content client-vue/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $config.app.windows[0] | Add-Member additionalBrowserArgs '--remote-debugging-port=9222'
+          $config.app.windows[0] | Add-Member dataDirectory (Join-Path $env:RUNNER_TEMP 'todesk-webview-test')
+          $testConfig = Join-Path $env:RUNNER_TEMP 'todesk-test-config.json'
+          @{ app = @{ windows = $config.app.windows } } | ConvertTo-Json -Depth 10 | Set-Content $testConfig
+          pnpm --filter client-vue exec tauri build --no-bundle --config $testConfig
       - run: pnpm --filter client-vue exec playwright test --config playwright.native.config.ts
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
