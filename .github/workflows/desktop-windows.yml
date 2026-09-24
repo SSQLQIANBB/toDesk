@@ -48,7 +48,7 @@ jobs:
           # Build the test binary separately; the already bundled installer stays unchanged.
           $config = Get-Content client-vue/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
           $config.app.windows[0] | Add-Member additionalBrowserArgs '--remote-debugging-port=9222'
-          $config.app.windows[0] | Add-Member dataDirectory (Join-Path $env:RUNNER_TEMP 'todesk-webview-test')
+          $config.app.windows[0] | Add-Member dataDirectory 'native-test'
           $testConfig = Join-Path $env:RUNNER_TEMP 'todesk-test-config.json'
           @{ app = @{ windows = $config.app.windows } } | ConvertTo-Json -Depth 10 | Set-Content $testConfig
           pnpm --filter client-vue exec tauri build --no-bundle --config $testConfig
