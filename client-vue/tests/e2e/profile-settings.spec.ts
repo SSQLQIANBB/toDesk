@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { pinch } from './image-gestures';
+
+test.use({ hasTouch: true });
 
 const defaults = {
   desktopEnabled: true, messagePreview: true, notifyPrivateMessage: true, notifyGroupMessage: true,
@@ -57,16 +60,19 @@ for (const width of [1440, 390]) {
       const context = canvas.getContext('2d')!;
       context.fillStyle = '#2563eb'; context.fillRect(0, 0, 400, 400);
       context.fillStyle = '#f97316'; context.fillRect(400, 0, 400, 400);
+      context.fillStyle = '#22c55e'; context.fillRect(390, 190, 20, 20);
       return canvas.toDataURL('image/png').split(',')[1]!;
     });
     const file = { name: 'crop.png', mimeType: 'image/png', buffer: Buffer.from(image, 'base64') };
     let uploaded = false;
+    let expectedJpeg: Buffer;
     await page.route('**/api/files/upload', route => {
       uploaded = true;
       const body = route.request().postDataBuffer()!.toString('latin1');
       expect(body).toContain('filename="avatar.jpg"');
       expect(body).toContain('image/jpeg');
       expect(body).toContain('avatar');
+      expect(route.request().postDataBuffer()!.includes(expectedJpeg)).toBe(true);
       return route.fulfill({ json: { file: { fileUrl: '/cropped-avatar.jpg' } } });
     });
     await page.locator('input[type="file"]').setInputFiles(file);
@@ -76,12 +82,23 @@ for (const width of [1440, 390]) {
     await expect(crop).toHaveCount(0);
     expect(uploaded).toBe(false);
     await page.locator('input[type="file"]').setInputFiles(file);
-    await crop.getByRole('slider', { name: '头像缩放' }).fill('2');
+    await expect(crop.getByRole('button', { name: '确认裁剪并上传' })).toBeEnabled();
+    await expect(crop.getByRole('slider')).toHaveCount(0);
+    const canvas = crop.locator('canvas');
+    const original = await canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL());
+    await pinch(page, canvas, 80, 200);
+    expect(await canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL())).not.toBe(original);
+    await pinch(page, canvas, 200, 80);
+    await pinch(page, canvas, 80, 160);
+    await expect(canvas).toHaveCSS('border-radius', '0px');
+    await expect(crop.locator('.crop-mask')).toHaveCSS('pointer-events', 'none');
+    await expect(crop.locator('.crop-mask')).toHaveCSS('box-shadow', 'rgba(0, 0, 0, 0.55) 0px 0px 0px 200px');
     const bounds = (await crop.locator('canvas').boundingBox())!;
     await page.mouse.move(bounds.x + 100, bounds.y + 100);
     await page.mouse.down(); await page.mouse.move(bounds.x + 170, bounds.y + 100); await page.mouse.up();
     expect(await crop.locator('canvas').evaluate(canvas => Array.from((canvas as HTMLCanvasElement).getContext('2d')!.getImageData(256, 256, 1, 1).data))).toEqual([37, 99, 235, 255]);
     await page.screenshot({ path: testInfo.outputPath('avatar-crop.png') });
+    expectedJpeg = Buffer.from(await canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL('image/jpeg', .9).split(',')[1]!), 'base64');
     await crop.getByRole('button', { name: '确认裁剪并上传' }).click();
     await expect(crop).toHaveCount(0);
     expect(uploaded).toBe(true);
@@ -91,6 +108,57 @@ for (const width of [1440, 390]) {
     await expect(page.getByText('保存成功', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '保存修改' })).toHaveCSS('--n-color', '#2563eb');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
+for (const path of ['/group-chat/7', '/remote']) {
+  test(`图片预览支持双指缩放、拖动、关闭后重新打开 ${path}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await prepare(page, { settings: { ...defaults } });
+    await page.route('https://chat-images.test/preview.svg', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#2563eb"/><circle cx="400" cy="300" r="100" fill="#f97316"/></svg>' }));
+    await page.route(/\/api\/messages\/(group\/7\?|private\?)/, route => route.fulfill({ json: { messages: [{
+      id: 1, userId: 2, fromUserId: 2, toUserId: 1, groupId: 7, sender: { id: 2, username: '测试联系人' }, message: '', messageType: 'image',
+      createdAt: '2026-09-24T04:00:00Z', media: { url: 'https://chat-images.test/preview.svg', mimeType: 'image/svg+xml' },
+    }], hasMore: false } }));
+    await page.goto(path);
+    if (path === '/remote') {
+      await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
+      await page.locator('.contact-item').first().click();
+    }
+    await page.getByRole('button', { name: '聊天图片', exact: true }).click();
+    const preview = page.getByRole('dialog', { name: '图片预览', exact: true });
+    const viewport = preview.locator('.image-preview__viewport');
+    const image = preview.locator('img');
+    await expect(image).toBeVisible();
+    await pinch(page, viewport, 80, 200);
+    const matrix = () => image.evaluate(node => {
+      const transform = new DOMMatrix(getComputedStyle(node).transform);
+      return { scale: transform.a, x: transform.e };
+    });
+    expect((await matrix()).scale).toBeCloseTo(2.5, 1);
+    const box = (await viewport.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + 50, box.y + box.height / 2); await page.mouse.up();
+    expect((await matrix()).x).toBeGreaterThan(40);
+    await pinch(page, viewport, 200, 80);
+    expect((await matrix()).scale).toBeCloseTo(1, 1);
+    await pinch(page, viewport, 80, 200);
+    await page.screenshot({ path: testInfo.outputPath('image-preview-pinch.png') });
+    expect(await page.evaluate(() => visualViewport!.scale)).toBe(1);
+    await preview.getByRole('button', { name: '关闭图片预览' }).click();
+    await expect(preview).toHaveCount(0);
+    await page.getByRole('button', { name: '聊天图片', exact: true }).click();
+    await expect(image).toBeVisible();
+    expect((await matrix()).scale).toBe(1);
+    await viewport.hover();
+    await page.mouse.wheel(0, -350);
+    await expect.poll(async () => (await matrix()).scale).toBeGreaterThan(1);
+    await preview.getByRole('button', { name: '重置', exact: true }).click();
+    expect((await matrix()).scale).toBe(1);
+    await preview.getByRole('button', { name: '向右旋转' }).click();
+    await expect(image).toHaveCSS('transform', 'matrix(0, 1, -1, 0, 0, 0)');
+    await page.keyboard.press('Escape');
+    await expect(preview).toHaveCount(0);
   });
 }
 

@@ -18,13 +18,14 @@ const voice = {
 };
 
 describe('聊天媒体消息', () => {
-  it('图片使用 Naive UI 站内预览，不渲染跳转链接', () => {
+  it('图片保留 Naive UI 缩略图并使用手势预览，不渲染跳转链接', () => {
     const wrapper = shallowMount(ChatImageMessage, {
       props: { media: image, isMine: false },
     });
 
     expect(wrapper.find('a').exists()).toBe(false);
     expect(wrapper.findComponent(NImage).props('src')).toBe(image.url);
+    expect(wrapper.findComponent(NImage).props('previewDisabled')).toBe(true);
   });
 
   it('语音显示为消息气泡并可点击播放', async () => {

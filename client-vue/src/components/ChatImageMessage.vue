@@ -5,6 +5,8 @@
     :src="resolvedUrl"
     :alt="media.fileName || '聊天图片'"
     object-fit="contain"
+    preview-disabled
+    :img-props="{ onClick: () => previewOpen = true, onKeydown: openWithKeyboard, tabindex: 0, role: 'button' }"
   >
     <template #placeholder>
       <span class="chat-image__status chat-image__loading" role="status">图片加载中…</span>
@@ -13,16 +15,24 @@
       <span class="chat-image__status chat-image__error" role="status">图片加载失败</span>
     </template>
   </n-image>
+  <ChatImagePreview v-if="previewOpen" :src="resolvedUrl" :alt="media.fileName || '聊天图片'" @close="previewOpen = false" />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { NImage } from 'naive-ui';
 import type { ChatMediaPayload } from '@/api/message';
 import { resolveChatMediaUrl } from '@/services/chatMedia';
+import ChatImagePreview from './ChatImagePreview.vue';
 
 const props = defineProps<{ media: ChatMediaPayload; isMine: boolean }>();
 const resolvedUrl = computed(() => resolveChatMediaUrl(props.media.url));
+const previewOpen = ref(false);
+function openWithKeyboard(event: KeyboardEvent) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  previewOpen.value = true;
+}
 </script>
 
 <style scoped>
