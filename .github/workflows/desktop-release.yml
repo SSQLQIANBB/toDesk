@@ -44,6 +44,10 @@ jobs:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
       PRERELEASE: ${{ needs.validate.outputs.prerelease }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           pattern: ToDesk-*
@@ -63,17 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > release-notes.md <<'NOTES'
-          ## 安装包
-          - Windows x64：下载 `.exe` 安装程序。
-          - Apple 芯片 Mac：下载文件名含 `aarch64` 的 `.dmg`。
-          - Intel Mac：下载文件名含 `x64` 的 `.dmg`。
-          - macOS：打开 DMG，将 ToDesk 拖入 Applications。
-
-          当前 Windows 安装包未签名，macOS 使用临时签名、未经过 Apple 公证，首次打开可能被系统拦截。
-          安装包连接构建时配置的在线服务；本次发布不包含应用内自动更新。
-          可使用 SHA256SUMS.txt 校验下载文件。
-          NOTES
+          node scripts/desktop-release-notes.mjs > release-notes.md
           if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2>/dev/null; then
             node -e 'if (!JSON.parse(require("fs").readFileSync("release-state.json")).isDraft) throw Error("该版本已发布，请使用新版本号")'
           else
@@ -81,5 +75,9 @@ jobs:
               --title "ToDesk Desktop v${RELEASE_VERSION}" \
               --notes-file release-notes.md --generate-notes
           fi
-          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          gh release upload "$RELEASE_TAG" --clobber \
+            "release-assets/ToDesk_${RELEASE_VERSION}_x64-setup.exe#Windows 安装包（64 位 Intel / AMD）.exe" \
+            "release-assets/ToDesk_${RELEASE_VERSION}_aarch64.dmg#macOS 安装包（Apple 芯片 / M 系列）.dmg" \
+            "release-assets/ToDesk_${RELEASE_VERSION}_x64.dmg#macOS 安装包（Intel 芯片）.dmg" \
+            "release-assets/SHA256SUMS.txt#SHA-256 校验文件（不是安装包）"
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE"

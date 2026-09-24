@@ -36,6 +36,8 @@ git push origin desktop-v0.1.0
 
 文件名中的版本随配置变化。Mac 需要 macOS 12 或更新版本。
 
+每次发布会自动在说明顶部生成 Windows、Mac（Apple 芯片）、Mac（Intel 芯片）三个中文下载入口，直接指向该版本的安装包。Mac 用户可在苹果菜单 →“关于本机”查看芯片类型。GitHub 自动附带的 `Source code (zip)` 和 `Source code (tar.gz)` 是源码，不是安装包；`SHA256SUMS.txt` 仅用于校验。
+
 ## 服务地址与签名
 
 - 安装包默认连接 `https://www.sycsq.top`。可在仓库 Settings → Secrets and variables → Actions → Variables 中设置 `DESKTOP_SERVER_URL`，填不含 `/api` 的 HTTPS 根地址。
