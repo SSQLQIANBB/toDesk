@@ -30,6 +30,8 @@ test('Windows 客户端启动、原生 IPC、刷新与单实例', async ({}, tes
     await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible();
+    await expect(page.locator('.n-input').filter({ has: page.locator('input[type="password"]') })).toHaveCSS('display', /^(inline-)?flex$/);
+    await expect(page.locator('.n-tabs-rail')).toHaveCSS('display', 'flex');
     expect(await page.evaluate(() => {
       const native = window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string) => Promise<boolean> } };
       return native.__TAURI_INTERNALS__.invoke('plugin:notification|is_permission_granted');

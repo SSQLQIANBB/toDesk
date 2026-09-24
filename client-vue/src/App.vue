@@ -63,6 +63,13 @@ watch(
   box-sizing: border-box;
 }
 
+/* 保持入口 HTML 无内联 style，避免原生 CSP nonce 阻断组件动态样式。 */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
 #app {
   width: 100%;
   height: 100vh;
