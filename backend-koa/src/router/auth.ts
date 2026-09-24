@@ -2,6 +2,7 @@ import Router from 'koa-router';
 import * as authController from '../controller/authController';
 import * as emailController from '../controller/authEmailController';
 import { authMiddleware } from '../middleware/auth';
+import { getNotificationSettings, updateNotificationSettings } from '../controller/notificationSettingsController';
 
 const router = new Router({ prefix: '/api/auth' });
 
@@ -18,6 +19,8 @@ router.post('/reset-password', emailController.resetPassword);
 // 需要认证的路由
 router.get('/me', authMiddleware, authController.getCurrentUser);
 router.put('/me', authMiddleware, authController.updateUser);
+router.get('/notification-settings', authMiddleware, getNotificationSettings);
+router.put('/notification-settings', authMiddleware, updateNotificationSettings);
 router.post('/logout', authMiddleware, authController.logout);
 router.post('/change-password', authMiddleware, authController.changePassword);
 router.get('/email', authMiddleware, emailController.getEmailStatus);

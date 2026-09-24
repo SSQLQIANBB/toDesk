@@ -4,12 +4,14 @@ import GroupMember from './GroupMember';
 import Message from './Message';
 import GroupMessage from './GroupMessage';
 import UserEmail from './UserEmail';
+import UserNotificationSettings from './UserNotificationSettings';
 import MessageReceipt from './MessageReceipt';
 import GroupInvitation from './GroupInvitation';
 import RefreshToken from './RefreshToken';
 import File from './File';
 
 // 定义模型关联关系
+UserNotificationSettings.belongsTo(User, { foreignKey: 'userId', onDelete: 'CASCADE' });
 
 // User 和 Group 的所有者关系
 User.hasMany(Group, { foreignKey: 'ownerId', as: 'ownedGroups' });
