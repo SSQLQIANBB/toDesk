@@ -1,0 +1,81 @@
+# Windows 桌面版
+
+桌面客户端使用 Tauri 2 + WebView2，内嵌现有 Vue 页面，连接现有 Koa / Socket.IO 服务。聊天、群组、音视频、屏幕共享、头像裁剪和账号通知偏好复用网页实现。
+
+## 已接入能力
+
+- 原生窗口支持缩放、最小化和最大化，恢复上次窗口大小与位置。
+- 关闭窗口隐藏到托盘，保留消息连接和正在进行的通话；点击托盘或重复启动返回现有窗口；托盘菜单“退出 ToDesk”结束进程。
+- Windows 系统通知复用账号级通知类型、内容预览和声音设置。切换到其他应用也视为后台，回到窗口后清除当前会话未读。
+- 录制文件使用系统另存为对话框。取消保留录制内容，写入失败可重试；文件权限只授予用户所选路径。
+- PNG/JPEG 头像通过系统文件选择器上传，20 MB 上限和裁剪流程与网页一致。
+- NSIS 安装包按当前用户安装，无 WebView2 时下载安装运行时。
+
+通知插件在 Windows 中需要安装后的应用才能显示正式名称和图标；系统通知点击跳转会话尚不支持，请通过托盘返回聊天。系统“请勿打扰”或禁用 ToDesk 通知仍会影响提醒。参考 [Tauri 通知说明](https://v2.tauri.app/plugin/notification/)。
+
+## 构建环境
+
+1. Windows 10/11 x64，Node.js 22，pnpm 10.14.0。
+2. 安装 Visual Studio 2022 Build Tools，选择“使用 C++ 的桌面开发”，包含 MSVC 和 Windows 10/11 SDK。
+3. 安装 Rust stable，默认工具链 `x86_64-pc-windows-msvc`，重开终端确保 `cargo`、`rustc` 在 PATH。
+4. 安装 Microsoft Edge WebView2 Evergreen Runtime。
+
+官方说明：[Windows 前置依赖](https://v2.tauri.app/start/prerequisites/#windows)。
+
+## 服务地址
+
+在仓库根目录执行：
+
+```powershell
+pnpm install --frozen-lockfile
+Copy-Item client-vue/.env.desktop.example client-vue/.env.desktop
+```
+
+编辑 `.env.desktop`：
+
+| 变量 | 要求 | 来源与用途 |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | 安装包构建必填；公开可分享 | 部署负责人提供的 API 站点根地址，不含 `/api`；本地联调可用 `http://localhost:3000` |
+| `VITE_SOCKET_URL` | 安装包构建必填；公开可分享 | Socket.IO 站点根地址，不含 `/meeting`；通常与 API 相同 |
+
+分发安装包前必须替换示例的 localhost 地址为实际 HTTPS 服务。环境文件不提交 Git；也可使用同名进程环境变量覆盖。数据库、JWT、七牛等密钥只保留在服务端。
+
+桌面生产页面使用本地源 `http://tauri.localhost`，不能依赖网页 Nginx 的同源代理。服务端须允许该源的 CORS 请求，并提供 `/meeting` WebSocket；当前后端已有跨源配置。Tauri 权限仅对内嵌主窗口开放，不授予远程网页原生权限。
+
+## 开发与打包
+
+```powershell
+pnpm desktop:check
+pnpm desktop:dev
+pnpm desktop:build
+```
+
+开发模式固定使用 1420 端口（占用时报错，避免原生窗口打开错误页面），可不设置服务地址，使用现有 localhost:3000 代理。网页仍使用原来的 `pnpm client`。
+
+安装包位置：`client-vue/src-tauri/target/release/bundle/nsis/`。当前没有配置代码签名或自动更新，构建得到的是未签名安装包。
+
+GitHub Actions 的 **Windows Desktop** 工作流在桌面功能分支推送和 PR 中检查编译与打包。分支构建默认连接现有站点 `https://www.sycsq.top`，可通过仓库变量 `DESKTOP_SERVER_URL` 覆盖；手动运行时填写的地址优先级最高。分支或手动构建成功后，从 `ToDesk-Windows-x64` artifact 下载安装包。不会发布 GitHub Release 或触发网页部署。
+
+## 验证与验收
+
+```powershell
+pnpm --filter client-vue test
+pnpm --filter client-vue typecheck
+pnpm --filter client-vue desktop:web:build
+pnpm --filter client-vue exec playwright test --config playwright.desktop.config.ts
+cargo check --manifest-path client-vue/src-tauri/Cargo.toml
+pnpm desktop:build
+```
+
+Chrome 测试只验证桌面前端产物的 hash 路由、刷新、服务地址及页面，不能替代 WebView2 验收。安装后还需检查：
+
+1. 启动、重复启动、缩放、最大化、关闭到托盘、恢复、退出后重新进入。
+2. 登录后私聊/群聊收发、断网重连、切换账号，确认通知设置按账号恢复。
+3. 后台收到私信、群消息、来电；关闭通知或预览后符合设置；回到会话清除未读。
+4. 允许/拒绝摄像头与麦克风，接听/挂断，选择/取消屏幕共享，结束后设备轨道停止。
+5. 通话期间关闭到托盘仍能继续；退出应用后摄像头、麦克风及共享释放。
+6. 头像选择、裁剪、取消、20 MB 限制；录制另存为、取消、覆盖和写入失败重试。
+
+## 本次环境限制
+
+当前开发机缺少 MSVC / Windows SDK，安装 Build Tools 被执行策略拒绝；Rust 安装下载也未完成。原生编译、安装包产出、真实 WebView2 音视频/屏幕共享和系统通知验收需在具备上述依赖的 Windows 环境完成，不能据前端测试宣称已通过。
