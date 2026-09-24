@@ -2,7 +2,7 @@ name: Windows Desktop
 
 on:
   push:
-    branches: ['codex/desktop-tauri']
+    branches: ['feature/desktop-tauri']
   workflow_dispatch:
     inputs:
       server_url:
