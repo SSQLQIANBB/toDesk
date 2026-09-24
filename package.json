@@ -8,7 +8,10 @@
     "typecheck": "pnpm --filter backend-koa typecheck && pnpm --filter client-vue typecheck",
     "env:check": "pnpm --filter backend-koa env:check",
     "server": "pnpm --filter backend-koa dev",
-    "client": "pnpm --filter client-vue dev"
+    "client": "pnpm --filter client-vue dev",
+    "desktop:dev": "pnpm --filter client-vue desktop:dev",
+    "desktop:build": "pnpm --filter client-vue desktop:build",
+    "desktop:check": "pnpm --filter client-vue desktop:check"
   },
   "keywords": [],
   "author": "",

@@ -1,4 +1,4 @@
-import { createWebHistory, createRouter } from 'vue-router';
+import { createWebHistory, createWebHashHistory, createRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { pinia } from '@/stores';
 import { getAuthRedirect } from '@/services/authNavigation';
@@ -82,7 +82,7 @@ const routes = [
 
 const router = createRouter({
   routes,
-  history: createWebHistory(),
+  history: import.meta.env.VITE_DESKTOP === 'true' ? createWebHashHistory() : createWebHistory(),
 });
 
 // 路由守卫
