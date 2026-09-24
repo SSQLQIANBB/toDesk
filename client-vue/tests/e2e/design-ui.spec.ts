@@ -145,6 +145,11 @@ for (const width of [1440, 375]) {
 test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
 
 async function prepare(page: Page) {
+  const settings = {
+    desktopEnabled: true, messagePreview: true, notifyPrivateMessage: true, notifyGroupMessage: true,
+    notifyCall: true, notifyInvitation: true, messageEnabled: true, callEnabled: true,
+    messageTone: 'default', callTone: 'default',
+  };
   const user = { id: 1, username: 'owner', nickname: 'Prometheus', status: 'online' };
   const group = { id: 7, name: '同学群', ownerId: 1, role: 'owner', memberCount: 3 };
   await page.addInitScript(() => localStorage.setItem('__STORAGE_PERSIST_AUTH_', JSON.stringify({ token: 'ui-test', refreshToken: 'ui-refresh' })));
@@ -152,7 +157,11 @@ async function prepare(page: Page) {
   await page.route(/\/api\/(auth|groups|messages|invitations)(?:\/|\?|$)/, route => {
     const url = route.request().url();
     let body: unknown = { invitations: [], messages: [], count: 0, hasMore: false, cursors: {} };
-    if (url.includes('/auth/me')) body = { user };
+    if (url.includes('/auth/notification-settings')) {
+      if (route.request().method() === 'PUT') Object.assign(settings, route.request().postDataJSON());
+      body = { settings };
+    }
+    else if (url.includes('/auth/me')) body = { user };
     else if (url.includes('/auth/users')) body = { users: [user, { id: 4, username: 'monkey', nickname: '猴子他爹' }, { id: 5, username: 'asd' }] };
     else if (url.includes('/messages/private?')) body = { messages: [
       { id: 91, fromUserId: 4, toUserId: 1, message: '一起开始远程协作吧', messageType: 'text', createdAt: '2026-09-20T04:00:00Z', isRead: true },

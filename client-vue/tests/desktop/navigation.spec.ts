@@ -1,7 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+const { app: { security: { csp } } } = JSON.parse(readFileSync(new URL('../../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
 
 test('桌面构建使用 hash 路由，刷新个人中心并连接配置的服务端', async ({ page }, testInfo) => {
   const apiRequests: string[] = [];
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.route('http://127.0.0.1:1421/', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': csp } });
+  });
   await page.addInitScript(() => {
     localStorage.setItem('__STORAGE_PERSIST_AUTH_', JSON.stringify({ token: 'desktop-test', refreshToken: 'test' }));
   });
@@ -27,5 +36,6 @@ test('桌面构建使用 hash 路由，刷新个人中心并连接配置的服�
   expect(apiRequests.length).toBeGreaterThan(0);
   expect(apiRequests.every(origin => origin !== 'http://127.0.0.1:1421')).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(pageErrors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('desktop-profile.png') });
 });

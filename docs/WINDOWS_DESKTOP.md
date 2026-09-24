@@ -65,9 +65,10 @@ pnpm --filter client-vue desktop:web:build
 pnpm --filter client-vue exec playwright test --config playwright.desktop.config.ts
 cargo check --manifest-path client-vue/src-tauri/Cargo.toml
 pnpm desktop:build
+pnpm --filter client-vue exec playwright test --config playwright.native.config.ts
 ```
 
-Chrome 测试只验证桌面前端产物的 hash 路由、刷新、服务地址及页面，不能替代 WebView2 验收。安装后还需检查：
+Chrome 测试验证桌面前端产物的 hash 路由、刷新、服务地址、CSP 及页面。Windows CI 还会启动 Release 程序，验证 WebView2 登录页、刷新、原生通知权限 IPC 和重复启动的单实例行为，截图随 `Windows-validation` artifact 保存。原生测试仅在测试进程中启用本地调试端口，不改动发布配置；实现参照 [Playwright WebView2 文档](https://playwright.dev/docs/webview2)。安装后仍需检查：
 
 1. 启动、重复启动、缩放、最大化、关闭到托盘、恢复、退出后重新进入。
 2. 登录后私聊/群聊收发、断网重连、切换账号，确认通知设置按账号恢复。
