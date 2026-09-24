@@ -17,15 +17,18 @@ test('桌面聊天布局在不同窗口尺寸下铺满可用内容区', async ({
     const shell = page.locator('.remote-shell');
     await expect(shell).toBeVisible();
     const bounds = await shell.boundingBox();
-    const titlebar = page.getByRole('banner', { name: '窗口标题栏' });
-    if (await titlebar.count()) {
-      const bar = await titlebar.boundingBox();
-      expect(bar).toMatchObject({ x: 0, y: 0, width: viewport.width, height: 44 });
-      expect(bounds!.y).toBe(bar!.height);
-      await expect(titlebar).toHaveAttribute('data-tauri-drag-region', '');
-    } else {
-      expect(bounds!.y).toBe(0);
+    const dragRegion = page.locator('.desktop-window-drag-region');
+    if (await dragRegion.count()) {
+      expect(await dragRegion.boundingBox()).toMatchObject({ x: 0, y: 0, width: viewport.width, height: 44 });
+      await expect(dragRegion).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(dragRegion).toHaveCSS('border-bottom-width', '0px');
+      await expect(dragRegion).toHaveAttribute('data-tauri-drag-region', '');
+      const profile = await page.locator('.sidebar-profile').boundingBox();
+      expect(profile!.y).toBe(0);
+      const avatar = await page.locator('.profile-avatar').boundingBox();
+      expect(avatar!.y).toBeGreaterThanOrEqual(44);
     }
+    expect(bounds!.y).toBe(0);
     expect(bounds!.x).toBe(0);
     expect(bounds!.width).toBe(viewport.width);
     expect(bounds!.y + bounds!.height).toBe(viewport.height);
@@ -35,4 +38,13 @@ test('桌面聊天布局在不同窗口尺寸下铺满可用内容区', async ({
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(viewport.height);
   }
   await page.screenshot({ path: testInfo.outputPath('desktop-full-window.png') });
+  // 顶部热区不能遮挡侧栏操作，也不能在页面切换后产生额外高度。
+  await page.getByRole('button', { name: '个人中心', exact: true }).click();
+  await expect(page.getByRole('button', { name: '保存修改' })).toBeVisible();
+  const back = page.getByRole('button', { name: '返回', exact: true });
+  if (await page.locator('.desktop-window-drag-region').count()) {
+    expect((await back.boundingBox())!.y).toBeGreaterThanOrEqual(44);
+  }
+  await back.click();
+  await expect(page.locator('.remote-shell')).toBeVisible();
 });

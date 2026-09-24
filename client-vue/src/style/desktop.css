@@ -2,7 +2,7 @@
 html.desktop-app .im-page,
 html.desktop-app .group-im-page {
   width: 100%;
-  height: var(--desktop-content-height, 100dvh);
+  height: 100dvh;
   padding: 0;
 }
 
@@ -21,19 +21,41 @@ html.desktop-app .remote-sidebar-content {
 }
 
 html.desktop-macos {
-  --desktop-content-height: calc(100dvh - 44px);
+  --desktop-window-inset: 44px;
 }
 
 html.desktop-app .app-route-content {
-  height: var(--desktop-content-height, 100dvh);
+  height: 100dvh;
   overflow: auto;
 }
 
 html.desktop-app .app-route-content .h-screen {
-  height: var(--desktop-content-height, 100dvh);
+  height: 100dvh;
 }
 
 html.desktop-app .app-route-content .min-h-screen,
 html.desktop-app .login-page {
-  min-height: var(--desktop-content-height, 100dvh);
+  min-height: 100dvh;
+}
+
+/* 让页面自身背景一直延伸至窗口顶边，只避让顶部交互元素。 */
+html.desktop-macos .sidebar-profile,
+html.desktop-macos .group-sidebar-profile {
+  padding-top: calc(var(--desktop-window-inset) + 16px);
+}
+
+html.desktop-macos .chat-header,
+html.desktop-macos .group-im-shell header,
+html.desktop-macos .desktop-call-header {
+  padding-top: calc(var(--desktop-window-inset) + 8px);
+  min-height: calc(var(--desktop-window-inset) + 64px);
+}
+
+html.desktop-macos .profile-page,
+html.desktop-macos .groups-shell {
+  padding-top: calc(var(--desktop-window-inset) + 24px);
+}
+
+html.desktop-macos .login-page {
+  padding-top: calc(var(--desktop-window-inset) + 24px);
 }

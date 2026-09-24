@@ -14,7 +14,7 @@
     >
       <n-button class="mobile-sidebar-close" secondary @click="mobileSidebarOpen = false">关闭成员列表</n-button>
       <!-- 群组信息卡片 -->
-      <div class="p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+      <div class="group-sidebar-profile p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
         <div class="flex items-center gap-3">
           <n-avatar :size="50" :src="groupInfo?.avatar || undefined">
             <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) || '?' }}</span>

@@ -1,21 +1,15 @@
 <template>
-  <header class="desktop-titlebar" data-tauri-drag-region aria-label="窗口标题栏">
-    <span data-tauri-drag-region>ToDesk</span>
-  </header>
+  <!-- 仅提供透明拖动热区；红黄绿按钮由 macOS 原生绘制。 -->
+  <div class="desktop-window-drag-region" data-tauri-drag-region aria-hidden="true"></div>
 </template>
 
 <style scoped>
-.desktop-titlebar {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
+.desktop-window-drag-region {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 20;
   height: 44px;
-  padding: 0 16px 0 96px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 600;
+  background: transparent;
   user-select: none;
   cursor: default;
 }

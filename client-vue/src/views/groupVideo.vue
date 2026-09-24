@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen w-full bg-gray-900 flex flex-col">
     <!-- 头部控制栏 -->
-    <header class="min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
+    <header class="desktop-call-header min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
       <div class="flex items-center gap-2 sm:gap-4 min-w-0">
         <n-avatar :size="40" :src="groupInfo?.avatar || undefined" class="ring-2 ring-white">
           <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
