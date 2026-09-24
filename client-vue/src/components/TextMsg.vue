@@ -6,8 +6,8 @@
         aria-label="消息" aria-multiline="true" @input="onInput" @keydown="onKeydown" @paste="onPaste"></div>
       <span v-if="!inputValue" class="text-placeholder">{{ placeholder }}</span>
     </div>
-    <button class="send-button" type="button" aria-label="发送" title="发送"
-      :disabled="disabled || !inputValue.trim()" @click="handleSend">
+    <button ref="sendButtonRef" class="send-button" type="button" aria-label="发送" title="发送"
+      :disabled="disabled || !inputValue.trim()" @pointerdown.prevent @mousedown.prevent @click="handleSend">
       <i class="iconfont icon-paper-plane" aria-hidden="true"></i>
     </button>
   </div>
@@ -35,6 +35,7 @@ const emits = defineEmits<{
 }>()
 
 const editorRef = ref<HTMLDivElement | null>(null)
+const sendButtonRef = ref<HTMLButtonElement | null>(null)
 const defaultValue = ref(props.value || '')
 
 const inputValue = computed({
@@ -117,6 +118,8 @@ function handleSend() {
 
 function blurOnOutsidePointer(event: PointerEvent) {
   const editor = editorRef.value
+  // 等 click 完成发送；提前失焦会收起软键盘，导致按钮在手指松开前移位。
+  if (sendButtonRef.value && event.composedPath().includes(sendButtonRef.value)) return
   if (editor && editor === document.activeElement && !event.composedPath().includes(editor)) editor.blur()
 }
 
