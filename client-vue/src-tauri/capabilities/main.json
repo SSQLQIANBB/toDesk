@@ -1,12 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "主窗口仅允许通知与用户选择的文件保存操作",
-  "windows": ["main"],
+  "description": "主窗口允许窗口拖动、通知与用户选择的文件保存操作",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "notification:default",
     "dialog:allow-save",
-    "fs:allow-write-file"
+    "fs:allow-write-file",
+    "core:window:allow-start-dragging"
   ]
 }

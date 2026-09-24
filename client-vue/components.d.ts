@@ -19,6 +19,7 @@ declare module 'vue' {
     ChatMessageContent: typeof import('./src/components/ChatMessageContent.vue')['default']
     ChatTextMessage: typeof import('./src/components/ChatTextMessage.vue')['default']
     ChatVoiceMessage: typeof import('./src/components/ChatVoiceMessage.vue')['default']
+    DesktopTitlebar: typeof import('./src/components/DesktopTitlebar.vue')['default']
     GlobalMessages: typeof import('./src/components/GlobalMessages.vue')['default']
     GlobalPrivateCall: typeof import('./src/components/GlobalPrivateCall.vue')['default']
     GroupCallInvitations: typeof import('./src/components/GroupCallInvitations.vue')['default']

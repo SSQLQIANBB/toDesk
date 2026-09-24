@@ -6,7 +6,8 @@
         <GroupCallInvitations />
         <GlobalPrivateCall />
         <GlobalMessages />
-        <RouterView />
+        <DesktopTitlebar v-if="showDesktopTitlebar" />
+        <div class="app-route-content"><RouterView /></div>
       </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>
@@ -15,6 +16,8 @@
 
 <script setup lang="ts">
 import { computed, watch } from 'vue';
+import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
+const showDesktopTitlebar = import.meta.env.VITE_DESKTOP === 'true' && /Mac/.test(navigator.platform);
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
