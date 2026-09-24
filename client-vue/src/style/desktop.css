@@ -41,11 +41,16 @@ html.desktop-app .login-page {
 /* 让页面自身背景一直延伸至窗口顶边，只避让顶部交互元素。 */
 html.desktop-macos .sidebar-profile,
 html.desktop-macos .group-sidebar-profile {
-  padding-top: calc(var(--desktop-window-inset) + 16px);
+  padding-top: var(--desktop-window-inset);
 }
 
+/* 原生窗口按钮仅位于左侧，右侧聊天标题无需整行避让。 */
 html.desktop-macos .chat-header,
-html.desktop-macos .group-im-shell header,
+html.desktop-macos .group-im-shell header {
+  padding-top: 8px;
+  min-height: 64px;
+}
+
 html.desktop-macos .desktop-call-header {
   padding-top: calc(var(--desktop-window-inset) + 8px);
   min-height: calc(var(--desktop-window-inset) + 64px);
