@@ -71,7 +71,7 @@ pnpm desktop:build
 
 Windows 当前未签名，macOS 为临时签名；尚未配置应用内自动更新。
 
-GitHub Actions 的 **Desktop Build** 工作流在桌面功能分支推送和 PR 中检查编译与打包。分支构建默认连接现有站点 `https://www.sycsq.top`，可通过仓库变量 `DESKTOP_SERVER_URL` 覆盖；手动运行时填写的地址优先级最高。分支或手动构建成功后，从 `ToDesk-windows-x64`、`ToDesk-macos-arm64` 或 `ToDesk-macos-x64` artifact 下载安装包。不会发布 GitHub Release 或触发网页部署。
+GitHub Actions 的 **Desktop Build** 工作流在桌面功能分支推送和 PR 中检查编译与打包。分支构建默认连接现有站点 `https://www.sycsq.top`，可通过仓库变量 `DESKTOP_SERVER_URL` 覆盖；手动运行时填写的地址优先级最高。分支或手动构建成功后，从 `ToDesk-windows-x64`、`ToDesk-macos-arm64` 或 `ToDesk-macos-x64` artifact 下载安装包。普通分支构建只上传 artifact；版本标签通过 **Desktop Release** 发布安装包，均不触发网页部署。发布方式见 [桌面版本发布](DESKTOP_RELEASE.md)。
 
 ## 验证与验收
 

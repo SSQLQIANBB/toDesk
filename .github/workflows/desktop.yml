@@ -18,6 +18,7 @@ on:
     paths:
       - 'client-vue/**'
       - 'pnpm-lock.yaml'
+      - 'scripts/desktop-release*.mjs'
       - '.github/workflows/desktop.yml'
       - '.github/workflows/desktop-release.yml'
 
@@ -63,8 +64,9 @@ jobs:
         with:
           workspaces: client-vue/src-tauri -> target
       - run: pnpm install --frozen-lockfile
+      - run: node --test scripts/desktop-release.test.mjs
       - run: pnpm --filter client-vue test
-      - run: cargo check --manifest-path client-vue/src-tauri/Cargo.toml
+      - run: cargo check --locked --manifest-path client-vue/src-tauri/Cargo.toml
       - run: pnpm --filter client-vue desktop:build ${{ matrix.args }}
       - name: Build native test binary
         if: runner.os == 'Windows'
