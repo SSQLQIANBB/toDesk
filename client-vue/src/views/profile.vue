@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-3 sm:p-6 overflow-x-hidden">
+  <div class="profile-page min-h-screen bg-slate-50 p-3 sm:p-6 overflow-x-hidden">
     <div class="max-w-4xl mx-auto">
       <!-- 页面头部 -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
@@ -16,7 +16,7 @@
       </div>
 
       <!-- 用户信息卡片 -->
-      <n-card class="shadow-lg">
+      <n-card class="profile-card">
         <n-tabs type="line" animated>
           <!-- 基本信息 -->
           <n-tab-pane name="basic" tab="基本信息">
@@ -32,14 +32,9 @@
                     <span v-if="!formData.avatar">{{ formData.nickname?.charAt(0) || formData.username?.charAt(0) || '?' }}</span>
                   </n-avatar>
                   <div class="flex flex-col gap-2">
-                    <n-upload
-                      :custom-request="handleAvatarUpload"
-                      :show-file-list="false"
-                      accept="image/*"
-                    >
-                      <n-button size="small" secondary>上传头像</n-button>
-                    </n-upload>
-                    <p class="text-xs text-gray-500">支持 JPG、PNG 格式，最大 2MB</p>
+                    <input ref="avatarInput" type="file" accept="image/jpeg,image/png" hidden @change="selectAvatar" />
+                    <n-button size="small" secondary @click="avatarInput?.click()">上传头像</n-button>
+                    <p class="text-xs text-gray-500">支持 JPG、PNG 格式，最大 20MB</p>
                   </div>
                 </div>
               </n-form-item>
@@ -171,6 +166,11 @@
 
           <!-- 通知设置 -->
           <n-tab-pane name="notification" tab="通知设置">
+            <p v-if="notificationSettings.error" role="alert" class="text-red-600 mb-4">
+              {{ notificationSettings.error }}
+              <n-button v-if="notificationSettings.status === 'error'" text type="primary" @click="notificationSettings.load(authStore.currentUser!.id)">重试</n-button>
+            </p>
+            <p v-if="notificationSettings.status === 'loading'" class="text-gray-500 mb-4">正在加载通知设置…</p>
             <div class="space-y-6">
               <!-- 桌面通知 -->
               <div class="p-4 bg-gray-50 rounded-lg">
@@ -187,14 +187,15 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <n-switch 
-                      v-model:value="notificationEnabled" 
-                      @update:value="handleNotificationToggle"
-                      :disabled="notificationPermission !== 'granted'"
+                      :value="notificationEnabled" :loading="notificationSettings.status === 'saving'"
+                      @update:value="notificationSettings.save({ desktopEnabled: $event })"
+                      :disabled="notificationSettings.disabled"
                     />
                     <n-button 
                       v-if="notificationPermission !== 'granted'" 
                       size="small" 
                       type="primary"
+                      :disabled="notificationSettings.disabled"
                       @click="requestNotificationPermission"
                     >
                       请求权限
@@ -203,7 +204,7 @@
                 </div>
               </div>
 
-              <NotificationSoundSettings />
+              <NotificationSoundSettings :settings="notificationSettings.settings" :disabled="notificationSettings.disabled" @update="notificationSettings.save" />
 
               <!-- 消息预览 -->
               <div class="p-4 bg-gray-50 rounded-lg">
@@ -212,7 +213,7 @@
                     <h3 class="font-semibold text-gray-800">消息预览</h3>
                     <p class="text-sm text-gray-500 mt-1">在通知中显示消息内容</p>
                   </div>
-                  <n-switch v-model:value="messagePreview" />
+                  <n-switch :value="notificationSettings.settings.messagePreview" :disabled="notificationSettings.disabled" aria-label="消息预览" @update:value="notificationSettings.save({ messagePreview: $event })" />
                 </div>
               </div>
 
@@ -223,19 +224,19 @@
                 <div class="space-y-3">
                   <div class="flex items-center justify-between">
                     <span class="text-sm">私聊消息</span>
-                    <n-switch v-model:value="notifyPrivateMessage" />
+                    <n-switch :value="notificationSettings.settings.notifyPrivateMessage" :disabled="notificationSettings.disabled" aria-label="私聊消息" @update:value="notificationSettings.save({ notifyPrivateMessage: $event })" />
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-sm">群组消息</span>
-                    <n-switch v-model:value="notifyGroupMessage" />
+                    <n-switch :value="notificationSettings.settings.notifyGroupMessage" :disabled="notificationSettings.disabled" aria-label="群组消息" @update:value="notificationSettings.save({ notifyGroupMessage: $event })" />
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-sm">来电通知</span>
-                    <n-switch v-model:value="notifyCall" />
+                    <n-switch :value="notificationSettings.settings.notifyCall" :disabled="notificationSettings.disabled" aria-label="来电通知" @update:value="notificationSettings.save({ notifyCall: $event })" />
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-sm">群组邀请</span>
-                    <n-switch v-model:value="notifyInvitation" />
+                    <n-switch :value="notificationSettings.settings.notifyInvitation" :disabled="notificationSettings.disabled" aria-label="群组邀请" @update:value="notificationSettings.save({ notifyInvitation: $event })" />
                   </div>
                 </div>
               </div>
@@ -260,6 +261,8 @@
           </n-tab-pane>
         </n-tabs>
       </n-card>
+
+      <AvatarCropper v-if="avatarFile" :file="avatarFile" @cancel="avatarFile = null" @uploaded="avatarUploaded" />
 
       <!-- 修改密码弹窗 -->
       <n-modal v-model:show="showPasswordModal" preset="card" title="修改密码" style="width: min(500px, calc(100vw - 24px))">
@@ -307,15 +310,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useMessage, type FormInst, type FormRules, type UploadCustomRequestOptions } from 'naive-ui';
+import { useMessage, type FormInst, type FormRules } from 'naive-ui';
 import { bindEmail, changePassword, getCurrentUser, getVerifiedEmail, sendEmailCode, updateUser } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
 import NotificationSoundSettings from '@/components/NotificationSoundSettings.vue';
-import { uploadFile } from '@/api/common';
+import AvatarCropper from '@/components/AvatarCropper.vue';
+import { useNotificationSettingsStore } from '@/stores/notificationSettings';
 import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '@/utils/passwordPolicy';
 
@@ -460,64 +464,18 @@ const lastLoginTime = computed(() => {
   return new Date().toLocaleString();
 });
 
-// 通知设置
-const notificationPermission = ref<NotificationPermission>('default');
-const notificationEnabled = ref(false);
+// 偏好随账号保存；浏览器通知权限仍属于当前设备。
+const notificationSettings = useNotificationSettingsStore();
+const notificationPermission = ref(notificationService.getPermission());
+const notificationEnabled = computed(() => notificationSettings.settings.desktopEnabled);
 
-const messagePreview = ref(true);
-const notifyPrivateMessage = ref(true);
-const notifyGroupMessage = ref(true);
-const notifyCall = ref(true);
-const notifyInvitation = ref(true);
-
-// 初始化通知设置
-function initNotificationSettings() {
-  notificationPermission.value = notificationService.getPermission();
-  notificationEnabled.value = notificationService.isEnabled();
-
-  const settings = notificationService.getPreferences();
-  messagePreview.value = settings.messagePreview;
-  notifyPrivateMessage.value = settings.notifyPrivateMessage;
-  notifyGroupMessage.value = settings.notifyGroupMessage;
-  notifyCall.value = settings.notifyCall;
-  notifyInvitation.value = settings.notifyInvitation;
-}
-
-watch(
-  [messagePreview, notifyPrivateMessage, notifyGroupMessage, notifyCall, notifyInvitation],
-  () => notificationService.updatePreferences({
-    messagePreview: messagePreview.value,
-    notifyPrivateMessage: notifyPrivateMessage.value,
-    notifyGroupMessage: notifyGroupMessage.value,
-    notifyCall: notifyCall.value,
-    notifyInvitation: notifyInvitation.value,
-  }),
-);
-
-// 请求通知权限
 async function requestNotificationPermission() {
   const granted = await notificationService.requestPermission();
+  notificationPermission.value = notificationService.getPermission();
   if (granted) {
-    notificationPermission.value = 'granted';
-    notificationService.enable();
-    notificationEnabled.value = true;
-    message.success('通知权限已授予');
-  } else {
-    notificationPermission.value = notificationService.getPermission();
-    notificationEnabled.value = false;
-    message.error('通知权限被拒绝');
-  }
-}
-
-// 切换通知开关
-function handleNotificationToggle(value: boolean) {
-  if (value) {
-    notificationService.enable();
-    message.success('桌面通知已开启');
-  } else {
-    notificationService.disable();
-    message.success('桌面通知已关闭');
-  }
+    await notificationSettings.save({ desktopEnabled: true });
+    if (!notificationSettings.error) message.success('通知权限已授予');
+  } else message.error('通知权限被拒绝');
 }
 
 // 发送测试通知
@@ -542,39 +500,29 @@ async function loadUserInfo() {
   }
 }
 
-// 处理头像上传
-async function handleAvatarUpload({ file, onFinish, onError }: UploadCustomRequestOptions) {
-  const maxSize = 2 * 1024 * 1024; // 2MB
-  const rawFile = file.file;
-  
-  if (!rawFile) {
-    message.error('请选择文件');
-    onError();
+const avatarInput = ref<HTMLInputElement | null>(null);
+const avatarFile = ref<File | null>(null);
+
+function selectAvatar(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    message.error('请选择 JPG 或 PNG 图片');
     return;
   }
-
-  if (rawFile.size > maxSize) {
-    message.error('图片大小不能超过 2MB');
-    onError();
+  if (file.size > 20 * 1024 * 1024) {
+    message.error('图片大小不能超过 20MB');
     return;
   }
+  avatarFile.value = file;
+}
 
-  try {
-    const uploadFormData = new FormData();
-
-    uploadFormData.append('file', rawFile);
-    uploadFormData.append('purpose', 'avatar');
-
-    const { file: uploadedFile } = await uploadFile(uploadFormData);
-    formData.avatar = uploadedFile.fileUrl;
-
-    console.log(formData)
-    message.success('头像上传成功');
-    onFinish();
-  } catch (error: any) {
-    message.error('上传失败: ' + error.message);
-    onError();
-  }
+function avatarUploaded(url: string) {
+  formData.avatar = url;
+  avatarFile.value = null;
+  message.success('头像已裁剪上传，请保存修改');
 }
 
 // 提交表单
@@ -659,11 +607,12 @@ function goBack() {
 
 onMounted(() => {
   loadUserInfo();
-  initNotificationSettings();
+  void notificationSettings.load(authStore.currentUser!.id);
 });
 </script>
 
 <style scoped lang="less">
+.profile-card { border-color: #e2e8f0; box-shadow: 0 2px 8px #0f172a06; }
 :deep {
   .n-card {
     border-radius: 12px;

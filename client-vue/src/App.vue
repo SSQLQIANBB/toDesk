@@ -22,11 +22,12 @@ import GroupCallInvitations from '@/components/GroupCallInvitations.vue';
 import GlobalPrivateCall from '@/components/GlobalPrivateCall.vue';
 import GlobalMessages from '@/components/GlobalMessages.vue';
 import { useUnreadStore } from '@/stores/unread';
+import { useNotificationSettingsStore } from '@/stores/notificationSettings';
 
 import { useRoute } from 'vue-router';
 import type { GlobalThemeOverrides } from 'naive-ui';
 const route = useRoute();
-const designTheme = computed<GlobalThemeOverrides>(() => ['/remote', '/groups'].includes(route.path) || route.path.startsWith('/group-chat/') ? {
+const designTheme = computed<GlobalThemeOverrides>(() => ['/remote', '/groups', '/profile'].includes(route.path) || route.path.startsWith('/group-chat/') ? {
   common: { primaryColor: '#2563eb', primaryColorHover: '#1d4ed8', primaryColorPressed: '#1e40af', errorColor: '#dc2626', errorColorHover: '#b91c1c', errorColorPressed: '#991b1b', borderRadius: '12px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
   Avatar: { borderRadius: '50%' },
 } : {});
@@ -34,6 +35,12 @@ const designTheme = computed<GlobalThemeOverrides>(() => ['/remote', '/groups'].
 const authStore = useAuthStore();
 const { token, currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
+const notificationSettings = useNotificationSettingsStore();
+
+watch(() => currentUser.value?.id, userId => {
+  if (userId) void notificationSettings.load(userId);
+  else notificationSettings.reset();
+}, { immediate: true });
 
 watch(
   [token, currentUser],

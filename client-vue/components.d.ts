@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AudioWaveform: typeof import('./src/components/AudioWaveform.vue')['default']
+    AvatarCropper: typeof import('./src/components/AvatarCropper.vue')['default']
     CallHistoryMessage: typeof import('./src/components/CallHistoryMessage.vue')['default']
     ChatImageMessage: typeof import('./src/components/ChatImageMessage.vue')['default']
     ChatMediaComposer: typeof import('./src/components/ChatMediaComposer.vue')['default']
