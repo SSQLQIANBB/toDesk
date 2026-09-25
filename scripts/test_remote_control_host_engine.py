@@ -1,0 +1,311 @@
+"""Standard-library safety checks; the separate loopback harness tests real media."""
+import base64
+import hashlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import ssl
+import struct
+import subprocess
+import sys
+import threading
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).parent))
+spec = importlib.util.spec_from_file_location("host_engine", Path(__file__).with_name("remote-control-host-engine.py"))
+engine = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(engine)
+
+
+class EngineContractTests(unittest.TestCase):
+    @staticmethod
+    def progress_message(capture=0, captured="0", encoded=0, encoded_at="0"):
+        return {"type": "screen-source-progress", "captureSeq": capture, "captureMonotonicNs": captured,
+                "encodedSeq": encoded, "encodedMonotonicNs": encoded_at}
+
+    def test_progress_stages_are_independent_and_duplicate_reports_do_not_refresh_event_times(self):
+        progress = engine.MediaProgressTracker()
+        self.assertEqual(progress.snapshot(), {"captureSeq": 0, "captureMonotonicNs": "0", "encodedSeq": 0,
+                         "encodedMonotonicNs": "0", "forwardedSeq": 0, "forwardedMonotonicNs": "0"})
+        progress.source(self.progress_message(1, "100", 1, "101"), 200)
+        progress.forwarded(201)
+        progress.source(self.progress_message(1, "100", 2, "202"), 500)
+        progress.forwarded(501)
+        snapshot = progress.snapshot()
+        progress.source(self.progress_message(1, "100", 2, "202"), 10_000)
+        self.assertEqual(progress.snapshot(), snapshot)
+        self.assertEqual(snapshot, {"captureSeq": 1, "captureMonotonicNs": "100", "encodedSeq": 2,
+                         "encodedMonotonicNs": "202", "forwardedSeq": 2, "forwardedMonotonicNs": "501"})
+
+    def test_progress_rejects_noncanonical_future_regressing_and_retimed_events_atomically(self):
+        progress = engine.MediaProgressTracker()
+        progress.source(self.progress_message(2, "100", 3, "110"), 200)
+        prior = progress.snapshot()
+        for seq, observed in [(True, "150"), (-1, "150"), (engine.MAX_SAFE_SEQUENCE + 1, "150"),
+                              (3, "0150"), (3, "+150"), (3, "150.0"), (3, 150), (0, "100"),
+                              (3, "0"), (3, str(engine.MAX_U64 + 1)), (3, "201"),
+                              (1, "150"), (2, "101"), (3, "100")]:
+            with self.subTest(seq=seq, observed=observed), self.assertRaises(ValueError):
+                progress.source(self.progress_message(seq, observed, 4, "180"), 200)
+            self.assertEqual(progress.snapshot(), prior)
+        with self.assertRaises(ValueError):
+            progress.source(self.progress_message(3, "150", 4, "110"), 200)
+        self.assertEqual(progress.snapshot(), prior, "failed second-stage validation must not partially commit capture")
+
+    def test_progress_schema_and_forwarded_overflow_fail_closed(self):
+        for message in [{}, {**self.progress_message(), "accepted": True},
+                        {**self.progress_message(), "type": "other"}]:
+            with self.assertRaises(ValueError):
+                engine.MediaProgressTracker().source(message, 100)
+        progress = engine.MediaProgressTracker()
+        for invalid in [0, -1, engine.MAX_U64 + 1]:
+            with self.assertRaises(ValueError):
+                progress.forwarded(invalid)
+        progress.forwarded(100)
+        with self.assertRaises(ValueError):
+            progress.forwarded(100)
+        progress.stages["forwarded"] = engine.MAX_SAFE_SEQUENCE, 100
+        with self.assertRaises(ValueError):
+            progress.forwarded(101)
+
+    def test_diagnostics_preserve_source_time_and_test_fault_requires_explicit_launch_mode(self):
+        source_report = self.progress_message(1, "100", 1, "110")
+        fault = {"type": "screen-source-test-fault", "phase": "begin", "stage": "capture"}
+        for enabled in [False, True]:
+            instance = object.__new__(engine.Engine)
+            instance.progress = engine.MediaProgressTracker()
+            instance.test_source_faults = enabled
+            instance.screen = SimpleNamespace(stderr=io.BytesIO((json.dumps(source_report) + "\n" + json.dumps(fault) + "\n").encode()))
+            failures, sent = [], []
+            instance.fail = failures.append
+            instance.send = lambda *args: sent.append(args)
+            with patch.object(engine, "clock_ns", return_value=100_000):
+                instance.read_diagnostics()
+            self.assertEqual(instance.progress.snapshot()["captureMonotonicNs"], "100")
+            self.assertEqual(failures, [] if enabled else ["SCREEN_DIAGNOSTICS_FAILED"])
+            self.assertEqual(sent, [("test-fault", {"phase": "begin", "stage": "capture"})] if enabled else [])
+
+    def test_periodic_progress_is_cumulative_and_only_reported_after_source_started(self):
+        instance = object.__new__(engine.Engine)
+        instance.closed = threading.Event()
+        instance.progress = engine.MediaProgressTracker()
+        instance.screen = None
+        sent = []
+        instance.send = lambda *args: sent.append(args)
+        self.assertTrue(instance.report_progress())
+        self.assertEqual(sent, [])
+        instance.screen = object()
+        instance.progress.source(self.progress_message(1, "100"), 200)
+        self.assertTrue(instance.report_progress())
+        self.assertTrue(instance.report_progress())
+        self.assertEqual(sent[0], sent[1])
+        self.assertEqual(sent[0][0], "media-progress")
+        instance.closed.set()
+        self.assertFalse(instance.report_progress())
+        self.assertEqual(len(sent), 2)
+
+    def test_forward_progress_requires_a_successful_gstreamer_push(self):
+        for succeeds in [False, True]:
+            instance = object.__new__(engine.Engine)
+            instance.closed = threading.Event()
+            instance.progress = engine.MediaProgressTracker()
+            instance.media = SimpleNamespace(alive=lambda _: True)
+            instance.test_source_faults = False
+            instance.frames, instance.bytes = 0, 0
+            failures, pushed = [], []
+            frame_bytes = b"\x00\x00\x00\x01frame"
+            instance.screen = SimpleNamespace(stdout=io.BytesIO(struct.pack(">IQ", len(frame_bytes), 123) + frame_bytes))
+            def push(_signal, frame):
+                pushed.append(frame)
+                return "ok" if succeeds else "failed"
+            source = SimpleNamespace(get_property=lambda _: 0, emit=push)
+            instance.pipeline = SimpleNamespace(get_by_name=lambda _: source)
+            instance.Gst = SimpleNamespace(Buffer=SimpleNamespace(new_wrapped=lambda data: SimpleNamespace(data=data)),
+                                           FlowReturn=SimpleNamespace(OK="ok"), SECOND=1_000_000_000)
+            instance.fail = failures.append
+            with patch.object(engine, "clock_ns", return_value=200):
+                instance.read_screen()
+            self.assertEqual(len(pushed), 1)
+            self.assertEqual(pushed[0].data, frame_bytes)
+            self.assertEqual(instance.progress.snapshot()["forwardedSeq"], 1 if succeeds else 0)
+            self.assertEqual(instance.progress.snapshot()["forwardedMonotonicNs"], "200" if succeeds else "0")
+            self.assertEqual(instance.progress.snapshot()["captureSeq"], 0)
+            self.assertEqual(instance.progress.snapshot()["encodedSeq"], 0)
+            self.assertEqual(failures, ["SCREEN_SOURCE_EOF"] if succeeds else ["SCREEN_PUSH_FAILED"])
+
+    def test_source_flags_cannot_be_enabled_without_explicit_test_launch(self):
+        with self.assertRaisesRegex(ValueError, "TEST_SOURCE_ARGUMENTS_DISABLED"):
+            engine.Engine(None, "/fixed-source", (), source_args=["--test-freeze-stage", "capture"])
+        with self.assertRaisesRegex(ValueError, "TEST_SOURCE_ARGUMENTS_DISABLED"):
+            engine.Engine(None, "/fixed-source", (), test_forward_freeze_after_ms=2500)
+        for invalid in [True, -1, 40_001]:
+            with self.assertRaisesRegex(ValueError, "INVALID_TEST_FORWARD_FREEZE"):
+                engine.Engine(None, "/fixed-source", (), test_source_faults=True, test_forward_freeze_after_ms=invalid)
+
+    def test_cli_rejects_fault_flags_before_bootstrap_or_source_execution(self):
+        script = str(Path(__file__).with_name("remote-control-host-engine.py"))
+        for flags in [["--test-forward-freeze-after-ms", "2500"], ["--source-arg=--test-freeze-stage"],
+                      ["--test-source-faults", "--test-forward-freeze-after-ms", "40001"]]:
+            result = subprocess.run([sys.executable, script, "--screen-source=/bin/true", *flags],
+                                    input=b"", capture_output=True, timeout=3)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stdout, b"")
+            self.assertIn(b"error:", result.stderr)
+
+    def test_forward_fault_drains_source_without_pushing_or_fabricating_forward_progress(self):
+        instance = object.__new__(engine.Engine)
+        instance.closed = threading.Event()
+        instance.progress = engine.MediaProgressTracker()
+        instance.progress.source(self.progress_message(10, "90", 10, "95"), 100)
+        instance.progress.forwarded(100)
+        instance.media = SimpleNamespace(alive=lambda _: True)
+        instance.test_source_faults = True
+        instance.test_forward_freeze_after_ns = 20
+        instance.media_started_at_ns = 100
+        instance.test_forward_freeze_announced = False
+        instance.frames, instance.bytes = 0, 0
+        failures, sent = [], []
+        record = struct.pack(">IQ", 5, 123) + b"frame"
+        instance.screen = SimpleNamespace(stdout=io.BytesIO(record * 3))
+        source = SimpleNamespace(get_property=lambda _: 0, emit=lambda *_: self.fail("frozen stage pushed a frame"))
+        instance.pipeline = SimpleNamespace(get_by_name=lambda _: source)
+        instance.fail = failures.append
+        instance.send = lambda *args: sent.append(args)
+        self.assertFalse(instance.discard_forward_for_test(119))
+        with patch.object(engine, "clock_ns", return_value=120):
+            instance.read_screen()
+        self.assertEqual(instance.screen.stdout.tell(), len(record) * 3)
+        self.assertEqual(instance.progress.snapshot()["forwardedSeq"], 1)
+        self.assertEqual(instance.progress.snapshot()["forwardedMonotonicNs"], "100")
+        self.assertEqual(instance.progress.snapshot()["captureSeq"], 10)
+        self.assertEqual(sent, [("test-fault", {"phase": "begin", "stage": "forwarded"})])
+        self.assertEqual(failures, ["SCREEN_SOURCE_EOF"])
+
+    def test_line_framing_accepts_a_maximum_line_and_next_frame_in_the_same_read(self):
+        framer = engine.IpcLineFramer()
+        prefix = b"x" * (engine.MAX_LINE_BYTES - 2)
+        self.assertEqual(framer.feed(prefix), [])
+        self.assertEqual(framer.feed(b"x\nnext\npartial"), [prefix + b"x\n", b"next\n"])
+        self.assertEqual(framer.feed(b"-tail\n"), [b"partial-tail\n"])
+
+    def test_line_framing_rejects_oversized_complete_or_incomplete_individual_lines(self):
+        for chunk in [b"x" * engine.MAX_LINE_BYTES + b"\n", b"x" * (engine.MAX_LINE_BYTES + 1),
+                      b"valid\n" + b"x" * engine.MAX_LINE_BYTES + b"\n"]:
+            with self.assertRaisesRegex(ValueError, "IPC_LINE_LIMIT"):
+                engine.IpcLineFramer().feed(chunk)
+
+    def test_fingerprint_hashes_certificate_der_instead_of_sdp_claim(self):
+        der = bytes(range(64))
+        pem = ssl.DER_cert_to_PEM_cert(der)
+        self.assertEqual(engine.certificate_fingerprint(pem), hashlib.sha256(der).hexdigest().upper())
+        for invalid in [None, "a=fingerprint:sha-256 AB:CD", "-----BEGIN CERTIFICATE-----\n!invalid\n-----END CERTIFICATE-----"]:
+            with self.assertRaises(ValueError):
+                engine.certificate_fingerprint(invalid)
+
+    def test_only_bounded_loopback_host_ice_is_accepted(self):
+        self.assertTrue(engine.loopback_candidate("candidate:1 1 udp 123 127.0.0.1 50000 typ host"))
+        self.assertTrue(engine.loopback_candidate("candidate:1 1 udp 123 ::1 50000 typ host"))
+        for address in ["192.168.0.2", "example.local", "8.8.8.8"]:
+            self.assertFalse(engine.loopback_candidate(f"candidate:1 1 udp 123 {address} 50000 typ host"))
+        for invalid in ["candidate:1 1 udp 123 127.0.0.1 50000 typ relay", "candidate:1 1 udp 123 127.0.0.1 0 typ host",
+                        "candidate:1 1 udp 123 127.0.0.1 50000 typ host raddr 8.8.8.8", "x" * 4097]:
+            self.assertFalse(engine.loopback_candidate(invalid))
+
+    def test_codec_selection_is_video_scoped_and_checks_embedded_ice(self):
+        sdp = "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 103\r\na=recvonly\r\na=rtpmap:103 H264/90000\r\na=fmtp:103 packetization-mode=1;profile-level-id=42001f\r\n"
+        self.assertEqual(engine.h264_payload(sdp), 103)
+        for invalid in [sdp.replace("42001f", "64001f"), sdp + "m=video 9 UDP/TLS/RTP/SAVPF 103\r\n", sdp + "m=audio 9 RTP/AVP 0\r\n",
+                        sdp + "a=candidate:1 1 udp 123 8.8.8.8 50000 typ host\r\n", "x" * 65537]:
+            with self.assertRaises(ValueError):
+                engine.h264_payload(invalid)
+
+    def test_media_deadline_accounts_for_ipc_queue_delay_and_absolute_deadline(self):
+        lease = engine.MediaDeadline()
+        lease.install({"mediaLeaseSeq": 1, "ttlMs": 15000, "monotonicDeadlineNs": "10000000000"}, 0, 1_000_000_000)
+        self.assertEqual(lease.deadline, 10_000_000_000)
+        self.assertTrue(lease.alive(9_999_999_999))
+        self.assertFalse(lease.alive(10_000_000_000))
+        with self.assertRaises(ValueError):
+            lease.install({"mediaLeaseSeq": 2, "ttlMs": 15000, "monotonicDeadlineNs": "30000000000"}, 10_000_000_000, 10_000_000_000)
+        self.assertTrue(lease.terminal)
+
+    def test_delayed_first_start_cannot_reset_a_parent_deadline(self):
+        lease = engine.MediaDeadline()
+        with self.assertRaises(ValueError):
+            lease.install({"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000"}, 0, 1_000_000_000)
+        self.assertTrue(lease.terminal)
+
+    def test_media_seq_ttl_and_unknown_fields_fail_closed(self):
+        for invalid in [{"mediaLeaseSeq": True, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000"},
+                        {"mediaLeaseSeq": 1, "ttlMs": 15001, "monotonicDeadlineNs": "9000000000"},
+                        {"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "-1"},
+                        {"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000", "accepted": True}]:
+            with self.assertRaises(ValueError):
+                engine.MediaDeadline().install(invalid, 0, 0)
+        lease = engine.MediaDeadline()
+        payload = {"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000"}
+        lease.install(payload, 0, 0)
+        with self.assertRaises(ValueError):
+            lease.install(payload, 1, 1)
+
+    def test_oversized_raw_data_is_rejected_before_entering_the_work_queue(self):
+        instance = object.__new__(engine.Engine)
+        failures, posted = [], []
+        instance.fail = failures.append
+        instance.post = lambda *args: posted.append(args)
+        instance.queue_channel("rc-input-v1", "x" * 4097)
+        instance.queue_channel("rc-state-v1", "界" * 2000)
+        self.assertEqual(failures, ["DATA_CHANNEL_MESSAGE_LIMIT"] * 2)
+        self.assertEqual(posted, [])
+        instance.queue_channel("rc-input-v1", '{"type":"key","code":"KeyA"}')
+        self.assertEqual(len(posted), 1)
+        self.assertEqual(posted[0][2], b'{"type":"key","code":"KeyA"}')
+
+    def test_channel_bytes_are_forwarded_unchanged_without_input_interpretation(self):
+        instance = object.__new__(engine.Engine)
+        sent = []
+        instance.send = lambda *args: sent.append(args)
+        instance.fail = lambda _: self.fail("unexpected error")
+        raw = b'{"accepted":true,"type":"key","code":"KeyA"}'
+        instance.receive_channel("rc-input-v1", raw)
+        self.assertEqual(sent, [("channel-data", {"label": "rc-input-v1", "data": base64.urlsafe_b64encode(raw).decode().rstrip("=")})])
+
+    def test_start_needs_actual_dtls_and_both_open_reliable_channels(self):
+        instance = object.__new__(engine.Engine)
+        instance.dtls = None
+        instance.channels = {}
+        instance.WebRTC = SimpleNamespace(WebRTCDataChannelState=SimpleNamespace(OPEN="open"))
+        payload = {"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000"}
+        with self.assertRaises(ValueError):
+            instance.command({"kind": "start-media", "payload": payload}, 0)
+        instance.dtls = {"hostFingerprint": "AB" * 32, "controllerFingerprint": "CD" * 32}
+        instance.channels = {"rc-state-v1": SimpleNamespace(get_property=lambda _: "open")}
+        with self.assertRaises(ValueError):
+            instance.command({"kind": "start-media", "payload": payload}, 0)
+        instance.channels["rc-input-v1"] = SimpleNamespace(get_property=lambda _: "connecting")
+        with self.assertRaises(ValueError):
+            instance.command({"kind": "start-media", "payload": payload}, 0)
+
+    def test_ipc_commands_cannot_override_the_fixed_executable_or_execute_input(self):
+        instance = object.__new__(engine.Engine)
+        instance.dtls = {"hostFingerprint": "AB" * 32, "controllerFingerprint": "CD" * 32}
+        instance.channels = {label: SimpleNamespace(get_property=lambda _: "open") for label in engine.LABELS}
+        instance.WebRTC = SimpleNamespace(WebRTCDataChannelState=SimpleNamespace(OPEN="open"))
+        instance.media, instance.screen = engine.MediaDeadline(), None
+        instance.start_media = lambda: self.fail("Untrusted executable request started media")
+        for message in [
+            {"kind": "start-media", "payload": {"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000", "screenSource": "/bin/sh"}},
+            {"kind": "exec", "payload": {"command": "whoami"}},
+            {"kind": "input", "payload": {"accepted": True, "code": "KeyA"}},
+            {"kind": "test-source-faults", "payload": {"stage": "forwarded", "afterMs": 2500}},
+            {"kind": "start-media", "payload": {"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000", "testForwardFreezeAfterMs": 2500}},
+        ]:
+            with self.assertRaises(ValueError):
+                instance.command(message, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
