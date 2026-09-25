@@ -10,6 +10,11 @@
     "notification:default",
     "dialog:allow-save",
     "fs:allow-write-file",
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    "allow-remote-control-capabilities",
+    "allow-remote-control-stop",
+    "allow-remote-control-register-device",
+    "allow-remote-control-confirm-request",
+    "allow-remote-control-reset-identity"
   ]
 }

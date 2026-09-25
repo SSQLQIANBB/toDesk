@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod remote_control;
+
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -17,6 +19,14 @@ fn show_main(app: &tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
+        .manage(remote_control::RemoteControlState::default())
+        .invoke_handler(tauri::generate_handler![
+            remote_control::remote_control_capabilities,
+            remote_control::remote_control_stop,
+            remote_control::remote_control_register_device,
+            remote_control::remote_control_confirm_request,
+            remote_control::remote_control_reset_identity,
+        ])
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_main(app)
         }))
@@ -40,7 +50,10 @@ fn main() {
                 .show_menu_on_left_click(cfg!(target_os = "macos"))
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        let _ = app.state::<remote_control::RemoteControlState>().stop();
+                        app.exit(0);
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -67,6 +80,12 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build ToDesk desktop")
         .run(|app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                let _ = app.state::<remote_control::RemoteControlState>().stop();
+            }
             // macOS 关闭窗口后，点击 Dock 图标重新显示主窗口。
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
