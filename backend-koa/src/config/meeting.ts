@@ -1,9 +1,8 @@
 import { type Server } from 'http';
 import { Server as Socket } from 'socket.io';
-import { verifyToken } from '../utils/jwt';
+import { onLoginSessionsRevoked, validateAuthenticatedSession, type AuthenticatedSessionPayload } from '../services/loginSessionService';
 import { File, GroupMember, GroupMessage, Message, User as UserModel } from '../models';
 import { saveReliableMessage } from '../services/reliableMessageService';
-import { isTokenVersionCurrent } from '../services/tokenVersionService';
 import {
   GroupSessionService,
   type GroupSession,
@@ -149,6 +148,7 @@ const initialMeeting = (server: Server) => {
     messageWriteFailures = 0;
   }, 60_000);
   metricsTimer.unref();
+  server.once?.('close', () => clearInterval(metricsTimer));
 
   async function emitGroupSessionEvent(groupId: number, event: string, payload: unknown) {
     const members = await GroupMember.findAll({ where: { groupId } });
@@ -253,15 +253,64 @@ const initialMeeting = (server: Server) => {
   io.on('connection', (socket) => {
     const socketId = socket.id;
     let currentUser: MeetingUser | null = null;
+    let currentAuth: AuthenticatedSessionPayload | null = null;
+    let currentToken: string | null = null;
+    let authenticationAttempt = 0;
+    let authenticationExpiryTimer: ReturnType<typeof setTimeout> | undefined;
     const joinedMediaSessions = new Map<string, GroupSession>();
     const ownedSessions = new Map<string, GroupSession>();
     const groupCallStartGenerations = new Map<string, number>();
 
-    socket.on('authenticate', async (data: { token: string; nickname?: string; avatar?: string }) => {
+    const unsubscribeRevocation = onLoginSessionsRevoked(event => {
+      if (currentAuth?.userId !== event.userId || (event.sid && currentAuth.sid !== event.sid)) return;
+      // A delayed account-wide event must not revoke a new login created after
+      // that password/version transaction committed.
+      if (!event.sid && event.revokedAuthVersion && currentAuth.authVersion !== event.revokedAuthVersion) return;
+      authenticationAttempt++;
+      currentToken = null;
+      socket.emit('auth_error', { message: '登录会话已撤销' });
+      socket.disconnect(true);
+    });
+    socket.use(async ([event], next) => {
+      if (event === 'authenticate') { next(); return; }
       try {
-        const payload = verifyToken(data.token);
-        if (!await isTokenVersionCurrent(payload.userId, payload.authVersion)) throw new Error('token 已失效');
+        if (!currentToken || !currentAuth) throw new Error('Authentication required');
+        const token = currentToken;
+        const fresh = await validateAuthenticatedSession(token);
+        if (!currentToken || fresh.userId !== currentAuth.userId || fresh.sid !== currentAuth.sid
+          || fresh.authVersion !== currentAuth.authVersion) throw new Error('Authentication changed');
+        next();
+      } catch {
+        currentToken = null;
+        socket.emit('auth_error', { message: '登录会话已失效' });
+        next(new Error('AUTH_REVOKED'));
+        socket.disconnect(true);
+      }
+    });
+
+    socket.on('authenticate', async (data: { token: string; nickname?: string; avatar?: string }) => {
+      const attempt = ++authenticationAttempt;
+      try {
+        const payload = await validateAuthenticatedSession(data.token);
+        if (attempt !== authenticationAttempt) return;
+        if (currentAuth && (payload.userId !== currentAuth.userId || payload.sid !== currentAuth.sid || payload.authVersion !== currentAuth.authVersion)) {
+          socket.disconnect(true);
+          return;
+        }
+        // Publish the validated identity before the next await so revocation can
+        // cancel an authentication that is still loading profile data.
+        currentAuth = payload;
         const dbUser = await UserModel.findByPk(payload.userId);
+        if (attempt !== authenticationAttempt) return;
+        currentToken = data.token;
+        clearTimeout(authenticationExpiryTimer);
+        authenticationExpiryTimer = setTimeout(() => {
+          authenticationAttempt++;
+          currentToken = null;
+          socket.emit('auth_error', { message: '登录凭据已过期，请重新认证' });
+          socket.disconnect(true);
+        }, Math.max(0, Math.min(payload.exp * 1000 - Date.now(), 2_147_483_647)));
+        authenticationExpiryTimer.unref();
         const status = (dbUser?.status || 'online') as PresenceStatus;
         const previous = getPublicUser(payload.userId);
 
@@ -282,8 +331,11 @@ const initialMeeting = (server: Server) => {
         socket.emit('user_list', getPublicUsers());
         emitPresenceChange(payload.userId, previous);
       } catch (error) {
+        if (attempt !== authenticationAttempt) return;
+        currentToken = null;
         socket.emit('auth_error', { message: 'Authentication failed' });
-        console.error('meeting authentication failed:', error);
+        socket.disconnect(true);
+        console.error('meeting authentication failed:', error instanceof Error ? error.name : 'UnknownError');
       }
     });
 
@@ -300,6 +352,10 @@ const initialMeeting = (server: Server) => {
     });
 
     socket.on('disconnect', async () => {
+      authenticationAttempt++;
+      currentToken = null;
+      clearTimeout(authenticationExpiryTimer);
+      unsubscribeRevocation();
       const previous = currentUser ? getPublicUser(currentUser.id) : undefined;
       userMap.delete(socketId);
       socketToUserMap.delete(socketId);
@@ -804,6 +860,7 @@ const initialMeeting = (server: Server) => {
       });
     });
   });
+  return io;
 };
 
 export default initialMeeting;

@@ -8,6 +8,7 @@ import UserNotificationSettings from './UserNotificationSettings';
 import MessageReceipt from './MessageReceipt';
 import GroupInvitation from './GroupInvitation';
 import RefreshToken from './RefreshToken';
+import LoginSession from './LoginSession';
 import File from './File';
 
 // 定义模型关联关系
@@ -43,6 +44,9 @@ Group.hasMany(GroupInvitation, { foreignKey: 'groupId', as: 'invitations' });
 User.hasMany(GroupInvitation, { foreignKey: 'inviterId', as: 'sentInvitations' });
 User.hasMany(GroupInvitation, { foreignKey: 'inviteeId', as: 'receivedInvitations' });
 
+LoginSession.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });
+User.hasMany(LoginSession, { foreignKey: 'userId', as: 'loginSessions' });
+
 // RefreshToken 和 User 的关系
 RefreshToken.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
@@ -61,3 +65,5 @@ Group.hasMany(File, { foreignKey: 'groupId', as: 'files' });
 
 export { User, UserEmail, MessageReceipt, Group, GroupMember, Message, GroupMessage, GroupInvitation, RefreshToken, File };
 
+
+export { LoginSession };

@@ -1,16 +1,18 @@
-import crypto from 'crypto';
-import redis from '../config/redis';
+import User from '../models/User';
+import { revokeAllLoginSessions } from './loginSessionService';
 
-const key = (userId: number) => `auth:version:${userId}`;
-
-export async function getTokenVersion(userId: number): Promise<string | null> {
-  return redis.get(key(userId));
+/** MySQL is the source of truth. Cache loss must never make an old/null version current. */
+export async function getTokenVersion(userId: number): Promise<string> {
+  const user = await User.findByPk(userId, { attributes: ['authVersion'] });
+  if (!user?.authVersion) throw new Error('账号认证版本不存在，请重新登录');
+  return user.authVersion;
 }
 
 export async function invalidateUserTokens(userId: number): Promise<void> {
-  await redis.set(key(userId), crypto.randomUUID());
+  await revokeAllLoginSessions(userId);
 }
 
 export async function isTokenVersionCurrent(userId: number, version?: string | null): Promise<boolean> {
-  return (version || null) === await getTokenVersion(userId);
+  if (!version) return false;
+  return version === await getTokenVersion(userId);
 }

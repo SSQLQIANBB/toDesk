@@ -4,7 +4,7 @@ import { User, UserEmail } from '../models';
 import redisService from '../services/redisService';
 import { hashPassword } from '../utils/crypto';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '../utils/passwordPolicy';
-import { invalidateUserTokens } from '../services/tokenVersionService';
+import { replacePasswordAndRevokeSessions } from '../services/loginSessionService';
 import {
   consumeEmailCode, isMailConfigured, issueEmailCode, normalizeEmail,
   type EmailCodePurpose,
@@ -120,8 +120,6 @@ export async function resetPassword(ctx: Context) {
   }
   const user = await User.findByPk(binding.userId);
   if (!user) { ctx.status = 404; ctx.body = { error: '账号不存在' }; return; }
-  await user.update({ password: hashPassword(newPassword) });
-  await invalidateUserTokens(user.id);
-  await redisService.delRefreshToken(user.id);
+  await replacePasswordAndRevokeSessions(user.id, hashPassword(newPassword), { authVersion: user.authVersion });
   ctx.body = { message: '密码已重置，请重新登录' };
 }

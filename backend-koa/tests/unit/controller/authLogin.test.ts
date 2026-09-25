@@ -7,8 +7,7 @@ const mocks = vi.hoisted(() => ({
   findBindingById: vi.fn(),
   consumeCode: vi.fn(),
   verifyPassword: vi.fn(),
-  setRefreshToken: vi.fn(),
-  generateTokenPair: vi.fn(),
+  createLoginSession: vi.fn(),
 }));
 
 vi.mock('../../../src/models', () => ({
@@ -21,9 +20,8 @@ vi.mock('../../../src/services/emailVerificationService', () => ({
   consumeEmailCode: mocks.consumeCode,
 }));
 vi.mock('../../../src/utils/crypto', () => ({ verifyPassword: mocks.verifyPassword }));
-vi.mock('../../../src/utils/jwt', () => ({ generateTokenPair: mocks.generateTokenPair }));
-vi.mock('../../../src/services/tokenVersionService', () => ({ getTokenVersion: vi.fn(async () => 'v1') }));
-vi.mock('../../../src/services/redisService', () => ({ default: { setRefreshToken: mocks.setRefreshToken } }));
+vi.mock('../../../src/services/loginSessionService', () => ({ createLoginSession: mocks.createLoginSession }));
+vi.mock('../../../src/services/redisService', () => ({ default: {} }));
 
 import { login, loginWithEmailCode } from '../../../src/controller/authController';
 
@@ -32,7 +30,7 @@ function makeUser() {
     id: 7,
     phone: null,
     status: 'offline',
-    get: vi.fn(() => ({ id: 7, username: 'alice', password: 'hashed', nickname: 'Alice', avatar: null })),
+    get: vi.fn(() => ({ id: 7, username: 'alice', password: 'hashed', authVersion: 'v1', nickname: 'Alice', avatar: null })),
     update: vi.fn(async (changes: { status: string }) => { user.status = changes.status; }),
   };
   return user;
@@ -46,7 +44,7 @@ beforeEach(() => {
   mocks.findBindingById.mockResolvedValue({ email: 'alice@example.com' });
   mocks.verifyPassword.mockReturnValue(true);
   mocks.consumeCode.mockResolvedValue(true);
-  mocks.generateTokenPair.mockReturnValue({ accessToken: 'access', refreshToken: 'refresh' });
+  mocks.createLoginSession.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', loginSessionId: 'sid1' });
 });
 
 describe('登录方式', () => {
@@ -58,7 +56,8 @@ describe('登录方式', () => {
     expect(mocks.findUserByName).toHaveBeenCalledWith({ where: { username: 'alice' } });
     expect(mocks.verifyPassword).toHaveBeenCalledWith('old-password', 'hashed');
     expect(user.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'online' }));
-    expect(mocks.setRefreshToken).toHaveBeenCalledWith(7, 'refresh');
+    expect(mocks.createLoginSession).toHaveBeenCalledWith(7, { authVersion: 'v1', password: 'hashed' });
+    expect(ctx.body.loginSessionId).toBe('sid1');
     expect(ctx.body.user.email).toBe('alice@example.com');
   });
 
@@ -87,7 +86,7 @@ describe('登录方式', () => {
     const ctx = { request: { body: { username: 'legacy@example.com', password: 'old-password' } }, status: 200 } as any;
     await login(ctx);
     expect(ctx.status).toBe(401);
-    expect(mocks.generateTokenPair).not.toHaveBeenCalled();
+    expect(mocks.createLoginSession).not.toHaveBeenCalled();
   });
 
   it('验证码登录消费登录专用验证码并复用相同的登录状态', async () => {
@@ -111,6 +110,6 @@ describe('登录方式', () => {
     mocks.consumeCode.mockResolvedValue(false);
     await loginWithEmailCode(ctx);
     expect(ctx.status).toBe(401);
-    expect(mocks.generateTokenPair).not.toHaveBeenCalled();
+    expect(mocks.createLoginSession).not.toHaveBeenCalled();
   });
 });

@@ -18,7 +18,7 @@ vi.mock('../../../src/services/emailVerificationService', () => ({
   isMailConfigured: () => true,
   issueEmailCode: mocks.issue,
 }));
-vi.mock('../../../src/services/tokenVersionService', () => ({ invalidateUserTokens: vi.fn() }));
+vi.mock('../../../src/services/loginSessionService', () => ({ replacePasswordAndRevokeSessions: vi.fn() }));
 
 import { resetPassword, sendLoginCode, sendResetCode } from '../../../src/controller/authEmailController';
 

@@ -1,10 +1,10 @@
 import { Context } from 'koa';
 import { User, UserEmail } from '../models';
 import { hashPassword, verifyPassword } from '../utils/crypto';
-import { generateTokenPair, verifyRefreshToken } from '../utils/jwt';
+import { createLoginSession, rotateLoginSession, revokeLoginSession, hasActiveLoginSessions,
+  replacePasswordAndRevokeSessions, InvalidLoginSessionError } from '../services/loginSessionService';
 import redisService from '../services/redisService';
 import { consumeEmailCode, normalizeEmail } from '../services/emailVerificationService';
-import { getTokenVersion, invalidateUserTokens } from '../services/tokenVersionService';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '../utils/passwordPolicy';
 
 /**
@@ -57,18 +57,11 @@ export async function register(ctx: Context) {
       throw error;
     }
 
-    // 生成 token 对
-    const tokens = generateTokenPair({
-      userId: user.id!,
-      username,
-      authVersion: await getTokenVersion(user.id!),
-    });
-
-    // 保存 refresh token 到 Redis
-    await redisService.setRefreshToken(user.id!, tokens.refreshToken);
+    const tokens = await createLoginSession(user.id, { authVersion: user.authVersion });
 
     ctx.body = {
       message: '注册成功',
+      loginSessionId: tokens.loginSessionId,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: {
@@ -91,14 +84,10 @@ export async function register(ctx: Context) {
 async function completeLogin(ctx: Context, user: User) {
   const userData = user.get({ plain: true });
   await user.update({ lastLoginAt: new Date(), status: 'online' });
-  const tokens = generateTokenPair({
-    userId: userData.id!,
-    username: userData.username,
-    authVersion: await getTokenVersion(userData.id!),
-  });
-  await redisService.setRefreshToken(userData.id!, tokens.refreshToken);
+  const tokens = await createLoginSession(userData.id!, { authVersion: userData.authVersion, password: userData.password });
   ctx.body = {
     message: '登录成功',
+    loginSessionId: tokens.loginSessionId,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     user: {
@@ -312,82 +301,40 @@ export async function getUserList(ctx: Context) {
  */
 export async function logout(ctx: Context) {
   try {
-    const userId = ctx.state.user?.userId;
-
-    const user = await User.findByPk(userId);
-    if (user) {
-      await user.update({ status: 'offline' });
+    const { userId, sid } = ctx.state.user;
+    await revokeLoginSession(userId, sid);
+    if (!await hasActiveLoginSessions(userId)) {
+      await User.update({ status: 'offline' }, { where: { id: userId } });
+      await redisService.setUserStatus(userId, 'offline');
+      await redisService.delUserSocket(userId);
     }
-
-    // 更新Redis中的用户状态
-    await redisService.setUserStatus(userId, 'offline');
-    
-    // 删除用户Socket映射
-    await redisService.delUserSocket(userId);
-
-    // 删除 refresh token
-    await redisService.delRefreshToken(userId);
-
-    ctx.body = {
-      message: '登出成功',
-    };
-  } catch (error: any) {
+    ctx.body = { message: '登出成功' };
+  } catch (error) {
     console.error('登出失败:', error);
     ctx.status = 500;
-    ctx.body = { error: '登出失败: ' + error.message };
+    ctx.body = { error: '登出失败，请稍后重试' };
   }
 }
 
-/**
- * 刷新 access token
- */
+/** Refresh one login session without disturbing another device. */
 export async function refreshToken(ctx: Context) {
+  const { refreshToken: clientRefreshToken, requestId } = (ctx.request.body || {}) as any;
+  if (typeof clientRefreshToken !== 'string' || !clientRefreshToken) {
+    ctx.status = 400;
+    ctx.body = { error: 'refresh token 不能为空' };
+    return;
+  }
+  if (requestId !== undefined && (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(requestId))) {
+    ctx.status = 400;
+    ctx.body = { error: '无效的刷新 requestId' };
+    return;
+  }
   try {
-    const { refreshToken: clientRefreshToken } = ctx.request.body as any;
-
-    if (!clientRefreshToken) {
-      ctx.status = 400;
-      ctx.body = { error: 'refresh token 不能为空' };
-      return;
-    }
-
-    // 验证 refresh token
-    let payload;
-    try {
-      payload = verifyRefreshToken(clientRefreshToken);
-    } catch (error) {
-      ctx.status = 401;
-      ctx.body = { error: 'refresh token 无效或已过期' };
-      return;
-    }
-
-    // 验证 refresh token 是否在 Redis 中存在且匹配
-    const isValid = await redisService.verifyRefreshToken(payload.userId, clientRefreshToken);
-    if (!isValid) {
-      ctx.status = 401;
-      ctx.body = { error: 'refresh token 已失效' };
-      return;
-    }
-
-    // 生成新的 token 对
-    const tokens = generateTokenPair({
-      userId: payload.userId,
-      username: payload.username,
-      authVersion: await getTokenVersion(payload.userId),
-    });
-
-    // 更新 Redis 中的 refresh token
-    await redisService.setRefreshToken(payload.userId, tokens.refreshToken);
-
-    ctx.body = {
-      message: 'token 刷新成功',
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-    };
-  } catch (error: any) {
-    console.error('刷新 token 失败:', error);
-    ctx.status = 500;
-    ctx.body = { error: '刷新 token 失败: ' + error.message };
+    const tokens = await rotateLoginSession(clientRefreshToken, requestId);
+    ctx.body = { message: 'token 刷新成功', ...tokens };
+  } catch (error) {
+    ctx.status = 401;
+    ctx.body = { error: 'refresh token 无效或登录会话已失效' };
   }
 }
 
@@ -434,16 +381,14 @@ export async function changePassword(ctx: Context) {
 
     // 更新密码
     const hashedPassword = hashPassword(newPassword);
-    await user.update({ password: hashedPassword });
-    await invalidateUserTokens(userId);
-    await redisService.delRefreshToken(userId);
+    await replacePasswordAndRevokeSessions(userId, hashedPassword, { password: user.password, authVersion: user.authVersion });
 
     ctx.body = {
       message: '密码修改成功',
     };
   } catch (error: any) {
     console.error('修改密码失败:', error);
-    ctx.status = 500;
+    ctx.status = error instanceof InvalidLoginSessionError ? 401 : 500;
     ctx.body = { error: '修改密码失败: ' + error.message };
   }
 }
