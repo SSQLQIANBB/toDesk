@@ -32,7 +32,7 @@
       <h4>录制结果：</h4>
       <video :src="recordedUrl" controls width="100%" />
       <div style="margin-top: 8px;">
-        <n-button type="info" @click="downloadRecord">下载视频</n-button>
+        <n-button type="info" :loading="saving" @click="downloadRecord">下载视频</n-button>
       </div>
     </div>
   </div>
@@ -40,6 +40,11 @@
 
 <script setup lang="ts">
 import { ref, onBeforeUnmount } from 'vue'
+import { useMessage } from 'naive-ui'
+import { saveFile } from '@/services/saveFile'
+
+const message = useMessage()
+const saving = ref(false)
 
 const screenVideoRef = ref<HTMLVideoElement | null>(null)
 const cameraVideoRef = ref<HTMLVideoElement | null>(null)
@@ -184,12 +189,16 @@ function stopRecord() {
 }
 
 /** 下载录制结果 */
-function downloadRecord() {
-  if (!recordedUrl.value) return
-  const a = document.createElement('a')
-  a.href = recordedUrl.value
-  a.download = `record-${Date.now()}.webm`
-  a.click()
+async function downloadRecord() {
+  if (!recordedUrl.value || saving.value) return
+  saving.value = true
+  try {
+    await saveFile(new Blob(recordedChunks, { type: 'video/webm' }), `record-${Date.now()}.webm`)
+  } catch {
+    message.error('保存失败，请重试')
+  } finally {
+    saving.value = false
+  }
 }
 
 /** 组件卸载时清理资源 */

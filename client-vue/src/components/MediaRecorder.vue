@@ -61,6 +61,9 @@
     <n-modal
       v-model:show="showSaveDialog"
       preset="card"
+      :mask-closable="!saving"
+      :close-on-esc="!saving"
+      :closable="!saving"
       title="录制完成"
       style="width: min(600px, calc(100vw - 24px))"
     >
@@ -85,14 +88,14 @@
           v-model:value="fileName"
           placeholder="请输入文件名"
         >
-          <template #suffix>.webm</template>
+          <template #suffix>.{{ recordingExtension }}</template>
         </n-input>
       </n-space>
 
       <template #footer>
         <n-space justify="end">
-          <n-button @click="discardRecording">丢弃</n-button>
-          <n-button type="primary" @click="downloadRecording">
+          <n-button :disabled="saving" @click="discardRecording">丢弃</n-button>
+          <n-button type="primary" :loading="saving" @click="downloadRecording">
             <template #icon>
               <n-icon>
                 <i class="iconfont icon-download" aria-hidden="true"></i>
@@ -109,6 +112,8 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useMessage } from 'naive-ui';
+import { saveFile } from '@/services/saveFile';
+import { selectVideoMimeType, getVideoFileExtension } from '@/services/recordingFormat';
 
 interface MediaRecorderProps {
   stream?: MediaStream | null;
@@ -126,6 +131,7 @@ const emit = defineEmits<{
 }>();
 
 const message = useMessage();
+const saving = ref(false);
 
 // 录制状态
 const isRecording = ref(false);
@@ -141,8 +147,10 @@ let mediaRecorder: MediaRecorder | null = null;
 let timerInterval: number | null = null;
 
 // 是否可以录制
+const recordingMimeType = computed(() => selectVideoMimeType(props.mimeType));
+const recordingExtension = computed(() => getVideoFileExtension(recordedBlob.value?.type || recordingMimeType.value));
 const canRecord = computed(() => {
-  return props.stream && MediaRecorder.isTypeSupported(props.mimeType);
+  return props.stream && !!recordingMimeType.value;
 });
 
 // 开始录制
@@ -155,7 +163,7 @@ async function startRecording() {
   try {
     // 创建 MediaRecorder
     const options: MediaRecorderOptions = {
-      mimeType: props.mimeType,
+      mimeType: recordingMimeType.value,
       videoBitsPerSecond: 2500000, // 2.5 Mbps
     };
 
@@ -233,7 +241,7 @@ function togglePause() {
 // 处理录制停止
 function handleRecordingStop() {
   // 创建 Blob
-  recordedBlob.value = new Blob(recordedChunks.value, { type: props.mimeType });
+  recordedBlob.value = new Blob(recordedChunks.value, { type: mediaRecorder?.mimeType || recordingMimeType.value });
   
   // 创建预览 URL
   recordedUrl.value = URL.createObjectURL(recordedBlob.value);
@@ -246,28 +254,23 @@ function handleRecordingStop() {
 }
 
 // 下载录制文件
-function downloadRecording() {
-  if (!recordedBlob.value) return;
-
-  const url = URL.createObjectURL(recordedBlob.value);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${fileName.value}.webm`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  message.success('下载成功');
-  showSaveDialog.value = false;
-  resetRecording();
+async function downloadRecording() {
+  if (!recordedBlob.value || saving.value) return;
+  saving.value = true;
+  try {
+    if (!await saveFile(recordedBlob.value, `${fileName.value}.${recordingExtension.value}`)) return;
+    message.success('保存成功');
+    showSaveDialog.value = false;
+    resetRecording();
+  } catch {
+    message.error('保存失败，请重试');
+  } finally {
+    saving.value = false;
+  }
 }
 
 // 丢弃录制
 function discardRecording() {
-  if (recordedUrl.value) {
-    URL.revokeObjectURL(recordedUrl.value);
-  }
   showSaveDialog.value = false;
   resetRecording();
   message.info('已丢弃录制');
@@ -275,6 +278,7 @@ function discardRecording() {
 
 // 重置录制状态
 function resetRecording() {
+  if (recordedUrl.value) URL.revokeObjectURL(recordedUrl.value);
   recordedChunks.value = [];
   recordedBlob.value = null;
   recordedUrl.value = '';

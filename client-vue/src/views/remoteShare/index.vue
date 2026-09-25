@@ -212,6 +212,7 @@
 </template>
 
 <script lang="ts" setup>
+import { isAppInBackground } from '@/services/appVisibility';
 import { onMounted, onUnmounted, ref, nextTick, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Socket } from 'socket.io-client';
@@ -419,9 +420,11 @@ async function selectContact(user: User) {
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
     scrollToBottom('auto');
-    const ids = res.messages.filter(msg => msg.fromUserId === user.id && !msg.isRead).map(msg => msg.id);
-    if (ids.length) await markMessagesAsRead(ids);
-    unread.readPrivate(user.id);
+    if (!isAppInBackground()) {
+      const ids = res.messages.filter(msg => msg.fromUserId === user.id && !msg.isRead).map(msg => msg.id);
+      if (ids.length) await markMessagesAsRead(ids);
+      unread.readPrivate(user.id);
+    }
   } catch (error: any) {
     message.error('加载聊天记录失败: ' + error.message);
     currentMessageList.value = privateMessageMap.get(user.id) || []
@@ -524,7 +527,7 @@ async function loadPendingInvitations() {
     pendingInvitations.value = res.invitations || [];
 
     if (pendingInvitations.value.length > 0) {
-      if (document.hidden) {
+      if (isAppInBackground()) {
         pendingInvitations.value.forEach(inv => {
           void notificationService.showInvitation(
             inv.group.name,
@@ -636,8 +639,7 @@ watch(socket, (nextSocket, previousSocket) => {
 }, { immediate: true });
 
 const handleVisible = () => {
-  console.log('--', document.visibilityState)
-  if (document.visibilityState === 'visible') {
+  if (!isAppInBackground()) {
     if (contactUser.value && unReadMessageCount.value[contactUser.value.id]) {
       void selectContact(contactUser.value);
     }
@@ -645,6 +647,7 @@ const handleVisible = () => {
 }
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisible);
+  window.addEventListener('focus', handleVisible);
 
   if (authUser.value && token.value) {
     await Promise.all([
@@ -660,6 +663,7 @@ onUnmounted(() => {
   unbindPageSocketEvents(socket.value);
   unread.activePrivateUserId = null;
   document.removeEventListener('visibilitychange', handleVisible);
+  window.removeEventListener('focus', handleVisible);
 });
 </script>
 

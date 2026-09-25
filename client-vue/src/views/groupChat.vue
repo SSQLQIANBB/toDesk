@@ -14,7 +14,7 @@
     >
       <n-button class="mobile-sidebar-close" secondary @click="mobileSidebarOpen = false">关闭成员列表</n-button>
       <!-- 群组信息卡片 -->
-      <div class="p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+      <div class="group-sidebar-profile p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
         <div class="flex items-center gap-3">
           <n-avatar :size="50" :src="groupInfo?.avatar || undefined">
             <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) || '?' }}</span>
@@ -218,6 +218,7 @@
 </template>
 
 <script setup lang="ts">
+import { isAppInBackground } from '@/services/appVisibility';
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type ScrollbarInst } from 'naive-ui';
@@ -226,6 +227,7 @@ import { useAuthStore } from '@/stores/auth';
 import { storeToRefs } from 'pinia';
 import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
+import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
 import { getGroupMessages, type ChatMediaPayload } from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
@@ -412,15 +414,18 @@ function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
 
 // 发起视频通话
 function handleVideoCall() {
+  if (mediaOccupancy.current.value) { message.warning('请先结束当前通话或远程控制'); return; }
   void router.push(`/group-video/${groupId.value}`);
 }
 
 function handleAudioCall() {
+  if (mediaOccupancy.current.value) { message.warning('请先结束当前通话或远程控制'); return; }
   void router.push(`/group-audio/${groupId.value}`);
 }
 
 // 发起屏幕共享
 async function handleScreenShare() {
+  if (mediaOccupancy.current.value) { message.warning('请先结束当前通话或远程控制'); return; }
   if (groupSessionState.getSession(groupId.value, 'screen')) {
     await router.push(`/group-screen/${groupId.value}`);
     return;
@@ -454,12 +459,13 @@ async function retryGroupMessage(msg: any) {
 }
 
 function clearVisibleUnread() {
-  if (!document.hidden) unread.readGroup(groupId.value);
+  if (!isAppInBackground()) unread.readGroup(groupId.value);
 }
 
 onMounted(async () => {
-  unread.readGroup(groupId.value);
+  clearVisibleUnread();
   document.addEventListener('visibilitychange', clearVisibleUnread);
+  window.addEventListener('focus', clearVisibleUnread);
   await loadGroupDetail();
   await loadGroupHistory();
   initSocket();
@@ -467,6 +473,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', clearVisibleUnread);
+  window.removeEventListener('focus', clearVisibleUnread);
   socket.value?.off('group_members', handleGroupMembers);
   socket.value?.off('group_member_joined', handleGroupMemberJoined);
   socket.value?.off('group_member_left', handleGroupMemberLeft);

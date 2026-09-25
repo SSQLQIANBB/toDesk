@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-control-confirm-request"
+description = "Enables the remote_control_confirm_request command without any pre-configured scope."
+commands.allow = ["remote_control_confirm_request"]
+
+[[permission]]
+identifier = "deny-remote-control-confirm-request"
+description = "Denies the remote_control_confirm_request command without any pre-configured scope."
+commands.deny = ["remote_control_confirm_request"]

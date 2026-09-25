@@ -1,10 +1,12 @@
 import { DataTypes, Model } from 'sequelize';
+import { randomUUID } from 'crypto';
 import sequelize from '../config/database';
 
 export interface UserAttributes {
   id?: number;
   username: string;
   password: string;
+  authVersion?: string;
   nickname?: string;
   avatar?: string;
   email?: string;
@@ -20,6 +22,7 @@ class User extends Model<UserAttributes> implements UserAttributes {
   declare id: number;
   declare username: string;
   declare password: string;
+  declare authVersion: string;
   declare nickname?: string;
   declare avatar?: string;
   declare email?: string;
@@ -46,6 +49,11 @@ User.init(
     password: {
       type: DataTypes.STRING(255),
       allowNull: false,
+    },
+    authVersion: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      defaultValue: () => randomUUID(),
     },
     nickname: {
       type: DataTypes.STRING(50),

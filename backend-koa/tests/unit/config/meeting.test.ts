@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
   connection: null as null | ((socket: any) => void),
@@ -10,6 +10,9 @@ const mock = vi.hoisted(() => ({
   messageCreate: vi.fn(),
   groupMessageCreate: vi.fn(),
   session: null as any,
+  validateSession: vi.fn(),
+  findUser: vi.fn(),
+  revocationListeners: new Set<Function>(),
 }));
 vi.mock('socket.io', () => ({ Server: class {
   on(_event: string, callback: (socket: any) => void) { mock.connection = callback; }
@@ -17,10 +20,13 @@ vi.mock('socket.io', () => ({ Server: class {
   to(rooms: string | string[]) { return { emit: (event: string, payload: any) => mock.broadcasts.push({ rooms: Array.isArray(rooms) ? rooms : [rooms], event, payload }) }; }
 } }));
 vi.mock('../../../src/utils/jwt', () => ({ verifyToken: (token: string) => ({ userId: Number(token), username: `user${token}` }) }));
-vi.mock('../../../src/services/tokenVersionService', () => ({ isTokenVersionCurrent: async () => true }));
+vi.mock('../../../src/services/loginSessionService', () => ({
+  validateAuthenticatedSession: mock.validateSession,
+  onLoginSessionsRevoked: (listener: Function) => { mock.revocationListeners.add(listener); return () => mock.revocationListeners.delete(listener); },
+}));
 vi.mock('../../../src/models', () => ({
   GroupMember: { findAll: mock.members },
-  User: { findByPk: async () => ({ status: 'online' }), update: vi.fn() },
+  User: { findByPk: mock.findUser, update: vi.fn() },
   GroupMessage: { create: mock.groupMessageCreate },
   Message: { create: mock.messageCreate },
 }));
@@ -37,6 +43,7 @@ import initialMeeting from '../../../src/config/meeting';
 function connect(id: number) {
   const handlers = new Map<string, Function>();
   const socket = {
+    use: vi.fn(), disconnect: vi.fn(),
     id: `socket-${id}`, on: (event: string, handler: Function) => handlers.set(event, handler),
     emit: vi.fn(), join: vi.fn(),
     to: (rooms: string | string[]) => ({
@@ -53,6 +60,9 @@ function connect(id: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mock.revocationListeners.clear();
+  mock.findUser.mockResolvedValue({ status: 'online' });
+  mock.validateSession.mockImplementation(async (token: string) => ({ userId: Number(token), username: `user${token}`, sid: `sid-${token}`, authVersion: 'v1', exp: 9_999_999_999 }));
   mock.broadcasts.length = 0;
   mock.members.mockResolvedValue([{ userId: 1 }, { userId: 2 }]);
   mock.start.mockImplementation(async (groupId, type, owner) => {
@@ -80,6 +90,94 @@ beforeEach(() => {
     createdAt: new Date('2026-09-17T12:00:00Z'),
     toJSON: () => ({ id: 100, ...input, createdAt: '2026-09-17T12:00:00.000Z' }),
   }));
+});
+
+afterEach(() => vi.useRealTimers());
+
+describe('长连接登录会话撤销', () => {
+  it('迟到的账号撤销事件保留事务提交后创建的新版本连接', async () => {
+    initialMeeting({} as any);
+    const oldLogin = connect(1);
+    await oldLogin.handlers.get('authenticate')!({ token: '1' });
+    mock.validateSession.mockResolvedValueOnce({ userId: 1, username: 'user1', sid: 'new-sid', authVersion: 'v2', exp: 9_999_999_999 });
+    const newLogin = connect(1);
+    await newLogin.handlers.get('authenticate')!({ token: 'new-token' });
+    for (const listener of mock.revocationListeners) listener({ userId: 1, revokedAuthVersion: 'v1', currentAuthVersion: 'v2' });
+    expect(oldLogin.socket.disconnect).toHaveBeenCalledWith(true);
+    expect(newLogin.socket.disconnect).not.toHaveBeenCalled();
+  });
+  it('连续改密事件乱序时只断开各自撤销的版本', async () => {
+    initialMeeting({} as any);
+    mock.validateSession.mockResolvedValueOnce({ userId: 1, username: 'user1', sid: 'latest-sid', authVersion: 'v3', exp: 9_999_999_999 });
+    const latest = connect(1);
+    await latest.handlers.get('authenticate')!({ token: 'latest-token' });
+    for (const event of [{ userId: 1, revokedAuthVersion: 'v2', currentAuthVersion: 'v3' },
+      { userId: 1, revokedAuthVersion: 'v1', currentAuthVersion: 'v2' }]) {
+      for (const listener of mock.revocationListeners) listener(event);
+    }
+    expect(latest.socket.disconnect).not.toHaveBeenCalled();
+  });
+  it('空闲Socket到期后断开，不能继续被动接收房间消息', async () => {
+    vi.useFakeTimers();
+    mock.validateSession.mockResolvedValueOnce({ userId: 1, username: 'user1', sid: 'sid-1', authVersion: 'v1', exp: Math.floor(Date.now() / 1000) + 1 });
+    initialMeeting({} as any);
+    const alice = connect(1);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(alice.socket.disconnect).toHaveBeenCalledWith(true);
+  });
+  it('读取账号资料期间收到撤销，不得补发authenticated或恢复旧连接', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    let finishProfile!: (value: unknown) => void;
+    mock.findUser.mockImplementationOnce(() => new Promise(resolve => { finishProfile = resolve; }));
+    const authenticating = alice.handlers.get('authenticate')!({ token: '1' });
+    await Promise.resolve();
+    for (const listener of mock.revocationListeners) listener({ userId: 1, sid: 'sid-1' });
+    finishProfile({ status: 'online' });
+    await authenticating;
+    expect(alice.socket.disconnect).toHaveBeenCalledWith(true);
+    expect(alice.socket.emit.mock.calls.some(([event]) => event === 'authenticated')).toBe(false);
+  });
+  it('每个后续事件重新验证sid，撤销后即使Socket存活也不能继续发送', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    const middleware = alice.socket.use.mock.calls[0][0];
+    const allowed = vi.fn();
+    await middleware(['private_message'], allowed);
+    expect(allowed).toHaveBeenCalledWith();
+    mock.validateSession.mockRejectedValueOnce(new Error('revoked'));
+    const denied = vi.fn();
+    await middleware(['private_message'], denied);
+    expect(denied.mock.calls[0][0]).toEqual(new Error('AUTH_REVOKED'));
+    expect(alice.socket.disconnect).toHaveBeenCalledWith(true);
+  });
+  it('同一sid换新token时，已在途验证的事件不会错误断开新认证', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    const payload = { userId: 1, username: 'user1', sid: 'sid-1', authVersion: 'v1', exp: 9_999_999_999 };
+    let finishValidation!: (value: typeof payload) => void;
+    mock.validateSession.mockImplementationOnce(() => new Promise(resolve => { finishValidation = resolve; }));
+    const next = vi.fn();
+    const validating = alice.socket.use.mock.calls[0][0](['private_message'], next);
+    mock.validateSession.mockResolvedValueOnce(payload);
+    await alice.handlers.get('authenticate')!({ token: 'refreshed-token' });
+    finishValidation(payload);
+    await validating;
+    expect(next).toHaveBeenCalledWith();
+    expect(alice.socket.disconnect).not.toHaveBeenCalled();
+  });
+  it('只断开匹配sid，账号级撤销则断开该账号所有连接', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    for (const listener of mock.revocationListeners) listener({ userId: 1, sid: 'other-sid' });
+    expect(alice.socket.disconnect).not.toHaveBeenCalled();
+    for (const listener of mock.revocationListeners) listener({ userId: 1 });
+    expect(alice.socket.disconnect).toHaveBeenCalledWith(true);
+  });
 });
 
 describe('私聊通话历史', () => {

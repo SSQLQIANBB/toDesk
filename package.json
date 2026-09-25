@@ -1,14 +1,21 @@
 {
   "name": "to-desk",
-  "version": "1.0.0",
+  "version": "0.4.0-beta.1",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "pnpm --filter backend-koa test && pnpm --filter client-vue test",
+    "test": "pnpm version:check && pnpm test:release && pnpm --filter backend-koa test && pnpm --filter client-vue test",
     "typecheck": "pnpm --filter backend-koa typecheck && pnpm --filter client-vue typecheck",
     "env:check": "pnpm --filter backend-koa env:check",
     "server": "pnpm --filter backend-koa dev",
-    "client": "pnpm --filter client-vue dev"
+    "client": "pnpm --filter client-vue dev",
+    "desktop:dev": "pnpm --filter client-vue desktop:dev",
+    "desktop:build": "pnpm --filter client-vue desktop:build",
+    "desktop:check": "pnpm --filter client-vue desktop:check",
+    "version:check": "node scripts/product-version.mjs check",
+    "version:sync": "node scripts/product-version.mjs sync",
+    "version:set": "node scripts/product-version.mjs set",
+    "test:release": "node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs"
   },
   "keywords": [],
   "author": "",
@@ -16,5 +23,6 @@
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
     "uuid": "^13.0.0"
-  }
+  },
+  "desktopBuildNumber": 5
 }

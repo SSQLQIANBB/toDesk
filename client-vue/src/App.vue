@@ -5,8 +5,10 @@
       <n-dialog-provider>
         <GroupCallInvitations />
         <GlobalPrivateCall />
+        <GlobalRemoteControl />
         <GlobalMessages />
-        <RouterView />
+        <DesktopTitlebar v-if="showDesktopTitlebar" />
+        <div class="app-route-content"><RouterView /></div>
       </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>
@@ -14,15 +16,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
+import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
+const showDesktopTitlebar = import.meta.env.VITE_DESKTOP === 'true';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import GroupCallInvitations from '@/components/GroupCallInvitations.vue';
 import GlobalPrivateCall from '@/components/GlobalPrivateCall.vue';
+import GlobalRemoteControl from '@/components/GlobalRemoteControl.vue';
 import GlobalMessages from '@/components/GlobalMessages.vue';
 import { useUnreadStore } from '@/stores/unread';
 import { useNotificationSettingsStore } from '@/stores/notificationSettings';
+import { useRemoteControlStore } from '@/stores/remoteControl';
 
 import { useRoute } from 'vue-router';
 import type { GlobalThemeOverrides } from 'naive-ui';
@@ -36,6 +42,14 @@ const authStore = useAuthStore();
 const { token, currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const notificationSettings = useNotificationSettingsStore();
+const remoteControl = useRemoteControlStore();
+const refreshRemoteCapabilities = () => { if (token.value && currentUser.value && !authStore.loggingOut) void remoteControl.refreshCapabilities(); };
+onMounted(() => window.addEventListener('focus', refreshRemoteCapabilities));
+onUnmounted(() => window.removeEventListener('focus', refreshRemoteCapabilities));
+watch(() => [currentUser.value?.id, authStore.authGeneration], () => {
+  remoteControl.reset();
+  refreshRemoteCapabilities();
+}, { immediate: true });
 
 watch(() => currentUser.value?.id, userId => {
   if (userId) void notificationSettings.load(userId);
@@ -61,6 +75,13 @@ watch(
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+/* 保持入口 HTML 无内联 style，避免原生 CSP nonce 阻断组件动态样式。 */
+input,
+textarea,
+select {
+  font-size: 16px;
 }
 
 #app {

@@ -1,0 +1,112 @@
+{
+  "notice": "Public RFC 8032 test seeds; never use for deployment or real devices.",
+  "testDeviceSeedHex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb",
+  "now": 1700000000000,
+  "key": {
+    "keyId": "fixture-only",
+    "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+    "notBefore": 1699999999000,
+    "notAfter": 1700003600000
+  },
+  "device": {
+    "id": "33333333-3333-4333-8333-333333333333",
+    "ownerUserId": 1,
+    "keyVersion": 1,
+    "fingerprint": "deb2ded39dc26fce0e6085b6fc34bf6b5941913bbfe2ea614113cff9e004c170",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=\n-----END PUBLIC KEY-----\n",
+    "revokedAt": null
+  },
+  "approvalClaims": {
+    "protocolVersion": 1,
+    "issuer": "todesk-remote-control",
+    "audience": "todesk-native-approval",
+    "purpose": "approval-request",
+    "approvalId": "77777777-7777-4777-8777-777777777777",
+    "action": "accept",
+    "sessionId": "77777777-7777-4777-8777-777777777777",
+    "host": {
+      "userId": 1,
+      "sid": "11111111-1111-4111-8111-111111111111",
+      "authVersion": "22222222-2222-4222-8222-222222222222",
+      "endpointId": "33333333-3333-4333-8333-333333333333",
+      "connectionId": "host-socket",
+      "generation": 2
+    },
+    "controller": {
+      "userId": 2,
+      "sid": "44444444-4444-4444-8444-444444444444",
+      "authVersion": "55555555-5555-4555-8555-555555555555",
+      "endpointId": "66666666-6666-4666-8666-666666666666",
+      "connectionId": "controller-socket",
+      "generation": 1
+    },
+    "requestedScope": "control",
+    "authorizationRevision": 1,
+    "controlEpoch": 1,
+    "hostKeyVersion": 1,
+    "hostKeyFingerprint": "deb2ded39dc26fce0e6085b6fc34bf6b5941913bbfe2ea614113cff9e004c170",
+    "screenId": "primary",
+    "issuedAt": 1700000000000,
+    "expiresAt": 1700000045000,
+    "sessionExpiresAt": 1700003600000
+  },
+  "approval": {
+    "format": "rc-signed-v1",
+    "keyId": "fixture-only",
+    "payload": "eyJwcm90b2NvbFZlcnNpb24iOjEsImlzc3VlciI6InRvZGVzay1yZW1vdGUtY29udHJvbCIsImF1ZGllbmNlIjoidG9kZXNrLW5hdGl2ZS1hcHByb3ZhbCIsInB1cnBvc2UiOiJhcHByb3ZhbC1yZXF1ZXN0IiwiYXBwcm92YWxJZCI6Ijc3Nzc3Nzc3LTc3NzctNDc3Ny04Nzc3LTc3Nzc3Nzc3Nzc3NyIsImFjdGlvbiI6ImFjY2VwdCIsInNlc3Npb25JZCI6Ijc3Nzc3Nzc3LTc3NzctNDc3Ny04Nzc3LTc3Nzc3Nzc3Nzc3NyIsImhvc3QiOnsidXNlcklkIjoxLCJzaWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJhdXRoVmVyc2lvbiI6IjIyMjIyMjIyLTIyMjItNDIyMi04MjIyLTIyMjIyMjIyMjIyMiIsImVuZHBvaW50SWQiOiIzMzMzMzMzMy0zMzMzLTQzMzMtODMzMy0zMzMzMzMzMzMzMzMiLCJjb25uZWN0aW9uSWQiOiJob3N0LXNvY2tldCIsImdlbmVyYXRpb24iOjJ9LCJjb250cm9sbGVyIjp7InVzZXJJZCI6Miwic2lkIjoiNDQ0NDQ0NDQtNDQ0NC00NDQ0LTg0NDQtNDQ0NDQ0NDQ0NDQ0IiwiYXV0aFZlcnNpb24iOiI1NTU1NTU1NS01NTU1LTQ1NTUtODU1NS01NTU1NTU1NTU1NTUiLCJlbmRwb2ludElkIjoiNjY2NjY2NjYtNjY2Ni00NjY2LTg2NjYtNjY2NjY2NjY2NjY2IiwiY29ubmVjdGlvbklkIjoiY29udHJvbGxlci1zb2NrZXQiLCJnZW5lcmF0aW9uIjoxfSwicmVxdWVzdGVkU2NvcGUiOiJjb250cm9sIiwiYXV0aG9yaXphdGlvblJldmlzaW9uIjoxLCJjb250cm9sRXBvY2giOjEsImhvc3RLZXlWZXJzaW9uIjoxLCJob3N0S2V5RmluZ2VycHJpbnQiOiJkZWIyZGVkMzlkYzI2ZmNlMGU2MDg1YjZmYzM0YmY2YjU5NDE5MTNiYmZlMmVhNjE0MTEzY2ZmOWUwMDRjMTcwIiwic2NyZWVuSWQiOiJwcmltYXJ5IiwiaXNzdWVkQXQiOjE3MDAwMDAwMDAwMDAsImV4cGlyZXNBdCI6MTcwMDAwMDA0NTAwMCwic2Vzc2lvbkV4cGlyZXNBdCI6MTcwMDAwMzYwMDAwMH0",
+    "signature": "GFt6e5oFSfq3ZBtJZvEDsZytc-FgXOoGP6G_5kfQHc9FnITbYXOvxh04_xlMpoigfKqBS3hyc_3ZLw4TdeVVCw"
+  },
+  "consentClaims": {
+    "protocolVersion": 1,
+    "purpose": "host-consent",
+    "approvalId": "77777777-7777-4777-8777-777777777777",
+    "action": "accept",
+    "authorizationRevision": 1,
+    "controlEpoch": 1,
+    "sessionId": "77777777-7777-4777-8777-777777777777",
+    "host": {
+      "userId": 1,
+      "sid": "11111111-1111-4111-8111-111111111111",
+      "authVersion": "22222222-2222-4222-8222-222222222222",
+      "endpointId": "33333333-3333-4333-8333-333333333333",
+      "connectionId": "host-socket",
+      "generation": 2
+    },
+    "controller": {
+      "userId": 2,
+      "sid": "44444444-4444-4444-8444-444444444444",
+      "authVersion": "55555555-5555-4555-8555-555555555555",
+      "endpointId": "66666666-6666-4666-8666-666666666666",
+      "connectionId": "controller-socket",
+      "generation": 1
+    },
+    "requestedScope": "control",
+    "decision": "control",
+    "consentNonce": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "screenId": "primary",
+    "issuedAt": 1700000000000,
+    "expiresAt": 1700000045000
+  },
+  "consent": {
+    "format": "rc-signed-v1",
+    "keyId": "device:33333333-3333-4333-8333-333333333333:1",
+    "payload": "eyJwcm90b2NvbFZlcnNpb24iOjEsInB1cnBvc2UiOiJob3N0LWNvbnNlbnQiLCJhcHByb3ZhbElkIjoiNzc3Nzc3NzctNzc3Ny00Nzc3LTg3NzctNzc3Nzc3Nzc3Nzc3IiwiYWN0aW9uIjoiYWNjZXB0IiwiYXV0aG9yaXphdGlvblJldmlzaW9uIjoxLCJjb250cm9sRXBvY2giOjEsInNlc3Npb25JZCI6Ijc3Nzc3Nzc3LTc3NzctNDc3Ny04Nzc3LTc3Nzc3Nzc3Nzc3NyIsImhvc3QiOnsidXNlcklkIjoxLCJzaWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJhdXRoVmVyc2lvbiI6IjIyMjIyMjIyLTIyMjItNDIyMi04MjIyLTIyMjIyMjIyMjIyMiIsImVuZHBvaW50SWQiOiIzMzMzMzMzMy0zMzMzLTQzMzMtODMzMy0zMzMzMzMzMzMzMzMiLCJjb25uZWN0aW9uSWQiOiJob3N0LXNvY2tldCIsImdlbmVyYXRpb24iOjJ9LCJjb250cm9sbGVyIjp7InVzZXJJZCI6Miwic2lkIjoiNDQ0NDQ0NDQtNDQ0NC00NDQ0LTg0NDQtNDQ0NDQ0NDQ0NDQ0IiwiYXV0aFZlcnNpb24iOiI1NTU1NTU1NS01NTU1LTQ1NTUtODU1NS01NTU1NTU1NTU1NTUiLCJlbmRwb2ludElkIjoiNjY2NjY2NjYtNjY2Ni00NjY2LTg2NjYtNjY2NjY2NjY2NjY2IiwiY29ubmVjdGlvbklkIjoiY29udHJvbGxlci1zb2NrZXQiLCJnZW5lcmF0aW9uIjoxfSwicmVxdWVzdGVkU2NvcGUiOiJjb250cm9sIiwiZGVjaXNpb24iOiJjb250cm9sIiwiY29uc2VudE5vbmNlIjoiQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TSIsInNjcmVlbklkIjoicHJpbWFyeSIsImlzc3VlZEF0IjoxNzAwMDAwMDAwMDAwLCJleHBpcmVzQXQiOjE3MDAwMDAwNDUwMDB9",
+    "signature": "-bsSUej3PXF4-JWVMFoBDiHcDTuToNxc-KEwv5Cw3KabVetMWokQkstXpaVED7nLi0LXTabyDpyMGhV68F3nAw"
+  },
+  "registrationChallenge": {
+    "id": "88888888-8888-4888-8888-888888888888",
+    "nonce": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "userId": 1,
+    "sid": "11111111-1111-4111-8111-111111111111",
+    "action": "register-device",
+    "expiresAt": 1700000030000
+  },
+  "registrationMessage": "{\"action\":\"register-device\",\"alias\":\"本机 Mac\",\"expiresAt\":1700000030000,\"id\":\"88888888-8888-4888-8888-888888888888\",\"nonce\":\"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ\",\"platform\":\"macos\",\"protocolVersion\":1,\"publicKey\":\"-----BEGIN PUBLIC KEY-----\\nMCowBQYDK2VwAyEAPUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=\\n-----END PUBLIC KEY-----\\n\",\"sid\":\"11111111-1111-4111-8111-111111111111\",\"userId\":1}",
+  "registration": {
+    "challengeId": "88888888-8888-4888-8888-888888888888",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=\n-----END PUBLIC KEY-----\n",
+    "alias": "本机 Mac",
+    "platform": "macos",
+    "signature": "kuVMMDVYBct6lRMtD69F4e3kCtBeXseOQg49rKHsatD5q7u0AkmGq1HwCdAXBCW6lD4JkXz27Q8ZDVgBPfdrBA=="
+  }
+}

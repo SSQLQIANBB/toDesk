@@ -1,0 +1,11 @@
+{
+  "description": "Public deterministic IPC test key only. Never use for a real process launch.",
+  "bootstrap": {
+    "protocolVersion": 1,
+    "sessionId": "77777777-7777-4777-8777-777777777777",
+    "launchId": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "key": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+  },
+  "supervisorLine": "{\"format\":\"rc-ipc-v1\",\"payload\":\"eyJzZXNzaW9uSWQiOiI3Nzc3Nzc3Ny03Nzc3LTQ3NzctODc3Ny03Nzc3Nzc3Nzc3NzciLCJsYXVuY2hJZCI6IkJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVEiLCJzZXEiOjEsImtpbmQiOiJoZWFydGJlYXQiLCJwYXlsb2FkIjp7InNhbXBsZSI6MX19\",\"mac\":\"pchWCLWCvB15QFlxY2n-RoUaa3qF6o8OwC0crJ67r70\"}\n",
+  "engineLine": "{\"format\":\"rc-ipc-v1\",\"payload\":\"eyJzZXNzaW9uSWQiOiI3Nzc3Nzc3Ny03Nzc3LTQ3NzctODc3Ny03Nzc3Nzc3Nzc3NzciLCJsYXVuY2hJZCI6IkJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVEiLCJzZXEiOjEsImtpbmQiOiJyZWFkeSIsInBheWxvYWQiOnsicHJvdG9jb2xWZXJzaW9uIjoxfX0\",\"mac\":\"zNomJoz-q0Dek7Wu-1cOaHle3ZpOjavYvXU0HpzYlJ8\"}\n"
+}

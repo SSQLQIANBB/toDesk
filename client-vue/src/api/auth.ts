@@ -101,8 +101,11 @@ export function getUserList() {
 /**
  * 用户登出
  */
-export function logout() {
-  return http.post<{ message: string }>('/api/auth/logout');
+export function logout(accessToken?: string) {
+  return request<{ message: string }>('/api/auth/logout', {
+    method: 'POST',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
 }
 
 /**

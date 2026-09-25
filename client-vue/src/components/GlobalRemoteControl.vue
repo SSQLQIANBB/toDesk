@@ -1,0 +1,98 @@
+<template>
+  <section v-if="session.visible" class="remote-session" :class="{ compact }" aria-label="远程协助会话">
+    <header>
+      <strong>{{ session.device?.alias || '远程协助' }}</strong>
+      <span>{{ session.statusMessage }}</span>
+      <n-button size="small" @click="minimize">{{ compact ? '展开' : '缩小' }}</n-button>
+      <n-button size="small" type="error" @click="session.end()">结束协助</n-button>
+    </header>
+    <div class="remote-video-area">
+      <video ref="video" autoplay playsinline muted tabindex="0" aria-label="远程画面，点击继续操作后可使用键盘鼠标"
+        @pointerdown="pointer($event, true)" @pointerup="pointer($event, false)" @pointermove="move"
+        @lostpointercapture="captureLost" @pointercancel="pause" @wheel.prevent="wheel" @contextmenu.prevent
+        @keydown="key($event, true)" @keyup="key($event, false)" @blur="pause" />
+      <div v-if="!session.stream" class="waiting">{{ session.phase === 'pending' ? '等待对方在本机确认' : '正在建立安全连接' }}</div>
+    </div>
+    <footer v-if="!compact">
+      <span>{{ session.scope === 'control' ? (session.inputArmed ? '键鼠操作中' : '键鼠操作已暂停') : '仅观看' }}</span>
+      <n-button v-if="session.scope === 'control'" size="small" :disabled="session.phase !== 'active' || session.inputArmed" @click="session.continueInput()">继续操作</n-button>
+      <n-button v-if="session.needsApproval && session.device?.canHostControl" size="small" @click="requestControl">请求控制许可</n-button>
+      <n-button v-if="session.inputArmed" size="small" @click="pause">暂停操作</n-button>
+      <span v-if="session.stats" class="stats">{{ Math.round(session.stats.framesPerSecond) }} fps · {{ Math.round(session.stats.bitrate / 1000) }} kbps<span v-if="session.stats.roundTripMs !== null"> · RTT {{ Math.round(session.stats.roundTripMs) }} ms</span></span>
+      <span class="hint">Esc 暂停操作；系统保留的快捷键仍由本机处理。</span>
+      <form v-if="session.scope === 'control'" class="remote-text" @submit.prevent="sendText">
+        <input v-model="text" maxlength="2048" aria-label="向远端输入文字" placeholder="输入中文或其他文字" @focus="pause" />
+        <n-button size="small" attr-type="submit" :disabled="!text || sendingText || session.phase !== 'active'">发送文字</n-button>
+      </form>
+    </footer>
+  </section>
+</template>
+<script setup lang="ts">
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { useRoute } from 'vue-router';
+import { NButton } from 'naive-ui';
+import { useRemoteControlSessionStore } from '@/stores/remoteControlSession';
+import { remoteWheelPixels } from '@/services/remoteControlInput';
+const session = useRemoteControlSessionStore();
+const route = useRoute();
+const video = ref<HTMLVideoElement | null>(null);
+const compact = ref(false);
+const text = ref('');
+const sendingText = ref(false);
+const pressedPointers = new Set<number>();
+watch(video, value => session.attachVideo(value), { flush: 'post' });
+watch(() => route.fullPath, () => pause());
+function pause() { pressedPointers.clear(); session.pauseInput('CONTROLLER_VIEW_BLURRED'); }
+function minimize() { pause(); compact.value = !compact.value; }
+function position(event: MouseEvent) {
+  return session.mapPointer(event.clientX, event.clientY);
+}
+function pointer(event: PointerEvent, down: boolean) {
+  if (!session.inputArmed || ![0, 1, 2].includes(event.button)) return;
+  const coordinates = position(event);
+  if (!coordinates) { if (!down) pause(); return; }
+  event.preventDefault();
+  if (down) { pressedPointers.add(event.pointerId); video.value?.setPointerCapture(event.pointerId); }
+  if (!session.sendInput({ type: 'button', payload: { ...coordinates, button: event.button as 0 | 1 | 2, down } })) pause();
+  if (!down) { pressedPointers.delete(event.pointerId); if (video.value?.hasPointerCapture(event.pointerId)) video.value.releasePointerCapture(event.pointerId); }
+}
+function captureLost(event: PointerEvent) { if (pressedPointers.has(event.pointerId)) pause(); }
+function move(event: PointerEvent) {
+  if (!session.inputArmed) return;
+  const coordinates = position(event);
+  if (coordinates) session.sendInput({ type: 'move', payload: coordinates });
+}
+function wheel(event: WheelEvent) {
+  if (!session.inputArmed) return;
+  const coordinates = position(event);
+  if (coordinates) session.sendInput({ type: 'wheel', payload: { ...coordinates, deltaX: remoteWheelPixels(event.deltaX, event.deltaMode, video.value?.clientHeight || 1), deltaY: remoteWheelPixels(event.deltaY, event.deltaMode, video.value?.clientHeight || 1), unit: 'css-pixel' } });
+}
+function key(event: KeyboardEvent, down: boolean) {
+  if (event.code === 'Escape') { event.preventDefault(); pause(); return; }
+  if (!session.inputArmed || event.isComposing) return;
+  if (session.sendInput({ type: 'key', payload: { code: event.code, down } })) event.preventDefault();
+}
+async function sendText() {
+  const value = text.value; sendingText.value = true;
+  try { if (await session.commitText(value) && text.value === value) text.value = ''; }
+  finally { sendingText.value = false; }
+}
+async function requestControl() { try { await session.requestControl(); } catch { /* The session transport already reports failure. */ } }
+function visibility() { if (document.hidden) pause(); }
+onMounted(() => { window.addEventListener('blur', pause); document.addEventListener('visibilitychange', visibility); });
+onBeforeUnmount(() => { window.removeEventListener('blur', pause); document.removeEventListener('visibilitychange', visibility); session.attachVideo(null); session.end(); });
+</script>
+<style scoped>
+.remote-session { position: fixed; z-index: 2000; inset: 6vh 5vw; display: flex; flex-direction: column; background: #111827; color: #e2e8f0; border: 1px solid #475569; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 80px #0008; }
+.remote-session.compact { inset: auto 20px 20px auto; width: min(520px, calc(100vw - 40px)); height: 340px; }
+header, footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; background: #1e293b; }
+header strong { flex: 1; }
+header span, .hint, .stats { font-size: 12px; }
+.remote-video-area { position: relative; flex: 1; min-height: 0; }
+video { width: 100%; height: 100%; object-fit: contain; outline: none; touch-action: none; }
+video:focus { box-shadow: inset 0 0 0 2px #60a5fa; }
+.waiting { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.remote-text { display: flex; width: 100%; gap: 8px; }
+.remote-text input { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid #475569; border-radius: 6px; background: #111827; color: white; }
+.hint { color: #94a3b8; }
+</style>

@@ -2,6 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
+import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { usePrivateCallStore } from '@/stores/privateCall';
 
 const mocks = vi.hoisted(() => ({
@@ -202,4 +203,31 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     expect(usePrivateCallStore().busy).toBe(false);
     wrapper.unmount();
   });
+  it('远控占用时拒绝来电和呼出，不请求设备权限或抢占会话', async () => {
+    const remote = mediaOccupancy.acquire('remote-control', 'remote-test')!;
+    const wrapper = render();
+    request(0);
+    expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', { to: { socketId: 'alice' }, accepted: false });
+    usePrivateCallStore().request = { user: { id: 1, socketId: 'alice' }, type: 0 };
+    await flushPromises();
+    expect(mocks.getUserMedia).not.toHaveBeenCalled();
+    expect(mocks.getDisplayMedia).not.toHaveBeenCalled();
+    expect(remote.isCurrent()).toBe(true);
+    wrapper.unmount(); remote.release();
+  });
+  it('设备权限弹窗期间取消，迟到流只停止自身并保留新远控占用', async () => {
+    let resolve!: (value: unknown) => void;
+    mocks.getUserMedia.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const wrapper = render();
+    usePrivateCallStore().request = { user: { id: 1, socketId: 'alice' }, type: 0 };
+    mediaOccupancy.stop('CANCELLED');
+    const remote = mediaOccupancy.acquire('remote-control', 'remote-after-cancel')!;
+    const stop = vi.fn();
+    resolve({ getTracks: () => [{ stop }] }); await flushPromises();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(remote.isCurrent()).toBe(true);
+    expect(mocks.emit).not.toHaveBeenCalledWith('webrtc_call_request', expect.anything());
+    wrapper.unmount(); remote.release();
+  });
+
 });

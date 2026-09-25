@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen w-full bg-gray-900 flex flex-col">
     <!-- 头部控制栏 -->
-    <header class="min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
+    <header class="desktop-call-header min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
       <div class="flex items-center gap-2 sm:gap-4 min-w-0">
         <n-avatar :size="40" :src="groupInfo?.avatar || undefined" class="ring-2 ring-white">
           <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
@@ -176,6 +176,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
+import { createRequestId } from '@/utils/requestId';
+const mediaOwner = `group-call:${createRequestId()}`;
+let mediaClaim: MediaClaim | null = null;
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
@@ -280,6 +284,7 @@ async function initLocalStream() {
       audio: true,
     });
 
+    if (cleanedUp || !mediaClaim?.isCurrent()) { stream.getTracks().forEach(track => track.stop()); return; }
     originalLocalStream.value = stream; // 保存原始流
     localStream.value = stream; // 当前流（可能被虚拟背景处理）
   } catch (error: any) {
@@ -584,6 +589,10 @@ function handleHangup() {
 function cleanupCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
+  const ownedMedia = !!mediaClaim;
+  mediaClaim?.release();
+  mediaClaim = null;
+  if (!ownedMedia) return;
 
   // 停止本地流
   localStream.value?.getTracks().forEach(track => track.stop());
@@ -623,8 +632,12 @@ function unbindSocketEvents() {
 }
 
 onMounted(async () => {
+  mediaClaim = mediaOccupancy.acquire('group-call', mediaOwner, () => cleanupCall(true));
+  if (!mediaClaim) { message.warning('请先结束当前通话或远程控制'); await router.replace(`/group-chat/${groupId.value}`); return; }
   await loadGroupDetail();
+  if (cleanedUp || !mediaClaim?.isCurrent()) return;
   await initLocalStream();
+  if (cleanedUp || !mediaClaim?.isCurrent()) return;
   initSocket();
 });
 
