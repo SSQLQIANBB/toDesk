@@ -12,6 +12,7 @@ COPY client-vue/package.json ./client-vue/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY client-vue ./client-vue
+COPY scripts/product-version.mjs ./scripts/product-version.mjs
 
 RUN pnpm --filter client-vue build
 
