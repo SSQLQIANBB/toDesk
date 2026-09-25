@@ -43,9 +43,11 @@ HTTP 路由主要以 `/api/auth`、`/api/groups`、`/api/messages`、`/api/invit
 
 - 账号密码登录：[login.vue](../client-vue/src/views/login.vue) → [services/loginController.ts](../client-vue/src/services/loginController.ts) → [stores/auth.ts](../client-vue/src/stores/auth.ts) → `POST /api/auth/login` → [authController.ts](../backend-koa/src/controller/authController.ts)。账号可以是用户名或 [UserEmail.ts](../backend-koa/src/models/UserEmail.ts) 中的已验证邮箱；服务端用 [User.ts](../backend-koa/src/models/User.ts) 核验密码。
 - 邮箱验证码登录：同一登录页调用 [api/auth.ts](../client-vue/src/api/auth.ts) 的 `sendEmailCode('login')`，经 `POST /api/auth/email-code/login` → [authEmailController.ts](../backend-koa/src/controller/authEmailController.ts) → [emailVerificationService.ts](../backend-koa/src/services/emailVerificationService.ts) 向已绑定邮箱发码。提交验证码时调用 `POST /api/auth/login/email-code`，由 [authController.ts](../backend-koa/src/controller/authController.ts) 消费登录专用验证码。未注册邮箱会直接提示错误，不会发送验证码。
-- 两种登录方式共用服务端的登录收尾流程：更新在线状态，签发 [utils/jwt.ts](../backend-koa/src/utils/jwt.ts) 的 token 对，通过 [redisService.ts](../backend-koa/src/services/redisService.ts) 保存 refresh token；前端统一保存登录状态并处理登录前页面跳转。
-- 页面刷新时，[router/index.ts](../client-vue/src/router/index.ts) 用 `GET /api/auth/me` 恢复用户；[utils/request.ts](../client-vue/src/utils/request.ts) 遇 401 调 `POST /api/auth/refresh-token` 并重试一次。服务端 [middleware/auth.ts](../backend-koa/src/middleware/auth.ts) 验证 token 和 [tokenVersionService.ts](../backend-koa/src/services/tokenVersionService.ts) 中的版本。
-- 退出由 [stores/auth.ts](../client-vue/src/stores/auth.ts) 调 `POST /api/auth/logout`，清理本地认证；[App.vue](../client-vue/src/App.vue) 断开 Socket。后端清除 refresh token 并更新用户状态。
+- 两种登录方式共用 [loginSessionService.ts](../backend-koa/src/services/loginSessionService.ts) 创建独立 sid，JWT 包含账号的非空 authVersion，MySQL `login_sessions` 保存刷新凭据哈希。多个设备不再共用 Redis 中一个 refresh 槽。
+- 页面刷新时，[router/index.ts](../client-vue/src/router/index.ts) 用 `GET /api/auth/me` 恢复用户；[utils/request.ts](../client-vue/src/utils/request.ts) 遇 401 调 `POST /api/auth/refresh-token`。HTTP/Socket 共用一次刷新，网络不确定时以同一个 requestId 重试；数据库事务校验当前账号版本、sid 和旧凭据哈希后轮换，并短时加密保存可恢复响应。服务端 [middleware/auth.ts](../backend-koa/src/middleware/auth.ts) 使用同一权威会话验证。
+- 退出先执行本地远控停止，再调 `POST /api/auth/logout` 撤销当前 sid；其他设备不被误注销。改密/重置密码在同一事务更新密码、authVersion 并撤销全部 sid。存活 Socket 接收撤销事件，并在后续消息/到期时再次校验。
+
+已有部署必须先执行[登录会话与远控迁移](../backend-koa/migrations/README.md)，用户需重新登录；旧版无 sid 的 JWT 不再接受，不能混跑新旧认证版本。远程控制的已实现基础与未开放部分见[实施进度](./plans/2026-09-25-remote-control-implementation.md)。
 
 ### 2.3 绑定、找回和修改密码
 
