@@ -243,6 +243,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
+let mediaClaim: MediaClaim | null = null;
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
@@ -437,6 +439,7 @@ function initSocket() {
 
 // 开始屏幕共享
 async function startScreenShare() {
+  if (!mediaClaim?.isCurrent() || cleanedUp) return;
   try {
     const preset = qualityPresets[currentQuality.value as keyof typeof qualityPresets];
 
@@ -451,9 +454,11 @@ async function startScreenShare() {
     });
 
     pendingInitialScreen.value = null;
+    if (cleanedUp || !mediaClaim?.isCurrent()) { screenStream.getTracks().forEach(track => track.stop()); return; }
     // 获取音频流 (如果需要语音)
     const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => null);
 
+    if (cleanedUp || !mediaClaim?.isCurrent()) { screenStream.getTracks().forEach(track => track.stop()); audioStream?.getTracks().forEach(track => track.stop()); return; }
     // 合并流
     localStream.value = new MediaStream([
       ...screenStream.getVideoTracks(),
@@ -623,6 +628,7 @@ function handleCallState(data: any) {
 }
 
 async function joinScreenCall(ownerUserId: number) {
+  if (!mediaClaim?.isCurrent() || cleanedUp) return;
   const owner = members.value.find(member => member.id === ownerUserId);
   sharer.value = owner || { id: ownerUserId, username: '共享者' };
   const session = groupSessionState.getSession(groupId.value, 'screen');
@@ -874,6 +880,10 @@ function handleExit() {
 function cleanupScreenCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
+  const ownedMedia = !!mediaClaim;
+  mediaClaim?.release();
+  mediaClaim = null;
+  if (!ownedMedia) return;
 
   pendingInitialScreen.value?.getTracks().forEach(track => track.stop());
   pendingInitialScreen.value = null;
@@ -924,13 +934,17 @@ function handleRecordingStop(blob: Blob) {
 }
 
 onMounted(async () => {
+  mediaClaim = mediaOccupancy.acquire('group-screen', `group-screen:${groupId.value}`, () => cleanupScreenCall(true));
+  if (!mediaClaim) { message.warning('请先结束当前通话或远程控制'); await router.replace(`/group-chat/${groupId.value}`); return; }
   const captured = takeCapturedGroupScreen(groupId.value);
   if (captured) {
     // 回填给 startScreenShare，避免切换路由后再次请求共享权限。
     pendingInitialScreen.value = captured;
   }
   await loadGroupDetail();
+  if (cleanedUp || !mediaClaim?.isCurrent()) return;
   if (pendingInitialScreen.value) await startScreenShare();
+  if (cleanedUp || !mediaClaim?.isCurrent()) return;
   initSocket();
 });
 

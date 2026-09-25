@@ -3,6 +3,7 @@ import { pinia } from '@/stores';
 import router from '@/router';
 import { getAuthRedirect } from '@/services/authNavigation';
 import { publicEnv } from '@/config/env';
+import { createRequestId } from './requestId';
 
 const API_BASE_URL = publicEnv.apiBaseUrl;
 
@@ -10,12 +11,15 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>;
   body?: any;
+  signal?: AbortSignal;
   _retry?: boolean;
   _skipAuthRedirect?: boolean;
 }
 
 // 刷新token的Promise，用于防止并发刷新
 let refreshTokenPromise: Promise<boolean> | null = null;
+let refreshGeneration: number | null = null;
+let refreshCredential: string | null = null;
 let authFailurePromise: Promise<void> | null = null;
 let authFailureHandled = false;
 
@@ -31,36 +35,58 @@ function skipsAutomaticAuthRecovery(url: string) {
 /**
  * 刷新 access token
  */
-export async function refreshAccessToken(): Promise<boolean> {
+export function refreshAccessToken(): Promise<boolean> {
+  const auth = useAuthStore(pinia);
+  if (refreshTokenPromise && refreshGeneration === auth.authGeneration && refreshCredential === auth.refreshToken) return refreshTokenPromise;
+  refreshGeneration = auth.authGeneration;
+  refreshCredential = auth.refreshToken;
+  const operation = performTokenRefresh().finally(() => {
+    if (refreshTokenPromise === operation) { refreshTokenPromise = null; refreshGeneration = null; refreshCredential = null; }
+  });
+  refreshTokenPromise = operation;
+  return operation;
+}
+
+async function performTokenRefresh(): Promise<boolean> {
   const auth = useAuthStore(pinia);
 
-  if (!auth.refreshToken) {
+  if (!auth.refreshToken || auth.loggingOut) {
     return false;
   }
 
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/refresh-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken: auth.refreshToken }),
-    });
-
-    if (!response.ok) {
-      return false;
-    }
-
-    const data = await response.json();
-    auth.updateToken(data.accessToken, data.refreshToken);
-    return true;
-  } catch (error) {
-    console.error('Refresh token failed:', error);
-    return false;
+  const originalGeneration = auth.authGeneration;
+  const originalToken = auth.token;
+  const originalRefreshToken = auth.refreshToken;
+  const requestId = createRequestId();
+  // A lost response may already have rotated the credential; retry that exact operation.
+  const body = JSON.stringify({ refreshToken: originalRefreshToken, requestId });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (auth.loggingOut || auth.authGeneration !== originalGeneration || auth.token !== originalToken || auth.refreshToken !== originalRefreshToken) return false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: controller.signal,
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      // An in-flight refresh must not restore a logged-out or switched account.
+      if (auth.loggingOut || auth.authGeneration !== originalGeneration || auth.token !== originalToken || auth.refreshToken !== originalRefreshToken) return false;
+      if (typeof data.accessToken !== 'string' || typeof data.refreshToken !== 'string') return false;
+      auth.updateToken(data.accessToken, data.refreshToken);
+      return true;
+    } catch (error) {
+      if (attempt === 1) console.error('Refresh token failed:', error);
+    } finally { clearTimeout(timeout); }
   }
+  return false;
 }
 
 async function handleAuthenticationFailure() {
+  if (authFailurePromise) { await authFailurePromise; return; }
   const auth = useAuthStore(pinia);
   if (authFailureHandled) {
     if (!auth.token) return;
@@ -98,7 +124,8 @@ export async function request<T = any>(
   const requestHeaders = { ...headers };
 
   const auth = useAuthStore(pinia);
-  if (auth.token) {
+  const requestGeneration = auth.authGeneration;
+  if (auth.token && !requestHeaders.Authorization) {
     requestHeaders.Authorization = `Bearer ${auth.token}`;
   }
 
@@ -111,6 +138,7 @@ export async function request<T = any>(
   const config: RequestInit = {
     method,
     headers: requestHeaders,
+    signal: options.signal,
   };
 
   if (body && method !== 'GET') {
@@ -124,21 +152,20 @@ export async function request<T = any>(
 
     if (!response.ok) {
       if (response.status === 401 && !skipsAutomaticAuthRecovery(url)) {
+        options.signal?.throwIfAborted();
+        if (auth.authGeneration !== requestGeneration || auth.loggingOut) throw new Error('Authentication changed during request');
         if (!_retry) {
-          // 使用共享的 refreshTokenPromise 防止并发刷新
-          if (!refreshTokenPromise) {
-            refreshTokenPromise = refreshAccessToken().finally(() => {
-              refreshTokenPromise = null;
-            });
-          }
-
-          const refreshSuccess = await refreshTokenPromise;
+          // HTTP and Socket authentication share one refresh operation/requestId.
+          const refreshSuccess = await refreshAccessToken();
+          options.signal?.throwIfAborted();
+          if (auth.authGeneration !== requestGeneration || auth.loggingOut) throw new Error('Authentication changed during request');
           if (refreshSuccess) {
             // 刷新成功，重试原始请求
             return request<T>(url, { ...options, _retry: true });
           }
         }
 
+        if (auth.authGeneration !== requestGeneration || auth.loggingOut) throw new Error('Authentication changed during request');
         if (_skipAuthRedirect) {
           throw new Error(data.error || 'Login expired, please sign in again');
         }

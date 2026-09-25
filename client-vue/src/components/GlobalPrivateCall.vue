@@ -101,6 +101,8 @@
 </template>
 
 <script lang="ts" setup>
+import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
+import { createRequestId } from '@/utils/requestId';
 import { isAppInBackground } from '@/services/appVisibility';
 import { nextTick, ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useSocketStore } from '@/stores/socket';
@@ -132,6 +134,8 @@ type User = {
 
 const socketStore = useSocketStore();
 const callStore = usePrivateCallStore();
+const mediaOwner = `private:${createRequestId()}`;
+let mediaClaim: MediaClaim | null = null;
 const activePeer = ref<User | null>(null);
 const socket = computed(() => socketStore.socket);
 let generation = 0;
@@ -283,6 +287,8 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
     return;
   }
 
+  mediaClaim = mediaOccupancy.acquire('private-call', mediaOwner, cleanup);
+  if (!mediaClaim) { message.warning('请先结束当前通话或远程控制'); activePeer.value = null; return; }
   try {
     isConnecting.value = true;
     connectionStatus.value = 'connecting';
@@ -292,7 +298,7 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
     const attempt = generation;
     // 先获取媒体流
     await initDeviceMedia(type);
-    if (attempt !== generation) { stopTrack(); return; }
+    if (attempt !== generation) return;
     connectModalShow.value = true;
     isFullscreen.value = true;
     await nextTick();
@@ -321,24 +327,23 @@ let peer: RTCPeerConnection | null = null;
 // 初始化用户媒体
 async function initDeviceMedia(type = DEVICE_TYPE.CAMERA) {
   const mediaDevices = navigator.mediaDevices;
+  const attempt = generation;
+  const owner = mediaClaim;
 
   try {
-    if (type === DEVICE_TYPE.CAMERA) {
-      currentStream = await mediaDevices.getUserMedia(cameraConstraints);
-    } else if (type === DEVICE_TYPE.AUDIO) {
-      currentStream = await mediaDevices.getUserMedia({ audio: true, video: false });
-    } else {
-      currentStream = await mediaDevices.getDisplayMedia(screenRecordConstraints);
-
-      // 监听屏幕共享停止
-      currentStream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        hangup();
-      });
-    }
+    const stream = type === DEVICE_TYPE.CAMERA ? await mediaDevices.getUserMedia(cameraConstraints)
+      : type === DEVICE_TYPE.AUDIO ? await mediaDevices.getUserMedia({ audio: true, video: false })
+      : await mediaDevices.getDisplayMedia(screenRecordConstraints);
+    if (attempt !== generation || !owner?.isCurrent()) { stream.getTracks().forEach(track => track.stop()); return; }
+    currentStream = stream;
+    if (type === DEVICE_TYPE.SCREEN) stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+      if (attempt === generation && owner.isCurrent()) hangup();
+    });
 
     await nextTick();
     syncVideos();
   } catch (error) {
+    if (attempt !== generation || !owner?.isCurrent()) return;
     console.error('获取媒体设备失败:', error);
     throw error;
   }
@@ -517,6 +522,8 @@ function handleIncomingCall(data: { from: string; callId?: string; deviceType: D
     }
     return;
   }
+  mediaClaim = mediaOccupancy.acquire('private-call', mediaOwner, cleanup);
+  if (!mediaClaim) { socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false }); return; }
   activePeer.value = { ...(data.user || socketStore.userList.find(user => user.socketId === data.from)), socketId: data.from, id: data.user?.id || 0 };
   incomingCallFromSocketId.value = data.from;
   incomingCallFrom.value = contactUserName.value;
@@ -550,7 +557,7 @@ async function acceptCall() {
     const attempt = generation;
     // 共享接收方只观看对方屏幕，无需选择自己的屏幕。
     if (incomingCallType.value !== DEVICE_TYPE.SCREEN) await initDeviceMedia(incomingCallType.value);
-    if (attempt !== generation) { stopTrack(); return; }
+    if (attempt !== generation) return;
     await nextTick();
     syncVideos();
     await initRTC(RTC_TYPE.CALLEE);
@@ -612,6 +619,8 @@ function hangup() {
 }
 
 function cleanup() {
+  mediaClaim?.release();
+  mediaClaim = null;
   generation++;
   outgoingCallId = null;
   outgoingRinging = false;

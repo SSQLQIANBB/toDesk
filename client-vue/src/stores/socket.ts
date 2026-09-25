@@ -62,7 +62,9 @@ export const useSocketStore = defineStore('socket', () => {
 
   async function handleAuthError() {
     const authStore = useAuthStore(pinia);
+    const generation = authStore.authGeneration;
     const res = await refreshAccessToken();
+    if (generation !== authStore.authGeneration || authStore.loggingOut) return;
 
     if (!res) {
       await authStore.logout({ callApi: false, navigate: true });

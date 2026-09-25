@@ -7,6 +7,12 @@ const HOME_ROUTE = { name: 'Remote' };
 
 const routes = [
   {
+    name: 'RemoteControl',
+    path: '/remote-control',
+    component: () => import('@/views/remoteControl/index.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     name: 'Login',
     path: '/login',
     component: () => import('@/views/login.vue'),
