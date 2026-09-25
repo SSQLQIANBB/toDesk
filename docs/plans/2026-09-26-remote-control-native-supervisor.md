@@ -29,17 +29,27 @@ line = JSON({format:"rc-ipc-v1", payload:encoded, mac:base64url(mac)}) + LF
 
 方向只能是 `supervisor-to-engine` 或 `engine-to-supervisor`。base64url 无填充且必须规范编码。MAC 错误、重放、跳号、跨会话/进程复制、反射、超限或非法结构都会使当前 codec 永久失效。HMAC 对编码后的原始 payload 签名，不依赖不同语言对 JSON 键顺序的处理。画面数据不经过这个控制管道。
 
-命令为 `offer`、`ice`、`send-channel`、`start-media`、`renew-media`、`stop-media`、`heartbeat`、`stop`。事件为 `ready`、`answer`、`ice`、`dtls`、`channel-open`、`channel-data`、`media-started`、`media-progress`、`media-stopped`、`stopped`、`error`。`ready` 仅表示进程就绪，不表示授权通过。通道 `data` 是无填充 base64url 编码的 UTF-8 原始字节，通道名称严格限定为 `rc-state-v1`/`rc-input-v1`，均为可靠有序。
+命令为 `offer`、`ice`、`send-channel`、`start-media`、`renew-media`、`stop-media`、`heartbeat`、`stop`。事件为 `ready`、`answer`、`ice`、`dtls`、`channel-open`、`channel-data`、`media-started`、`media-layout`、`media-progress`、`media-stopped`、`stopped`、`error`。`ready` 仅表示进程就绪，不表示授权通过。通道 `data` 是无填充 base64url 编码的 UTF-8 原始字节，通道名称严格限定为 `rc-state-v1`/`rc-input-v1`，均为可靠有序。
 
 `start-media`/`renew-media` 包含 `mediaLeaseSeq`、`ttlMs`、十进制字符串 `monotonicDeadlineNs`。双方显式使用同机 `CLOCK_MONOTONIC`；监督进程先读内核时钟，再计算原生租约的剩余时间，避免排队延长权限。媒体进程取接收时间加 TTL 与绝对期限的较小值，TTL 不超过 15 秒，续租不能复活已到期的媒体会话。
 
-进程读写、队列和清理有界；EOF、心跳丢失、输出背压或停止指令触发退出并回收采屏子进程。正式资源必须来自编译时固定路径与 SHA256 清单，当前清单为空。开发路径仅由 `remote-control-harness` feature 的独立 CLI 接受，不提供网页调用入口。
+进程读写、队列和清理有界；EOF、心跳丢失、输出背压或停止指令触发退出并回收采屏子进程。候选引擎通过构建期显式选择完整资源包，编译固定清单；运行时只从 Tauri 的 `Resources/remote-control-engine/` 加载，逐项核对脚本、解释器、动态库及插件的路径、大小、SHA-256、执行权限，拒绝链接、额外或缺失资源。默认构建不带引擎，旧单程序清单必须保持空。开发路径仅由 `remote-control-harness` feature 的独立 CLI 接受，不提供网页调用入口。
 
 ## 3. 媒体与输入执行
 
 开发引擎使用 GStreamer 真实 PeerConnection，从 SCTP/RTP 的 DTLS transport 读取证书，将 PEM 转 DER 后计算 SHA256。它不把 SDP 中的指纹直接当作握手证据。ScreenCaptureKit → VideoToolbox H.264 的采屏进程在首个有效媒体租约到来后启动，之前 appsrc 不产生画面。
 
-当前开发传输只接受 loopback host ICE，不使用 STUN/TURN。采屏保持既有实验限制：主屏、1280×720、最高 15fps、无音频、单次最多 45 秒；不能据此声称已满足一小时产品会话要求。Python SDK、插件和脚本也还不是可发布的签名 sidecar。
+当前开发传输只接受 loopback host ICE，不使用 STUN/TURN。采屏保持既有实验限制：主屏、1280×720、最高 15fps、无音频、单次最多 45 秒；不能据此声称已满足一小时产品会话要求。新增可搬移候选资源包仅用于本地内测，完整产品信令、正式签名与许可证分发材料仍需验收。
+
+### 3.0 H.264 与系统 WebView
+
+当前协商采用 `H264/90000`、`packetization-mode=1`、Constrained Baseline Level 3.1（offer 为 `42e01f`）。VideoToolbox 启动时先尝试硬件编码，创建、属性配置或准备失败后最多尝试一次系统软件编码。两次失败则结束；已开始采屏后发生编码错误仍结束，不热切换编码器、不重置活性或授权期限。
+
+硬件使用 `ConstrainedBaseline_AutoLevel`，本机实际 SPS 为 `42c01f`；软件不接受该自动 profile 配置，因此使用固定 Baseline 3.1，实际 SPS 为 `42e01f`。输出每个访问单元前校验真实 SPS：NAL 类型为 SPS、profile_idc=66、profile_iop 匹配 `x1xx0000`、level_idc=31，未知/不兼容输出直接停止。两种约束位属于相同的 Constrained Baseline 档次，不修改 SPS 比特或伪造标识。[RFC 6184 §8.1](https://www.rfc-editor.org/rfc/rfc6184#section-8.1)
+
+GStreamer 本地 RTP caps 同时容纳 `42e01f` 和 `42c01f`，解决字符串求交与 profile 语义等价之间的差异；SDP 仍从对端实际提供的 `42e01f` 选择 payload。`rtph264pay` 使用 `aggregate-mode=none`、保留周期参数集：本机系统 WKWebView 在 `zero-latency` 聚合时收到 RTP 但完整帧/解码计数为 0，关闭聚合后真实画面通过；不能仅靠 Chromium 成功认定桌面 WebView 兼容。
+
+独立 `remote-control-encoder-check.py` 使用真实编码器处理合成像素，检查硬件异常后的软件回退、有限失败路径、帧序与输出 SPS，不采屏、不注入输入、不保存帧。硬件强制与软件禁用的选择规则依据 Apple SDK，并在创建后核对可用的后端属性。[Apple 编码器选择](https://developer.apple.com/documentation/videotoolbox/kvtvideoencoderspecification_requirehardwareacceleratedvideoencoder)
 
 ### 3.1 独立画面活性
 
@@ -66,7 +76,7 @@ payload 恰好包含这六个字段。序号为不超过 `2^53-1` 的无符号�
 
 ### 3.2 输入执行边界
 
-实际键鼠验收还需验证内容矩形、缩放/DPI、旋转与主屏坐标的一致性。
+已通过实际帧附件建立内容矩形，认证 `media-layout` 与原生独立主屏快照绑定后才允许 arm；状态通道 `layout` 包含完整 geometry。主控过滤 CSS 与编码帧两层黑边、核对真实解码尺寸；原生在输入执行前复查采集布局及本机显示状态，变化即释放并结束。逻辑点、物理像素、旋转方向和边缘钳制详见[坐标合同](./2026-09-26-remote-control-layout.md)。当前已验证本机 Retina 元数据和记录型输入路径；实体旋转、多种缩放配置和真实 OS 点击仍须实机验收。
 
 `input.rs` 对消息大小、结构、类型、坐标、键码、序号、票据、授权代次及布局做验证。执行前再次检查真实系统权限和布局，按键/鼠标 down 成功后才记入释放记录，未持有的 up 不注入系统。文字提交限制长度并按 commitId 防重放。macOS 适配器使用 CoreGraphics；Windows 当前返回不支持。
 
@@ -76,9 +86,12 @@ payload 恰好包含这六个字段。序号为不超过 `2^53-1` 的无符号�
 
 ```sh
 python3 -m unittest discover -s scripts -p 'test_remote_control_*.py' -v
+python3 scripts/remote-control-encoder-check.py
+node scripts/remote-control-wkwebview-capabilities.mjs
 cargo test --locked --manifest-path client-vue/src-tauri/Cargo.toml
 cargo build --locked --manifest-path client-vue/src-tauri/Cargo.toml --features remote-control-harness --bin remote-control-host-harness
 REMOTE_CONTROL_PROBE_PYTHON=/tmp/todesk-gstreamer-m0-1.28.7/bin/python node scripts/remote-control-supervisor-probe.mjs --source=screen
+REMOTE_CONTROL_PROBE_PYTHON=/tmp/todesk-gstreamer-m0-1.28.7/bin/python node scripts/remote-control-supervisor-probe.mjs --source=screen --browser=wkwebview
 REMOTE_CONTROL_PROBE_PYTHON=/tmp/todesk-gstreamer-m0-1.28.7/bin/python node scripts/remote-control-supervisor-probe.mjs --source=screen --stop-mode=lease-expiry
 REMOTE_CONTROL_PROBE_PYTHON=/tmp/todesk-gstreamer-m0-1.28.7/bin/python node scripts/remote-control-supervisor-probe.mjs --source=screen --stop-mode=pause --scope=control
 REMOTE_CONTROL_PROBE_PYTHON=/tmp/todesk-gstreamer-m0-1.28.7/bin/python node scripts/remote-control-supervisor-probe.mjs --source=screen --stop-mode=capture-freeze --scope=control

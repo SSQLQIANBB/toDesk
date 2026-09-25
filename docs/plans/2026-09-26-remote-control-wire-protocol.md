@@ -116,6 +116,12 @@ namespace `/remote-control`，Socket.IO path `/meeting`；关闭自动重连。�
 
 状态通道使用可靠有序 `rc-state-v1`，输入通道使用可靠有序 `rc-input-v1`。状态消息共同头为 `version, sessionId, negotiationId, connectionGeneration, type, payload`。hello 绑定同一 connection proof，心跳、屏幕布局、input-arm/input-armed、input-window/input-ack、pause/end 已接主控 peer 与 Rust HostRuntime。开发 sidecar 只透传有界原始通道字节，Rust 负责解析、授权及输入执行；CLI 测试使用记录型执行器。
 
+主控必须完成实际 DTLS 证书哈希核对，发送带同一签名凭据的 hello，并收到宿主确认，才能发送周期心跳。异步证书校验期间只有 connection proof 并不代表握手完成；心跳不得抢先到达原生端。等待确认仍受原有建连及 3 秒活性截止约束，不通过延长超时掩盖启动问题。
+
+原生 IPC 接收线程记录本机单调接收时间，经过适配器排队后仍用于心跳和呈现活性，不能用处理时间刷新旧消息。处理时的权限/租约检查使用当前时间，超过 3 秒或未来接收时间拒绝；该时间仅存在原生内存，不新增可由远端指定的协议字段。启动前授权占用、DTLS/SDP 匹配和队列上限见[原生协商边界](./2026-09-26-remote-control-host-transport.md)。
+
+`layout` 必须携带 `{screenId, layoutVersion, geometry}`，其中 geometry 绑定显示器、全局逻辑矩形、定向物理像素、旋转、实际编码尺寸及有效内容矩形。只在媒体租约有效且认证采集数据已与本机快照核对后发送；缺失布局不能 arm，同版本字段改变也结束。指针 x/y 相对有效内容归一化，不包含两层黑边，也不重复乘 DPI 或旋转。严格 schema 与共享测试向量见[画面布局合同](./2026-09-26-remote-control-layout.md)。
+
 心跳 `renderedFrames` 只在真实呈现/解码计数增加时推进呈现活性，重复值不刷新计时，倒退拒绝。主控在同一状态通道上先报告当前帧数，再发送 input-arm；原生要求 capture/encoded/forwarded/rendered 四阶段均健康才能启用输入。发送端前三阶段通过认证 IPC 的 `media-progress` 报告原始单调时钟进度，任一阶段 3 秒停滞暂停、10 秒结束；租约续签和数据心跳不延长进度截止。恢复画面不自动恢复控制。字段与校验合同见[独立画面活性](./2026-09-26-remote-control-native-supervisor.md#31-独立画面活性)。
 
 ## 5. 当前验证边界
@@ -127,3 +133,7 @@ namespace `/remote-control`，Socket.IO path `/meeting`；关闭自动重连。�
 早期 macOS 屏幕实验与进程清理证据见 [M0 记录](./2026-09-25-remote-control-m0-validation.md)，后续带签名授权、真实 DTLS 与 Rust 监督的开发闭环见[原生监督说明](./2026-09-26-remote-control-native-supervisor.md)及[实施进度](./2026-09-25-remote-control-implementation.md)。设备身份与系统确认的实际测试边界见[身份说明](./2026-09-26-remote-control-native-identity.md)；正式签名 sidecar、实际 OS 输入验收与跨平台/TURN 仍需继续实施。
 
 参考：[Ed25519-dalek 2.1.1](https://docs.rs/crate/ed25519-dalek/2.1.1)、[Tauri capabilities](https://v2.tauri.app/security/capabilities/)。本地安装的库源码用于核对 API 与编译兼容性。
+
+## ICE 签名配置续行
+
+`GET /api/remote-control/sessions/:id/ice` 已由占位改为会话授权后的短期 TURN 凭据接口，增加 `proof` 字段。其签名载荷用途为 `ice-config`、受众为 `todesk-native-ice`，字段及生存期见 [TURN 接入合同](../remote-control-turn.md)。主控将 `iceServers/iceTransportPolicy` 交给 PeerConnection；被控原生适配器须先把 `proof` 交给 `PreparedHost::configure_ice`，再送 offer。ICE 签名不能用于连接握手或媒体租约。新配置未进入旧安装包。

@@ -4,6 +4,11 @@
 - [远控签名与主控协议](./plans/2026-09-26-remote-control-wire-protocol.md)：签名格式、密钥配置、建连/短租约、主控适配器事件与原生集成边界。
 - [原生设备身份与确认](./plans/2026-09-26-remote-control-native-identity.md)：设备登记/撤销/重建、系统凭据存储、原生同意窗口与编译时可信公钥配置。
 - [原生监督与输入](./plans/2026-09-26-remote-control-native-supervisor.md)：原生会话监督、继承管道认证、媒体租约、macOS 输入执行器和开发验证边界。
+- [原生启动与协商](./plans/2026-09-26-remote-control-host-transport.md)：启动前占用本地同意、固定建连期限、实际 DTLS 绑定和保留接收时间的消息队列。
+- [远控 TURN 接入与核对](./remote-control-turn.md)：复用现有服务、会话短期凭据、原生签名配置及 UDP/TCP 强制中继实测。
+- [画面布局与指针坐标](./plans/2026-09-26-remote-control-layout.md)：实际内容矩形、双层黑边、DPI/旋转、原生布局绑定与变化停止。
+- [原生引擎候选包](./remote-control-engine-packaging.md)：固定依赖、包内加载、完整资源校验、本地打包与验收边界。
+- [内测版本与桌面发布](./DESKTOP_RELEASE.md)：统一版本、重大变更升级规则、版本检查和安装包构建。
 - [功能实现链路](./FEATURE_IMPLEMENTATION_GUIDE.md)：按功能查看前端页面、API/Socket、后端处理器和存储模型的对应关系。
 - [小带宽实时通信方案](./LOW_BANDWIDTH_REALTIME.md)：消息可靠性、在线状态、媒体限速和监控的实现与边界。
 - [邮箱验证配置](./EMAIL_VERIFICATION.md)：QQ 邮箱 SMTP 配置、验证码规则和上线检查。
