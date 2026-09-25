@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "vitest run",
+    "test:remote:integration": "vitest run --config vitest.remote-integration.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "dev": "node --env-file=.env.local ./node_modules/nodemon/bin/nodemon.js -r tsconfig-paths/register src/app.ts",

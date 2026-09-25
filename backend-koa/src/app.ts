@@ -7,7 +7,10 @@ import { koaBody } from 'koa-body';
 import setupRouter from './router';
 import initializeSocket from './config/initializeSocket';
 import initialMeeting from './config/meeting';
-import { initDatabase } from './config/database';
+import { initializeRemoteControl } from './config/remoteControl';
+import sequelize, { initDatabase } from './config/database';
+import redis from './config/redis';
+import { initializeRemoteControlRuntime } from './services/initializeRemoteControlRuntime';
 import { env } from './config/env';
 import cors from '@/middleware/cors'
 
@@ -52,7 +55,26 @@ async function startServer() {
     // 2. 初始化Socket.IO
     console.log(chalk.yellow('🔌 正在初始化 Socket.IO...'));
     // initializeSocket(httpServer)
-    initialMeeting(httpServer)
+    const sockets = initialMeeting(httpServer);
+    initializeRemoteControl(sockets);
+    const remoteRuntime = initializeRemoteControlRuntime(httpServer);
+    let shuttingDown = false;
+    const shutdown = async () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      const deadline = setTimeout(() => process.exit(1), 10_000);
+      deadline.unref();
+      try {
+        sockets.close();
+        await remoteRuntime.stop();
+        await sequelize.close();
+        await redis.quit();
+        clearTimeout(deadline);
+        process.exit(0);
+      } catch { process.exit(1); }
+    };
+    process.once('SIGTERM', shutdown);
+    process.once('SIGINT', shutdown);
     console.log(chalk.green('✓ Socket.IO 初始化完成\n'));
 
     // 3. 注册路由

@@ -67,3 +67,4 @@ export { User, UserEmail, MessageReceipt, Group, GroupMember, Message, GroupMess
 
 
 export { LoginSession };
+export { RemoteDevice, AssistanceGrant, RemoteSessionRecord, RemoteSessionEvent } from './RemoteControl';
