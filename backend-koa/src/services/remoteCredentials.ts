@@ -1,5 +1,6 @@
 import { createPrivateKey, createPublicKey, sign, verify, type KeyObject } from 'crypto';
 import { z } from 'zod';
+import { iceConfigurationSchema, type RemoteIceConfiguration } from './remoteIce';
 import { isEndpoint, RemoteControlError, REMOTE_LIMITS, type RemoteSession } from './remoteControlProtocol';
 
 export const REMOTE_SIGNATURE_DOMAIN = 'todesk-remote-control/v1';
@@ -102,6 +103,20 @@ export function verifyHostConsent(envelope: unknown, session: RemoteSession,
 export class RemoteCredentialSigner {
   private readonly key: KeyObject;
   readonly publicKey: Readonly<RemotePublicSigningKey>;
+  /** Called only after the ICE service revalidates live session and durable authority. */
+  issueIceConfiguration(session: RemoteSession, configuration: RemoteIceConfiguration, now = Date.now()) {
+    integer.parse(now);
+    configuration = iceConfigurationSchema.parse(configuration);
+    endpoint.parse(session.host); endpoint.parse(session.controller); uuid.parse(session.id);
+    if (!['connecting', 'active'].includes(session.state) || session.authorizationRevision < 1
+      || session.deadline <= now || session.hardDeadline <= now || session.hardDeadline > now + REMOTE_LIMITS.sessionMs
+      || now < this.publicKey.notBefore || configuration.expiresAt > this.publicKey.notAfter
+      || configuration.expiresAt <= session.hardDeadline || configuration.expiresAt > session.hardDeadline + 300_000)
+      throw new RemoteControlError('REMOTE_ICE_SIGNING_WINDOW', 503);
+    return signed(this.publicKey.keyId, { protocolVersion: 1, issuer: 'todesk-remote-control', audience: 'todesk-native-ice', purpose: 'ice-config',
+      sessionId: session.id, host: session.host, controller: session.controller, issuedAt: now,
+      sessionExpiresAt: session.hardDeadline, ...configuration }, this.key);
+  }
   constructor(keyId: string, pem: string, notBefore: number, notAfter: number) {
     identifier.parse(keyId); integer.parse(notBefore); positive.parse(notAfter);
     if (notAfter <= notBefore) throw new Error('REMOTE_SIGNING_KEY_WINDOW_INVALID');

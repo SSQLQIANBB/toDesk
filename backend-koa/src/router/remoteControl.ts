@@ -10,9 +10,13 @@ import { getRemoteControlCapabilities } from '../services/remoteControlPolicy';
 import { RemoteControlError, uuid } from '../services/remoteControlProtocol';
 import { deviceRegistrationSchema, RemoteDeviceChallengeStore, verifyRegistrationProof } from '../services/remoteDeviceProof';
 import { remoteCredentialSignerFromEnvironment } from '../services/remoteCredentials';
+import { RemoteIceService, turnSettingsFromEnvironment } from '../services/remoteIce';
+import { RedisRemoteSessionStore } from '../services/redisRemoteSessionStore';
+import { RemoteSessionHistory } from '../services/remoteSessionHistory';
 
 const router = new Router({ prefix: '/api/remote-control' });
 const challenges = new RemoteDeviceChallengeStore(redis);
+const ice = new RemoteIceService(new RedisRemoteSessionStore(redis), new RemoteSessionHistory(), turnSettingsFromEnvironment, remoteCredentialSignerFromEnvironment);
 const safeDevice = (device: RemoteDevice) => ({ deviceId: device.id, alias: device.alias, platform: device.platform,
   revokedAt: device.revokedAt, createdAt: device.createdAt });
 
@@ -102,6 +106,9 @@ router.get('/sessions', async ctx => {
     endedAt: record.endedAt, endReason: record.endReason, hostDeviceId: record.hostDeviceId, scope: record.scope,
   })) };
 });
-router.get('/sessions/:id/ice', () => { throw new RemoteControlError('NATIVE_VALIDATION_PENDING', 503); });
+router.get('/sessions/:id/ice', async ctx => {
+  ctx.set('Cache-Control', 'no-store');
+  ctx.body = await ice.issue(uuid.parse(ctx.params.id), ctx.state.remoteAuth);
+});
 
 export default router;
