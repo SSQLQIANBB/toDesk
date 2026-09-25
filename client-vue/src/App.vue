@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
-const showDesktopTitlebar = import.meta.env.VITE_DESKTOP === 'true' && /Mac/.test(navigator.platform);
+const showDesktopTitlebar = import.meta.env.VITE_DESKTOP === 'true';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';

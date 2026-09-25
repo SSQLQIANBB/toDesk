@@ -19,6 +19,9 @@ on:
       - 'client-vue/**'
       - 'pnpm-lock.yaml'
       - 'scripts/desktop-release*.mjs'
+      - 'scripts/product-version*.mjs'
+      - 'package.json'
+      - 'backend-koa/package.json'
       - '.github/workflows/desktop.yml'
       - '.github/workflows/desktop-release.yml'
 
@@ -63,8 +66,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: client-vue/src-tauri -> target
+      - run: node scripts/product-version.mjs check
       - run: pnpm install --frozen-lockfile
-      - run: node --test scripts/desktop-release.test.mjs
+      - run: node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs
       - run: pnpm --filter client-vue test
       - run: cargo check --locked --manifest-path client-vue/src-tauri/Cargo.toml
       - run: pnpm --filter client-vue desktop:build ${{ matrix.args }}

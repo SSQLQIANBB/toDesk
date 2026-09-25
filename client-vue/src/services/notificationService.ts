@@ -185,7 +185,7 @@ class NotificationService {
       if (this.getPermission() !== 'granted') return false;
       const notification = new Notification(options.title, {
         body: options.body,
-        icon: options.icon || '/favicon.ico',
+        icon: options.icon || '/app-icon.png',
         tag: options.tag,
         requireInteraction: false, // 自动关闭
         silent: true, // 统一使用可由声音开关控制的应用提示音

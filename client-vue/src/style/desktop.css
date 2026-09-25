@@ -24,6 +24,15 @@ html.desktop-macos {
   --desktop-window-inset: 44px;
 }
 
+html.desktop-macos.desktop-fullscreen {
+  --desktop-window-inset: 0px;
+}
+
+html.desktop-fullscreen .desktop-window-drag-region,
+html.desktop-fullscreen .desktop-chat-top-drag-region {
+  display: none;
+}
+
 html.desktop-app .app-route-content {
   height: 100dvh;
   overflow: auto;
@@ -41,7 +50,14 @@ html.desktop-app .login-page {
 /* 让页面自身背景一直延伸至窗口顶边，只避让顶部交互元素。 */
 html.desktop-macos .sidebar-profile,
 html.desktop-macos .group-sidebar-profile {
-  padding-top: var(--desktop-window-inset);
+  padding-top: max(16px, var(--desktop-window-inset));
+}
+
+html.desktop-app .chat-header,
+html.desktop-app .group-im-shell header,
+html.desktop-app .desktop-call-header {
+  user-select: none;
+  cursor: default;
 }
 
 /* 原生窗口按钮仅位于左侧，右侧聊天标题无需整行避让。 */

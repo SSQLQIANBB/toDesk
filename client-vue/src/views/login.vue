@@ -10,10 +10,11 @@
         <template #header>
           <div class="login-brand text-center">
             <div class="login-brand-lockup">
-              <span class="login-brand-mark" aria-hidden="true">T</span>
+              <img class="login-brand-mark" src="/app-icon.png" alt="" aria-hidden="true" width="44" height="44" />
               <h1 class="login-brand-title">ToDesk</h1>
             </div>
             <p class="login-brand-subtitle">远程协作平台 · 高效安全链接</p>
+            <p class="mt-2 text-xs text-slate-500">{{ APP_VERSION_LABEL }}</p>
           </div>
         </template>
 
@@ -179,6 +180,7 @@
 </template>
 
 <script setup lang="ts">
+import { APP_VERSION_LABEL } from '@/config/appVersion';
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
@@ -382,7 +384,7 @@ async function handleRegister() {
 .star { position:absolute; width:2px; height:2px; border-radius:50%; background:white; }
 .login-astronaut { position:absolute; width:144px; height:144px; right:-80px; bottom:4px; z-index:30; pointer-events:none; animation:float 6s ease-in-out infinite; }
 .login-brand-lockup { display:inline-flex; align-items:center; gap:8px; margin-bottom:4px; }
-.login-brand-mark { display:grid; place-items:center; width:36px; height:36px; border-radius:12px; background:linear-gradient(to top right,#10b981,#2dd4bf); font-size:20px; font-weight:900; color:white; box-shadow:0 10px 15px -3px #10b9814d; }
+.login-brand-mark { display:block; width:44px; height:44px; flex:none; object-fit:contain; border-radius:12px; }
 .login-brand-title { font-size:24px; font-weight:700; letter-spacing:-.025em; color:white; }
 .login-brand-subtitle { font-size:12px; color:#94a3b8; letter-spacing:.05em; font-weight:500; }
 .icp-record { position:absolute; bottom:0; width:100%; text-align:center; color:#94a3b8; font-size:11px; }

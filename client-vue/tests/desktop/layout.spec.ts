@@ -49,6 +49,16 @@ test('桌面聊天布局在不同窗口尺寸下铺满可用内容区', async ({
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(viewport.height);
   }
   await page.screenshot({ path: testInfo.outputPath('desktop-full-window.png') });
+  // 浏览器中模拟由原生窗口事件同步的全屏状态，检查留白和遮挡。
+  await page.evaluate(() => document.documentElement.classList.add('desktop-fullscreen'));
+  await expect(page.locator('.desktop-window-drag-region')).toBeHidden();
+  await expect(page.locator('.desktop-chat-top-drag-region')).toBeHidden();
+  await expect(page.locator('.sidebar-profile')).toHaveCSS('padding-top', '16px');
+  expect((await page.locator('.profile-avatar').boundingBox())!.y).toBeLessThan(28);
+  await page.screenshot({ path: testInfo.outputPath('desktop-fullscreen.png') });
+  await page.evaluate(() => document.documentElement.classList.remove('desktop-fullscreen'));
+  await expect(page.locator('.sidebar-profile')).toHaveCSS('padding-top', '44px');
+  await expect(page.locator('.desktop-window-drag-region')).toBeVisible();
   // 顶部热区不能遮挡侧栏操作，也不能在页面切换后产生额外高度。
   await page.getByRole('button', { name: '个人中心', exact: true }).click();
   await expect(page.getByRole('button', { name: '保存修改' })).toBeVisible();

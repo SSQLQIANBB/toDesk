@@ -45,7 +45,10 @@ fn main() {
             let menu = Menu::with_items(app, &[&open, &quit])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().expect("missing app icon").clone())
-                .tooltip("ToDesk · 关闭窗口后仍在后台运行")
+                .tooltip(format!(
+                    "ToDesk 内测版 {} · 关闭窗口后仍在后台运行",
+                    env!("CARGO_PKG_VERSION")
+                ))
                 .menu(&menu)
                 .show_menu_on_left_click(cfg!(target_os = "macos"))
                 .on_menu_event(|app, event| match event.id.as_ref() {

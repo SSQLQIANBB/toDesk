@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 
 export function desktopReleaseNotes(repository, version) {
   const base = `https://github.com/${repository}/releases/download/desktop-v${version}`;
-  return `## 下载 ToDesk ${version}
+  return `## 下载 ToDesk 内测版 ${version}
 
 请按电脑系统选择安装包，点击下方对应的下载链接：
 

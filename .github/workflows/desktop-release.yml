@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test scripts/desktop-release.test.mjs
+      - run: node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs
       - id: version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -72,7 +72,7 @@ jobs:
             node -e 'if (!JSON.parse(require("fs").readFileSync("release-state.json")).isDraft) throw Error("该版本已发布，请使用新版本号")'
           else
             gh release create "$RELEASE_TAG" --verify-tag --draft \
-              --title "ToDesk Desktop v${RELEASE_VERSION}" \
+              --title "ToDesk 内测版 v${RELEASE_VERSION}" \
               --notes-file release-notes.md --generate-notes
           fi
           gh release upload "$RELEASE_TAG" --clobber \

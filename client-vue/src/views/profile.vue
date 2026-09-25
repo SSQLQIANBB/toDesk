@@ -6,6 +6,7 @@
         <div>
           <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">个人中心</h1>
           <p class="text-gray-500 mt-1">管理您的个人信息</p>
+          <p class="mt-1 text-xs text-slate-500">ToDesk {{ APP_VERSION_LABEL }}</p>
         </div>
         <n-button @click="goBack" secondary>
           <template #icon>
@@ -317,6 +318,7 @@
 </template>
 
 <script setup lang="ts">
+import { APP_VERSION_LABEL } from '@/config/appVersion';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';

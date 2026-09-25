@@ -1,15 +1,20 @@
 <template>
   <!-- 仅提供透明拖动热区；红黄绿按钮由 macOS 原生绘制。 -->
-  <div class="desktop-window-drag-region" :class="{ 'desktop-window-drag-region--chat': isChat }" data-tauri-drag-region aria-hidden="true"></div>
-  <div v-if="isChat" class="desktop-chat-top-drag-region" data-tauri-drag-region aria-hidden="true"></div>
+  <div v-if="isMac" class="desktop-window-drag-region" :class="{ 'desktop-window-drag-region--chat': isChat }" data-tauri-drag-region aria-hidden="true"></div>
+  <div v-if="isMac && isChat" class="desktop-chat-top-drag-region" data-tauri-drag-region aria-hidden="true"></div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
+import { installDesktopWindowControls } from '@/services/desktopWindow';
 
+const isMac = /Mac/.test(navigator.platform);
 const route = useRoute();
 const isChat = computed(() => route.path === '/remote' || route.path.startsWith('/group-chat/'));
+let cleanup: (() => void) | undefined;
+onMounted(() => { cleanup = installDesktopWindowControls(); });
+onUnmounted(() => cleanup?.());
 </script>
 
 <style scoped>
