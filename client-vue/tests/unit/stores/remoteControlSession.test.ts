@@ -16,6 +16,7 @@ vi.mock('@/services/remoteControlAdapter', () => ({ SocketRemoteControllerAdapte
 vi.mock('@/services/remoteControlPeer', () => ({ sdpSha256Fingerprint: vi.fn(), RemoteControlPeer: class {
   start = vi.fn().mockResolvedValue(undefined); end = vi.fn(); attachVideo = vi.fn(); pauseInput = vi.fn();
   sendInput = vi.fn().mockReturnValue(true); requestInputArm = vi.fn().mockReturnValue(true); observeAuthorization = vi.fn();
+  mapPointer = vi.fn().mockReturnValue({ x: 0.25, y: 0.75 });
   receiveSignal = vi.fn().mockResolvedValue(true); installConnectionProof = vi.fn().mockResolvedValue(true); installMediaLease = vi.fn().mockResolvedValue(true);
   constructor(public options: any) { mocks.peers.push(this); }
 } }));
@@ -26,7 +27,7 @@ beforeEach(() => {
   mediaOccupancy.stop('TEST_RESET');
   setActivePinia(createPinia()); vi.clearAllMocks();
   mocks.capabilities.canControl = true; mocks.peers = []; mocks.adapters = [];
-  mocks.ice.mockResolvedValue({ iceServers: [], iceTransportPolicy: 'all', expiresAt: Date.now() + 60000 });
+  mocks.ice.mockResolvedValue({ iceServers: [{ urls: ['turn:turn.example.com:3478?transport=udp'], username: 'temporary', credential: 'test-only' }], iceTransportPolicy: 'all', expiresAt: bootstrap.hardDeadline + 299000 });
   mocks.keys.mockResolvedValue({ keys: [] });
 });
 async function connected() {
@@ -37,6 +38,12 @@ async function connected() {
   return store;
 }
 describe('远控主控会话接线', () => {
+  it('界面坐标仅交给peer已验证的布局映射', async () => {
+    const store = await connected();
+    expect(store.mapPointer(120, 240)).toEqual({ x: 0.25, y: 0.75 });
+    expect(mocks.peers[0].mapPointer).toHaveBeenCalledWith(120, 240);
+    store.end(); expect(store.mapPointer(120, 240)).toBeNull();
+  });
   it('未发布不创建socket；已有群组媒体时拒绝远控且不抢占', async () => {
     const store = useRemoteControlSessionStore();
     mocks.capabilities.canControl = false;
@@ -63,7 +70,7 @@ describe('远控主控会话接线', () => {
     await store.start(mocks.capabilities.targets[0]!, 'view');
     mocks.adapters[0].event({ type: 'connecting', value: bootstrap }); await flushPromises();
     store.end('LOGOUT');
-    resolve({ iceServers: [], iceTransportPolicy: 'all', expiresAt: Date.now() + 60000 }); await flushPromises();
+    resolve({ iceServers: [{ urls: ['turn:turn.example.com:3478?transport=udp'], username: 'temporary', credential: 'test-only' }], iceTransportPolicy: 'all', expiresAt: bootstrap.hardDeadline + 299000 }); await flushPromises();
     expect(mocks.peers).toHaveLength(0); expect(mediaOccupancy.current.value).toBeNull(); expect(store.phase).toBe('ended');
   });
   it('旧会话迟到队列不能减少新会话的事件上限计数', async () => {
@@ -79,7 +86,7 @@ describe('远控主控会话接线', () => {
     store.end();
     await store.start(mocks.capabilities.targets[0]!, 'view');
     mocks.adapters[1].event({ type: 'connecting', value: bootstrap }); await flushPromises();
-    const ice = { iceServers: [], iceTransportPolicy: 'all', expiresAt: Date.now() + 60000 };
+    const ice = { iceServers: [{ urls: ['turn:turn.example.com:3478?transport=udp'], username: 'temporary', credential: 'test-only' }], iceTransportPolicy: 'all', expiresAt: bootstrap.hardDeadline + 299000 };
     resolveOld(ice); await flushPromises();
     for (let index = 0; index < 140; index++) mocks.adapters[1].event(state);
     expect(store.phase).toBe('connecting');

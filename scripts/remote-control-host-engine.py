@@ -7,10 +7,12 @@ SDK is a validation dependency, not a signed or distributable production sidecar
 import argparse
 import base64
 import ctypes
+import copy
 import faulthandler
 import hashlib
 import ipaddress
-import json
+from urllib.parse import quote
+import math
 import os
 from pathlib import Path
 import queue
@@ -26,7 +28,7 @@ import tempfile
 import threading
 import time
 
-from remote_control_ipc import HostIpc, MAX_LINE_BYTES
+from remote_control_ipc import HostIpc, MAX_LINE_BYTES, _json as strict_json
 
 LABELS = {"rc-state-v1", "rc-input-v1"}
 MAX_CHANNEL_BYTES = 4096
@@ -102,6 +104,78 @@ class MediaProgressTracker:
                     for field, value in [(f"{name}Seq", seq), (f"{name}MonotonicNs", str(observed))]}
 
 
+class MediaLayoutTracker:
+    """A source-observed, immutable primary-screen layout; never supplied by IPC."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.value = None
+
+    @staticmethod
+    def validate(value):
+        def keys(item, names):
+            if type(item) is not dict or set(item) != set(names):
+                raise ValueError("INVALID_MEDIA_LAYOUT")
+
+        def integer(number, minimum, maximum):
+            if type(number) is not int or not minimum <= number <= maximum:
+                raise ValueError("INVALID_MEDIA_LAYOUT")
+
+        def finite(number):
+            if type(number) not in {int, float} or not math.isfinite(number):
+                raise ValueError("INVALID_MEDIA_LAYOUT")
+
+        def rect(item):
+            keys(item, ("x", "y", "width", "height"))
+            for number in item.values():
+                finite(number)
+            if not 0 < item["width"] <= 16_384 or not 0 < item["height"] <= 16_384:
+                raise ValueError("INVALID_MEDIA_LAYOUT")
+            finite(item["x"] + item["width"])
+            finite(item["y"] + item["height"])
+
+        keys(value, ("screenId", "layoutVersion", "geometry"))
+        if value["screenId"] != "primary":
+            raise ValueError("INVALID_MEDIA_LAYOUT")
+        integer(value["layoutVersion"], 1, MAX_SAFE_SEQUENCE)
+        geometry = value["geometry"]
+        keys(geometry, ("displayId", "coordinateSpace", "displayBounds", "displayPixels", "rotationDegrees", "encodedSize", "contentRect"))
+        integer(geometry["displayId"], 1, (1 << 32) - 1)
+        if geometry["coordinateSpace"] != "quartz-global-logical":
+            raise ValueError("INVALID_MEDIA_LAYOUT")
+        integer(geometry["rotationDegrees"], 0, 270)
+        if geometry["rotationDegrees"] not in {0, 90, 180, 270}:
+            raise ValueError("INVALID_MEDIA_LAYOUT")
+        rect(geometry["displayBounds"])
+        rect(geometry["contentRect"])
+        bounds = geometry["displayBounds"]
+        if (bounds["width"] < 1 or bounds["height"] < 1
+                or abs(bounds["x"]) > 1_000_000 or abs(bounds["y"]) > 1_000_000):
+            raise ValueError("INVALID_MEDIA_LAYOUT")
+        for name in ("displayPixels", "encodedSize"):
+            size = geometry[name]
+            keys(size, ("width", "height"))
+            for dimension in size.values():
+                integer(dimension, 1, 16_384)
+        content, encoded = geometry["contentRect"], geometry["encodedSize"]
+        if (content["x"] < 0 or content["y"] < 0 or content["x"] + content["width"] > encoded["width"]
+                or content["y"] + content["height"] > encoded["height"]):
+            raise ValueError("INVALID_MEDIA_LAYOUT")
+
+    def source(self, message):
+        if type(message) is not dict or set(message) != {"type", "screenId", "layoutVersion", "geometry"} or message["type"] != "screen-source-layout":
+            raise ValueError("INVALID_MEDIA_LAYOUT")
+        value = {key: message[key] for key in ("screenId", "layoutVersion", "geometry")}
+        self.validate(value)
+        with self.lock:
+            if self.value is not None and self.value != value:
+                raise ValueError("MEDIA_LAYOUT_CHANGED")
+            self.value = copy.deepcopy(value)
+
+    def snapshot(self):
+        with self.lock:
+            return copy.deepcopy(self.value)
+
+
 def certificate_fingerprint(pem):
     """Hash actual transport certificate DER. Never echo a fingerprint from SDP."""
     if not isinstance(pem, str) or len(pem) > 65536:
@@ -124,22 +198,79 @@ def loopback_candidate(candidate):
         return False
 
 
-def h264_payload(sdp):
+def network_candidate(candidate, policy="loopback"):
+    if policy == "loopback":
+        return loopback_candidate(candidate)
+    if not isinstance(candidate, str) or len(candidate) > 4096 or any(c in candidate for c in "\r\n\0"):
+        return False
+    p = candidate.split()
+    try:
+        address = ipaddress.ip_address(p[4])
+        if (len(p) < 8 or not p[0].startswith("candidate:") or len(p[0]) <= 10 or p[1] != "1"
+                or p[2].lower() not in {"udp", "tcp"} or not 0 < int(p[3]) <= 0xffffffff
+                or not 0 < int(p[5]) <= 65535 or p[6] != "typ" or p[7] not in {"host", "srflx", "prflx", "relay"}
+                or address.is_unspecified or address.is_multicast or (len(p) - 8) % 2):
+            return False
+        for key, value in zip(p[8::2], p[9::2]):
+            if key == "raddr": ipaddress.ip_address(value)
+            if key == "rport" and not 0 <= int(value) <= 65535: return False
+        return True
+    except (ValueError, IndexError):
+        return False
+
+
+def ice_configuration(payload, now_ms):
+    """Validated native IPC input only. Never log or put these URIs on argv."""
+    if (not isinstance(payload, dict) or set(payload) != {"iceServers", "iceTransportPolicy", "expiresAt"}
+            or payload["iceTransportPolicy"] not in {"all", "relay"} or type(payload["expiresAt"]) is not int
+            or not now_ms < payload["expiresAt"] <= now_ms + 3_900_000
+            or not isinstance(payload["iceServers"], list) or not 1 <= len(payload["iceServers"]) <= 4):
+        raise ValueError("INVALID_ICE_CONFIGURATION")
+    stun, turns = None, []
+    for server in payload["iceServers"]:
+        if (not isinstance(server, dict) or not set(server) <= {"urls", "username", "credential"}
+                or not isinstance(server.get("urls"), list) or not 1 <= len(server["urls"]) <= 4):
+            raise ValueError("INVALID_ICE_CONFIGURATION")
+        kinds = set()
+        for url in server["urls"]:
+            match = re.fullmatch(r"(stun|turn|turns):([a-zA-Z0-9.-]+):([0-9]{1,5})(?:\?transport=(udp|tcp))?", url) if isinstance(url, str) and len(url) <= 512 else None
+            if not match: raise ValueError("INVALID_ICE_CONFIGURATION")
+            scheme, host, port, transport = match.groups()
+            if (not 0 < int(port) <= 65535 or len(host) > 253
+                    or any(not re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?", label) for label in host.split('.'))
+                    or (scheme == "stun" and transport is not None) or (scheme != "stun" and transport is None)
+                    or (scheme == "turns" and transport != "tcp")):
+                raise ValueError("INVALID_ICE_CONFIGURATION")
+            kinds.add(scheme != "stun")
+            if scheme == "stun":
+                if stun is not None or "username" in server or "credential" in server: raise ValueError("INVALID_ICE_CONFIGURATION")
+                stun = f"stun://{host}:{port}"
+            else:
+                for key in ["username", "credential"]:
+                    if not isinstance(server.get(key), str) or not re.fullmatch(r"[\x21-\x7e]{1,256}", server[key]):
+                        raise ValueError("INVALID_ICE_CONFIGURATION")
+                turns.append(f"{scheme}://{quote(server['username'], safe='')}:{quote(server['credential'], safe='')}@{host}:{port}?transport={transport}")
+        if len(kinds) != 1: raise ValueError("INVALID_ICE_CONFIGURATION")
+    if not turns: raise ValueError("INVALID_ICE_CONFIGURATION")
+    return stun, turns
+
+
+def h264_payload(sdp, policy="loopback"):
     if not isinstance(sdp, str) or not 0 < len(sdp.encode()) <= 65536:
         raise ValueError("INVALID_SDP")
     sections = re.split(r"(?m)^m=", sdp)
     videos = [section for section in sections[1:] if section.startswith("video ")]
     if len(videos) != 1 or any(section.startswith("audio ") for section in sections[1:]):
         raise ValueError("UNSUPPORTED_MEDIA")
-    # Every embedded candidate must obey the same loopback-only constraint as trickle ICE.
-    if any(not loopback_candidate(line[2:]) for line in sdp.splitlines() if line.startswith("a=candidate:")):
+    # Embedded and trickle ICE use the same native-authorized network policy.
+    if any(not network_candidate(line[2:], policy) for line in sdp.splitlines() if line.startswith("a=candidate:")):
         raise ValueError("NON_LOOPBACK_ICE")
     video = videos[0]
     fmtp = {int(value): dict(part.strip().split("=", 1) for part in params.split(";") if "=" in part)
             for value, params in re.findall(r"a=fmtp:(\d+) ([^\r\n]+)", video)}
     payload = next((int(value) for value in re.findall(r"a=rtpmap:(\d+) H264/90000", video, re.I)
                     if fmtp.get(int(value), {}).get("packetization-mode") == "1"
-                    and fmtp.get(int(value), {}).get("profile-level-id", "").lower() == "42001f"), None)
+                    and fmtp.get(int(value), {}).get("profile-level-id", "").lower() == "42e01f"), None)
     if payload is None or not 0 <= payload <= 127:
         raise ValueError("H264_BASELINE_REQUIRED")
     return payload
@@ -171,7 +302,7 @@ class MediaDeadline:
         return not self.terminal and self.deadline is not None and now_ns < self.deadline
 
 
-def load_sdk(registry):
+def load_sdk(registry, sdk_root=None):
     os.environ.update(GST_PLUGIN_SYSTEM_PATH_1_0="", GST_PLUGIN_PATH_1_0="",
                       GST_REGISTRY_1_0=registry, GST_REGISTRY_FORK="no")
     import gi
@@ -180,7 +311,7 @@ def load_sdk(registry):
     gi.require_version("GstWebRTC", "1.0")
     from gi.repository import GLib, Gst, GstSdp, GstWebRTC
     Gst.init(None)
-    sdk = Path(sysconfig.get_paths()["purelib"])
+    sdk = Path(sdk_root) if sdk_root is not None else Path(sysconfig.get_paths()["purelib"])
     for package, names in [("gstreamer_libs", ["coreelements", "app"]),
                            ("gstreamer_plugins", ["videoparsersbad", "rtp", "rtpmanager", "nice", "dtls", "srtp", "sctp", "webrtc"])]:
         for name in names:
@@ -238,6 +369,7 @@ class Engine:
         self.dtls = None
         self.media = MediaDeadline()
         self.progress = MediaProgressTracker()
+        self.layout = MediaLayoutTracker()
         self.screen = None
         self.screen_stats = None
         self.diagnostics_thread = None
@@ -246,15 +378,23 @@ class Engine:
         self.reason = "STOPPED"
         self.last_heartbeat = clock_ns()
         self.started_at = self.last_heartbeat
+        # VT hardware/software emit equivalent constrained-baseline SPS values
+        # 42c01f/42e01f. Gst caps compare strings, so retain both locally while
+        # SDP selects the offered 42e01f. Do not rewrite SPS constraint bits.
+        # No STAP-A aggregation: system WKWebView received RTP but assembled no
+        # video frames with zero-latency aggregation in the real-device probe.
         self.pipeline = self.Gst.parse_launch(
             'webrtcbin name=peer bundle-policy=max-bundle '
             'appsrc name=screen is-live=true format=time block=false max-bytes=4194304 '
             'caps=video/x-h264,stream-format=byte-stream,alignment=au,width=1280,height=720,framerate=15/1 ! '
-            'h264parse ! rtph264pay name=screenpay pt=96 config-interval=-1 aggregate-mode=zero-latency ! '
+            'h264parse ! rtph264pay name=screenpay pt=96 config-interval=-1 aggregate-mode=none ! '
             'queue max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! '
-            'capsfilter name=screenrtp caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000,packetization-mode=(string)1,profile-level-id=(string)42001f" ! peer.')
+            'capsfilter name=screenrtp caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000,packetization-mode=(string)1,profile-level-id=(string){42e01f,42c01f}" ! peer.')
         self.peer = self.pipeline.get_by_name("peer")
-        self.ice_agent, self.nice_agent, self.nice_library = bind_loopback(self.peer, sdk)
+        self.sdk = sdk
+        self.ice_policy = "loopback"
+        self.ice_expires_at = None
+        self.ice_agent = self.nice_agent = self.nice_library = None
         self.peer.connect("on-ice-candidate", lambda _p, index, candidate: self.post(self.local_ice, index, candidate))
         self.peer.connect("on-data-channel", lambda _p, channel: self.post(self.channel, channel))
         bus = self.pipeline.get_bus()
@@ -347,21 +487,37 @@ class Engine:
             if payload:
                 raise ValueError()
             self.last_heartbeat = received_ns
+        elif kind == "configure-ice":
+            if self.offer_received or self.ice_policy != "loopback":
+                raise ValueError("ICE_CONFIGURATION_REPLAY")
+            wall = time.time_ns() // 1_000_000
+            stun, turns = ice_configuration(payload, wall)
+            self.peer.set_property("ice-transport-policy", self.WebRTC.WebRTCICETransportPolicy.RELAY if payload["iceTransportPolicy"] == "relay" else self.WebRTC.WebRTCICETransportPolicy.ALL)
+            if stun and payload["iceTransportPolicy"] == "all": self.peer.set_property("stun-server", stun)
+            for uri in turns:
+                if not self.peer.emit("add-turn-server", uri): raise ValueError("TURN_CONFIGURATION_FAILED")
+            self.ice_policy = payload["iceTransportPolicy"]
+            self.ice_expires_at = clock_ns() + (payload["expiresAt"] - wall) * 1_000_000
+            self.send("network-configured", {"iceTransportPolicy": self.ice_policy})
         elif kind == "offer":
             if self.offer_received or set(payload) != {"sdp"}:
                 raise ValueError()
-            value = h264_payload(payload["sdp"])
+            value = h264_payload(payload["sdp"], self.ice_policy)
+            if self.ice_policy == "loopback":
+                self.ice_agent, self.nice_agent, self.nice_library = bind_loopback(self.peer, self.sdk)
+            elif clock_ns() >= self.ice_expires_at:
+                raise ValueError("ICE_CONFIGURATION_EXPIRED")
             self.offer_received = True
             self.pipeline.get_by_name("screenpay").set_property("pt", value)
             self.pipeline.get_by_name("screenrtp").set_property("caps", self.Gst.Caps.from_string(
-                f"application/x-rtp,media=video,encoding-name=H264,payload={value},clock-rate=90000,packetization-mode=(string)1,profile-level-id=(string)42001f"))
+                f"application/x-rtp,media=video,encoding-name=H264,payload={value},clock-rate=90000,packetization-mode=(string)1,profile-level-id=(string){{42e01f,42c01f}}"))
             _, sdp = self.GstSdp.SDPMessage.new()
             if self.GstSdp.sdp_message_parse_buffer(payload["sdp"].encode(), sdp) != self.GstSdp.SDPResult.OK:
                 raise ValueError()
             description = self.WebRTC.WebRTCSessionDescription.new(self.WebRTC.WebRTCSDPType.OFFER, sdp)
             self.peer.emit("set-remote-description", description, self.Gst.Promise.new_with_change_func(self.description_set_callback, None))
         elif kind == "ice":
-            if set(payload) != {"candidate", "sdpMLineIndex"} or type(payload["sdpMLineIndex"]) is not int or not 0 <= payload["sdpMLineIndex"] <= 2 or not loopback_candidate(payload["candidate"]):
+            if set(payload) != {"candidate", "sdpMLineIndex"} or type(payload["sdpMLineIndex"]) is not int or not 0 <= payload["sdpMLineIndex"] <= 2 or not network_candidate(payload["candidate"], self.ice_policy):
                 raise ValueError()
             self.ice_count += 1
             if self.ice_count > 128:
@@ -418,8 +574,11 @@ class Engine:
     def local_ice(self, index, candidate):
         if candidate == "":  # GStreamer 1.28 end-of-candidates notification.
             return
-        if not loopback_candidate(candidate):
-            self.fail("NON_LOOPBACK_ICE")
+        if not network_candidate(candidate, self.ice_policy):
+            self.fail("INVALID_LOCAL_ICE")
+            return
+        # Relay policy must not disclose local host/srflx addresses in signaling.
+        if self.ice_policy == "relay" and candidate.split()[7] != "relay":
             return
         self.send("ice", {"sdpMLineIndex": index, "candidate": candidate})
 
@@ -508,6 +667,8 @@ class Engine:
         now = clock_ns()
         if now - self.last_heartbeat >= 3_000_000_000:
             self.fail("SUPERVISOR_TIMEOUT")
+        elif self.ice_expires_at is not None and now >= self.ice_expires_at:
+            self.fail("ICE_CONFIGURATION_EXPIRED")
         elif self.screen is not None and not self.media.alive(now):
             self.fail("MEDIA_LEASE_EXPIRED")
         elif now - self.started_at >= 60_000_000_000:
@@ -531,6 +692,9 @@ class Engine:
         if self.closed.is_set():
             return False
         if self.screen is not None:
+            layout = self.layout.snapshot()
+            if layout is not None:
+                self.send("media-layout", layout)
             self.send("media-progress", self.progress.snapshot())
         return not self.closed.is_set()
 
@@ -564,19 +728,36 @@ class Engine:
                 raw = self.screen.stderr.readline(4097)
                 if not raw:
                     return
-                if len(raw) > 4096:
+                if len(raw) > 4096 or not raw.endswith(b"\n"):
                     raise ValueError()
-                message = json.loads(raw)
+                message = strict_json(raw)
                 if message.get("type") == "error":
-                    self.fail("SCREEN_SOURCE_ERROR")
+                    if message.get("reason") == "MEDIA_LAYOUT_CHANGED":
+                        self.send("error", {"reason": "MEDIA_LAYOUT_CHANGED"})
+                        self.fail("MEDIA_LAYOUT_CHANGED")
+                    else:
+                        self.fail("SCREEN_SOURCE_ERROR")
                     return
                 if message.get("type") == "screen-source-stopped":
                     self.screen_stats = message
+                    if message.get("reason") == "MEDIA_LAYOUT_CHANGED":
+                        self.send("error", {"reason": "MEDIA_LAYOUT_CHANGED"})
+                        self.fail("MEDIA_LAYOUT_CHANGED")
+                        return
+                elif message.get("type") == "screen-source-layout":
+                    try:
+                        self.layout.source(message)
+                    except ValueError as error:
+                        if str(error) == "MEDIA_LAYOUT_CHANGED":
+                            self.send("error", {"reason": "MEDIA_LAYOUT_CHANGED"})
+                            self.fail("MEDIA_LAYOUT_CHANGED")
+                            return
+                        raise
                 elif message.get("type") == "screen-source-progress":
                     self.progress.source(message, clock_ns())
                 elif message.get("type") == "screen-source-test-fault":
                     if (not self.test_source_faults or set(message) != {"type", "phase", "stage"}
-                            or message["phase"] not in {"begin", "end"} or message["stage"] not in {"capture", "encode"}):
+                            or message["phase"] not in {"begin", "end"} or message["stage"] not in {"capture", "encode", "layout"}):
                         raise ValueError("UNEXPECTED_TEST_SOURCE_FAULT")
                     self.send("test-fault", {"phase": message["phase"], "stage": message["stage"]})
         except Exception:
@@ -655,8 +836,32 @@ class Engine:
             self.send("stopped", {"reason": self.reason, "frames": self.frames, "bytes": self.bytes,
                                   "screenPid": self.screen.pid if self.screen else None,
                                   "screenExitCode": self.screen.returncode if self.screen else None,
+                                  "screenStopReason": self.screen_stats.get("reason") if self.screen_stats else None,
                                   "captureStopped": self.screen is None or bool(self.screen_stats and self.screen_stats.get("captureStopped")),
                                   "childExited": self.screen is None or self.screen.poll() is not None})
+
+
+def read_bootstrap():
+    """Shared bounded stdin-only bootstrap for both fixed bundle and test CLI."""
+    bootstrap = bytearray()
+    deadline = time.monotonic() + 5
+    while b"\n" not in bootstrap and time.monotonic() < deadline:
+        if select.select([sys.stdin.fileno()], [], [], max(0, deadline - time.monotonic()))[0]:
+            value = os.read(sys.stdin.fileno(), 1)
+            if not value:
+                raise ValueError("BOOTSTRAP_EOF")
+            bootstrap.extend(value)
+            if len(bootstrap) > 2048:
+                raise ValueError("BOOTSTRAP_LIMIT")
+    if not bootstrap.endswith(b"\n"):
+        raise ValueError("BOOTSTRAP_TIMEOUT")
+    return HostIpc.accept_bootstrap(bytes(bootstrap))
+
+
+def supervise_engine(instance):
+    signal.signal(signal.SIGTERM, lambda *_: instance.fail("TERMINATED"))
+    signal.signal(signal.SIGINT, lambda *_: instance.fail("TERMINATED"))
+    instance.run()
 
 
 def main():
@@ -674,27 +879,12 @@ def main():
     source = Path(args.screen_source)
     if not source.is_absolute() or not source.is_file() or not os.access(source, os.X_OK):
         parser.error("requires a fixed existing absolute native source executable")
-    # Bootstrap is the only un-MACed frame and can never contain a command.
-    bootstrap = bytearray()
-    deadline = time.monotonic() + 5
-    while b"\n" not in bootstrap and time.monotonic() < deadline:
-        if select.select([sys.stdin.fileno()], [], [], max(0, deadline - time.monotonic()))[0]:
-            value = os.read(sys.stdin.fileno(), 1)
-            if not value:
-                return 1
-            bootstrap.extend(value)
-            if len(bootstrap) > 2048:
-                return 1
-    if not bootstrap.endswith(b"\n"):
-        return 1
-    codec = HostIpc.accept_bootstrap(bytes(bootstrap))
+    codec = read_bootstrap()
     with tempfile.TemporaryDirectory(prefix="todesk-host-engine-") as directory:
         engine = Engine(codec, str(source), load_sdk(str(Path(directory) / "registry.bin")),
                         source_args=args.source_arg, test_source_faults=args.test_source_faults,
                         test_forward_freeze_after_ms=args.test_forward_freeze_after_ms)
-        signal.signal(signal.SIGTERM, lambda *_: engine.fail("TERMINATED"))
-        signal.signal(signal.SIGINT, lambda *_: engine.fail("TERMINATED"))
-        engine.run()
+        supervise_engine(engine)
     return 0
 
 

@@ -13,14 +13,15 @@ test('远控主控通过真实WebRTC和签名握手接收视频、发送有序�
     const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const key = { keyId: 'browser-test', publicKey: base64(await crypto.subtle.exportKey('raw', pair.publicKey)), notBefore: Date.now() - 1000, notAfter: Date.now() + 60000 };
     const endpoint = { userId: 1, sid: crypto.randomUUID(), authVersion: crypto.randomUUID(), endpointId: crypto.randomUUID(), connectionId: 'host-socket', generation: 1 };
-    const binding = { sessionId: crypto.randomUUID(), host: endpoint, controller: { ...endpoint, userId: 2, endpointId: crypto.randomUUID(), connectionId: 'controller-socket' }, negotiationId: crypto.randomUUID(), consentNonce: base64(crypto.getRandomValues(new Uint8Array(32))), screenId: 'test-canvas' };
+    const binding = { sessionId: crypto.randomUUID(), host: endpoint, controller: { ...endpoint, userId: 2, endpointId: crypto.randomUUID(), connectionId: 'controller-socket' }, negotiationId: crypto.randomUUID(), consentNonce: base64(crypto.getRandomValues(new Uint8Array(32))), screenId: 'primary' };
+    const layout = { screenId: 'primary', layoutVersion: 1, geometry: { displayId: 1, coordinateSpace: 'quartz-global-logical', displayBounds: { x: -1440, y: 0, width: 1440, height: 1080 }, displayPixels: { width: 2880, height: 2160 }, rotationDegrees: 0, encodedSize: { width: 320, height: 180 }, contentRect: { x: 40, y: 0, width: 240, height: 180 } } };
     const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 180;
     const context = canvas.getContext('2d')!;
     const hostStream = canvas.captureStream(15);
     let frame = 0;
     let consentNonce = binding.consentNonce; let authorizationRevision = 1; let controlEpoch = 1;
-    const drawing = setInterval(() => { context.fillStyle = frame++ % 2 ? '#2563eb' : '#dc2626'; context.fillRect(0, 0, 320, 180); }, 60);
-    const video = document.createElement('video'); video.tabIndex = 0; video.style.cssText = 'position:fixed;top:0;left:0;width:320px;height:180px;z-index:99999'; document.body.append(video);
+    const drawing = setInterval(() => { context.fillStyle = '#000'; context.fillRect(0, 0, 320, 180); context.fillStyle = frame++ % 2 ? '#2563eb' : '#dc2626'; context.fillRect(40, 0, 240, 180); }, 60);
+    const video = document.createElement('video'); video.tabIndex = 0; video.style.cssText = 'position:fixed;top:0;left:0;width:320px;height:240px;object-fit:contain;z-index:99999'; document.body.append(video);
     const host = new RTCPeerConnection({ iceServers: [] });
     hostStream.getTracks().forEach(track => host.addTrack(track, hostStream));
     let hostState: RTCDataChannel | null = null;
@@ -81,14 +82,17 @@ test('远控主控通过真实WebRTC和签名握手接收视频、发送有序�
       await wait(() => ready);
       heartbeat = setInterval(() => { if (hostState?.readyState === 'open') sendState('heartbeat'); }, 500);
       await controller.installMediaLease(await proof('lease'));
-      sendState('layout', { screenId: binding.screenId, layoutVersion: 1 });
       await wait(() => video.videoWidth > 0 && video.getVideoPlaybackQuality().totalVideoFrames > 1);
       video.focus();
+      const noLayoutCannotArm = !controller.requestInputArm();
+      sendState('layout', layout);
+      await wait(() => controller.mapPointer(160, 120) !== null);
+      const pointerMapping = [[40, 30], [160, 120], [280, 210], [20, 120], [160, 10]].map(([x, y]) => controller.mapPointer(x, y));
       const armRequested = controller.requestInputArm();
       await wait(() => armed);
       await new Promise(resolve => setTimeout(resolve, 30));
-      controller.sendInput({ type: 'button', payload: { x: 0.5, y: 0.5, button: 0, down: true } });
-      controller.sendInput({ type: 'button', payload: { x: 0.5, y: 0.5, button: 0, down: false } });
+      controller.sendInput({ type: 'button', payload: { ...controller.mapPointer(160, 120), button: 0, down: true } });
+      controller.sendInput({ type: 'button', payload: { ...controller.mapPointer(160, 120), button: 0, down: false } });
       await wait(() => received.length === 2);
       const framesBeforePause = video.getVideoPlaybackQuality().totalVideoFrames;
       sendState('pause', { reason: 'REMOTE_CAPTURE_STALLED' });
@@ -109,7 +113,7 @@ test('远控主控通过真实WebRTC和签名握手接收视频、发送有序�
       clearInterval(drawing); // Real decoded video stops while the authenticated data heartbeat remains alive.
       await wait(() => pauses.includes('REMOTE_VIDEO_STALLED'), 6000);
       await wait(() => !!ended, 12000);
-      return { beforeAuthorization, ready, armRequested, armProgress, framesDidNotRearm, oldLeaseCannotResume, approvalAccepted, approvalDidNotArm, leaseDidNotArm, width: video.videoWidth, seq: received.map(item => item.seq), labels: [hostInput!.label, hostState!.label], ordered: [hostInput!.ordered, hostState!.ordered], pauses, ended, closed: controller.peer.connectionState };
+      return { beforeAuthorization, ready, noLayoutCannotArm, pointerMapping, armRequested, armProgress, framesDidNotRearm, oldLeaseCannotResume, approvalAccepted, approvalDidNotArm, leaseDidNotArm, width: video.videoWidth, seq: received.map(item => item.seq), coordinates: received.map(item => ({ x: item.payload.x, y: item.payload.y })), labels: [hostInput!.label, hostState!.label], ordered: [hostInput!.ordered, hostState!.ordered], pauses, ended, closed: controller.peer.connectionState };
     } finally {
       clearInterval(drawing); if (heartbeat) clearInterval(heartbeat); if (renew) clearInterval(renew);
       controller.end('TEST_CLEANUP'); host.close(); hostStream.getTracks().forEach(track => track.stop()); video.remove();
@@ -117,8 +121,11 @@ test('远控主控通过真实WebRTC和签名握手接收视频、发送有序�
   });
   expect(result.beforeAuthorization).toBe(0);
   expect(result.ready).toBe(true);
+  expect(result.noLayoutCannotArm).toBe(true);
+  expect(result.pointerMapping).toEqual([{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }, null, null]);
   expect(result.armRequested).toBe(true);
   expect(result.seq).toEqual([1, 2]);
+  expect(result.coordinates).toEqual([{ x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 }]);
   expect(result.armProgress).toEqual([true, true]);
   expect(result.framesDidNotRearm).toBe(true);
   expect(result.oldLeaseCannotResume).toBe(true);

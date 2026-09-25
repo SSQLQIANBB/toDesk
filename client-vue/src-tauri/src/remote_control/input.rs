@@ -2,6 +2,7 @@
 //! No Tauri invoke exposes this module. All tests use a recording executor.
 #![allow(dead_code)]
 use super::guard::{InputContext, InputEnvelope, ReleasePlan, SessionGuard, StopReason};
+use super::media_layout::{self, DisplaySnapshot};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -54,6 +55,9 @@ pub struct InputEnvironment {
 /// `release` is independent of lease/tickets and must attempt every ledger item
 /// even if another release fails. It must never synthesize unowned key/button ups.
 pub trait InputExecutor: Send {
+    fn display_snapshot(&mut self) -> Result<DisplaySnapshot, InputError> {
+        Err(InputError::Unsupported)
+    }
     fn preflight(&mut self) -> Result<InputEnvironment, InputError>;
     fn execute(&mut self, action: &InputAction, deadline: Instant) -> Result<(), InputError>;
     fn release(&mut self, plan: &ReleasePlan) -> Result<(), InputError>;
@@ -132,9 +136,6 @@ struct Text {
 
 fn unit(value: f64) -> bool {
     value.is_finite() && (0.0..=1.0).contains(&value)
-}
-fn pointer_position(origin: (f64, f64), size: (f64, f64), x: f64, y: f64) -> (f64, f64) {
-    (origin.0 + x * (size.0 - 1.0), origin.1 + y * (size.1 - 1.0))
 }
 fn mouse_button(button: u8) -> Option<(u32, u32, u32)> {
     // DOM: left=0, middle=1, right=2. Quartz: left=0, right=1, middle=2.
@@ -524,25 +525,8 @@ mod macos {
         x: f64,
         y: f64,
     }
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    struct Size {
-        width: f64,
-        height: f64,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    struct Rect {
-        origin: Point,
-        size: Size,
-    }
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
-        fn CGMainDisplayID() -> u32;
-        fn CGDisplayBounds(display: u32) -> Rect;
-        fn CGDisplayPixelsWide(display: u32) -> usize;
-        fn CGDisplayPixelsHigh(display: u32) -> usize;
-        fn CGDisplayRotation(display: u32) -> f64;
         fn CGEventSourceCreate(state: i32) -> *mut c_void;
         fn CGEventCreateMouseEvent(
             source: *mut c_void,
@@ -572,46 +556,12 @@ mod macos {
     extern "C" {
         fn CFRelease(value: *const c_void);
     }
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    struct Layout {
-        display: u32,
-        bounds: Rect,
-        pixels_x: usize,
-        pixels_y: usize,
-        rotation: f64,
-    }
+    type Layout = DisplaySnapshot;
     fn layout() -> Result<Layout, InputError> {
-        // AXIsProcessTrusted is non-interactive; this function never opens TCC UI.
         if unsafe { AXIsProcessTrusted() } == 0 {
             return Err(InputError::PermissionDenied);
         }
-        let display = unsafe { CGMainDisplayID() };
-        let bounds = unsafe { CGDisplayBounds(display) };
-        let value = Layout {
-            display,
-            bounds,
-            pixels_x: unsafe { CGDisplayPixelsWide(display) },
-            pixels_y: unsafe { CGDisplayPixelsHigh(display) },
-            rotation: unsafe { CGDisplayRotation(display) },
-        };
-        if display == 0
-            || ![
-                bounds.origin.x,
-                bounds.origin.y,
-                bounds.size.width,
-                bounds.size.height,
-                value.rotation,
-            ]
-            .iter()
-            .all(|v| v.is_finite())
-            || bounds.size.width < 1.0
-            || bounds.size.height < 1.0
-            || value.pixels_x == 0
-            || value.pixels_y == 0
-        {
-            return Err(InputError::LayoutChanged);
-        }
-        Ok(value)
+        media_layout::primary_display_snapshot().map_err(|_| InputError::LayoutChanged)
     }
     struct Event(*mut c_void);
     impl Event {
@@ -653,7 +603,10 @@ mod macos {
                 source: ptr::null_mut(),
                 keys: BTreeSet::new(),
                 buttons: BTreeSet::new(),
-                last_point: initial.bounds.origin,
+                last_point: Point {
+                    x: initial.bounds.x,
+                    y: initial.bounds.y,
+                },
             })
         }
         fn source(&mut self) -> Result<*mut c_void, InputError> {
@@ -666,17 +619,9 @@ mod macos {
                 Ok(self.source)
             }
         }
-        fn point(&self, x: f64, y: f64) -> Point {
-            let (x, y) = pointer_position(
-                (self.initial.bounds.origin.x, self.initial.bounds.origin.y),
-                (
-                    self.initial.bounds.size.width,
-                    self.initial.bounds.size.height,
-                ),
-                x,
-                y,
-            );
-            Point { x, y }
+        fn point(&self, x: f64, y: f64) -> Result<Point, InputError> {
+            let (x, y) = self.initial.point(x, y).ok_or(InputError::InvalidMessage)?;
+            Ok(Point { x, y })
         }
         fn flags(keys: &BTreeSet<String>) -> u64 {
             let mut flags = 0;
@@ -778,6 +723,14 @@ mod macos {
         }
     }
     impl InputExecutor for MacOsInputExecutor {
+        fn display_snapshot(&mut self) -> Result<DisplaySnapshot, InputError> {
+            let current =
+                media_layout::primary_display_snapshot().map_err(|_| InputError::LayoutChanged)?;
+            if current != self.initial {
+                return Err(InputError::LayoutChanged);
+            }
+            Ok(current)
+        }
         fn preflight(&mut self) -> Result<InputEnvironment, InputError> {
             if layout()? != self.initial {
                 return Err(InputError::LayoutChanged);
@@ -792,10 +745,10 @@ mod macos {
             match action {
                 InputAction::Key { code, down } => self.key(code, *down, Some(deadline)),
                 InputAction::Button { x, y, button, down } => {
-                    self.button(self.point(*x, *y), *button, *down, Some(deadline))
+                    self.button(self.point(*x, *y)?, *button, *down, Some(deadline))
                 }
                 InputAction::Move { x, y } => {
-                    let point = self.point(*x, *y);
+                    let point = self.point(*x, *y)?;
                     let (kind, button) = if self.buttons.contains(&0) {
                         (6, 0)
                     } else if self.buttons.contains(&2) {
@@ -833,7 +786,7 @@ mod macos {
                         )
                     })?;
                     unsafe {
-                        CGEventSetLocation(event.0, self.point(*x, *y));
+                        CGEventSetLocation(event.0, self.point(*x, *y)?);
                     }
                     self.check_post(Some(deadline))?;
                     Self::post(event, Self::flags(&self.keys));
@@ -1325,11 +1278,41 @@ mod tests {
     #[test]
     fn pointer_normalization_and_dom_button_mapping_are_explicit() {
         assert_eq!(
-            pointer_position((-1920.0, 100.0), (1920.0, 1080.0), 0.0, 0.0),
+            DisplaySnapshot {
+                display_id: 1,
+                bounds: media_layout::Rect {
+                    x: -1920.0,
+                    y: 100.0,
+                    width: 1920.0,
+                    height: 1080.0
+                },
+                pixels: media_layout::PixelSize {
+                    width: 1920,
+                    height: 1080
+                },
+                rotation_degrees: 0
+            }
+            .point(0.0, 0.0)
+            .unwrap(),
             (-1920.0, 100.0)
         );
         assert_eq!(
-            pointer_position((-1920.0, 100.0), (1920.0, 1080.0), 1.0, 1.0),
+            DisplaySnapshot {
+                display_id: 1,
+                bounds: media_layout::Rect {
+                    x: -1920.0,
+                    y: 100.0,
+                    width: 1920.0,
+                    height: 1080.0
+                },
+                pixels: media_layout::PixelSize {
+                    width: 1920,
+                    height: 1080
+                },
+                rotation_degrees: 0
+            }
+            .point(1.0, 1.0)
+            .unwrap(),
             (-1.0, 1179.0)
         );
         assert_eq!(mouse_button(1), Some((2, 25, 26)));

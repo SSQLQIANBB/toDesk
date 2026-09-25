@@ -118,6 +118,8 @@ pub(super) fn strict_json<'de, D: serde::Deserializer<'de>>(
 pub struct IpcMessage {
     pub kind: String,
     pub payload: Value,
+    /// Local monotonic receipt time, never supplied by the child or serialized.
+    pub received_at: Instant,
 }
 
 pub struct IpcCodec {
@@ -299,6 +301,7 @@ impl IpcCodec {
         Ok(IpcMessage {
             kind: body.kind,
             payload: body.payload,
+            received_at: Instant::now(),
         })
     }
     fn close(&mut self) {

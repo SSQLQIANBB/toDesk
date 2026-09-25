@@ -1,4 +1,6 @@
-import { RemoteInputSender, type RemoteInputContext, type RemoteInputEvent } from './remoteControlInput';
+import { isMdnsCandidate, withoutMdnsCandidates } from './remoteControlIce';
+import { RemoteInputSender, remoteVideoCoordinates, type RemoteInputContext, type RemoteInputEvent } from './remoteControlInput';
+import { parseRemoteControlLayout, sameRemoteControlLayout, type RemoteControlLayout } from './remoteControlGeometry';
 import { verifyRemoteProof, type RemotePeerBinding, type RemoteSigningKey, type RemoteSignedEnvelope, type VerifiedRemoteProof } from './remoteControlProof';
 import { createRequestId } from '@/utils/requestId';
 
@@ -65,7 +67,7 @@ export class RemoteControlPeer {
   private frozen = false;
   private hostPaused = false;
   private frameCount = 0;
-  private layoutVersion: number | null = null;
+  private layout: RemoteControlLayout | null = null;
   private armRequest: string | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
@@ -85,7 +87,15 @@ export class RemoteControlPeer {
     try { video.setCodecPreferences(codecs); } catch (error) { this.peer.close(); throw error; }
     this.inputChannel = this.peer.createDataChannel('rc-input-v1', { ordered: true });
     this.stateChannel = this.peer.createDataChannel('rc-state-v1', { ordered: true });
-    this.input = new RemoteInputSender(this.inputChannel, (reason, context) => {
+    const inputChannel = this.inputChannel;
+    this.input = new RemoteInputSender({
+      get readyState() { return inputChannel.readyState; },
+      get bufferedAmount() { return inputChannel.bufferedAmount; },
+      send: data => {
+        if (!this.decodedGeometryReady()) throw new Error('REMOTE_VIDEO_GEOMETRY_UNAVAILABLE');
+        inputChannel.send(data);
+      },
+    }, (reason, context) => {
       this.sendState('release-all', { ...context, reason });
       this.options.onInputArmed?.(false);
       this.options.onPauseInput(reason);
@@ -93,6 +103,7 @@ export class RemoteControlPeer {
     this.peer.onicecandidate = event => {
       if (!event.candidate || this.stopped) return;
       const candidate = event.candidate.toJSON();
+      if (isMdnsCandidate(candidate.candidate || '')) return;
       if (++this.sentCandidates > 128 || utf8Bytes(JSON.stringify(candidate)) > 4096) { this.end('REMOTE_ICE_LIMIT'); return; }
       void Promise.resolve(options.onSignal({ ...this.signalBinding(), type: 'candidate', candidate })).catch(() => this.end('REMOTE_SIGNAL_FAILED'));
     };
@@ -122,7 +133,7 @@ export class RemoteControlPeer {
     if (this.stopped) return;
     if (!offer.sdp || utf8Bytes(offer.sdp) > 65536) { this.end('REMOTE_SDP_LIMIT'); return; }
     await this.peer.setLocalDescription(offer);
-    if (!this.stopped) await this.options.onSignal({ ...this.signalBinding(), type: 'offer', sdp: this.peer.localDescription!.sdp });
+    if (!this.stopped) await this.options.onSignal({ ...this.signalBinding(), type: 'offer', sdp: withoutMdnsCandidates(this.peer.localDescription!.sdp) });
   }
 
   receiveSignal(signal: RemotePeerSignal) {
@@ -193,25 +204,42 @@ export class RemoteControlPeer {
 
   attachVideo(video: HTMLVideoElement | null) {
     if (this.video && this.videoCallback !== null) this.video.cancelVideoFrameCallback?.(this.videoCallback);
-    if (this.video) this.video.srcObject = null;
+    if (this.video) { this.video.removeEventListener('resize', this.onVideoResize); this.video.srcObject = null; }
     this.videoCallback = null;
     this.video = video;
+    video?.addEventListener('resize', this.onVideoResize);
     if (video && this.lease && !this.stopped) this.publishStream();
   }
 
+  mapPointer(clientX: number, clientY: number) {
+    if (!this.decodedGeometryReady() || !this.video || !this.layout) return null;
+    return remoteVideoCoordinates(clientX, clientY, this.video.getBoundingClientRect(), this.video.videoWidth, this.video.videoHeight, this.layout.geometry);
+  }
+
+  private readonly onVideoResize = () => { this.decodedGeometryReady(); };
+  private decodedGeometryReady() {
+    if (this.stopped || !this.layout || !this.video) return false;
+    const { videoWidth: width, videoHeight: height } = this.video;
+    if (!width || !height) { if (this.input.armed) this.pauseInput('REMOTE_VIDEO_UNAVAILABLE'); return false; }
+    if (width !== this.layout.geometry.encodedSize.width || height !== this.layout.geometry.encodedSize.height) {
+      this.end('REMOTE_VIDEO_GEOMETRY_MISMATCH'); return false;
+    }
+    return true;
+  }
+
   requestInputArm() {
-    if (this.stopped || !this.lease || this.lease.claims.scope !== 'control' || this.now() >= this.lease.deadline || this.frozen || this.hostPaused || this.frameCount === 0 || this.layoutVersion === null || !this.video || document.hidden || document.activeElement !== this.video || this.now() - this.lastFrame >= 3000) return false;
+    if (!this.decodedGeometryReady() || !this.lease || this.lease.claims.scope !== 'control' || this.now() >= this.lease.deadline || this.frozen || this.hostPaused || this.frameCount === 0 || !this.layout || !this.video || document.hidden || document.activeElement !== this.video || this.now() - this.lastFrame >= 3000) return false;
     this.armRequest = null;
     // The host must observe a rendered frame before considering this explicit
     // arm request. Both messages share the same reliable, ordered channel.
     if (!this.sendState('heartbeat', { renderedFrames: this.frameCount })) return false;
     this.lastHeartbeatSent = this.now();
     this.armRequest = createRequestId();
-    if (!this.sendState('input-arm', { requestId: this.armRequest, controlEpoch: this.lease.claims.controlEpoch, layoutVersion: this.layoutVersion })) { this.armRequest = null; return false; }
+    if (!this.sendState('input-arm', { requestId: this.armRequest, controlEpoch: this.lease.claims.controlEpoch, layoutVersion: this.layout.layoutVersion })) { this.armRequest = null; return false; }
     return true;
   }
 
-  sendInput(event: RemoteInputEvent) { return !this.stopped && !!this.lease && this.now() < this.lease.deadline && !this.frozen && this.input.enqueue(event); }
+  sendInput(event: RemoteInputEvent) { return this.decodedGeometryReady() && !!this.lease && this.now() < this.lease.deadline && !this.frozen && this.input.enqueue(event); }
   observeAuthorization(scope: 'view' | 'control', authorizationRevision: number, controlEpoch: number) {
     if (!this.lease) return;
     if (scope === 'view' || authorizationRevision > this.lease.claims.authorizationRevision || controlEpoch > this.lease.claims.controlEpoch) { this.hostPaused = true; this.pauseInput('REMOTE_AUTHORIZATION_CHANGED'); }
@@ -286,13 +314,17 @@ export class RemoteControlPeer {
           if (!this.readySent) { this.readySent = true; void Promise.resolve(this.options.onReady()).catch(() => this.end('REMOTE_READY_FAILED')); }
           break;
         case 'heartbeat': this.lastHeartbeat = this.now(); break;
-        case 'layout':
-          if (!this.lease || payload.screenId !== this.options.binding.screenId || !Number.isSafeInteger(payload.layoutVersion) || payload.layoutVersion < 0) throw new Error('REMOTE_LAYOUT_INVALID');
-          if (this.layoutVersion !== null && this.layoutVersion !== payload.layoutVersion) { this.end('REMOTE_LAYOUT_CHANGED'); return; }
-          this.layoutVersion = payload.layoutVersion;
+        case 'layout': {
+          const layout = parseRemoteControlLayout(payload);
+          if (!this.lease || !layout || layout.screenId !== this.options.binding.screenId
+            || Object.keys(message).length !== 6) throw new Error('REMOTE_LAYOUT_INVALID');
+          if (this.layout && !sameRemoteControlLayout(this.layout, layout)) { this.end('REMOTE_LAYOUT_CHANGED'); return; }
+          this.layout = layout;
+          this.decodedGeometryReady();
           break;
+        }
         case 'input-armed': {
-          if (!this.lease || this.lease.claims.scope !== 'control' || this.now() >= this.lease.deadline || payload.requestId !== this.armRequest || this.armRequest === null || payload.controlEpoch !== this.lease.claims.controlEpoch || payload.layoutVersion !== this.layoutVersion || this.frozen) throw new Error('REMOTE_INPUT_ARM_INVALID');
+          if (!this.decodedGeometryReady() || !this.lease || this.lease.claims.scope !== 'control' || this.now() >= this.lease.deadline || payload.requestId !== this.armRequest || this.armRequest === null || payload.controlEpoch !== this.lease.claims.controlEpoch || payload.layoutVersion !== this.layout?.layoutVersion || this.frozen) throw new Error('REMOTE_INPUT_ARM_INVALID');
           const context: RemoteInputContext = { sessionId: this.options.binding.sessionId, controlEpoch: payload.controlEpoch, inputEpoch: payload.inputEpoch, layoutVersion: payload.layoutVersion };
           this.armRequest = null;
           if (!this.input.arm(context)) throw new Error('REMOTE_INPUT_ARM_INVALID');
@@ -328,14 +360,20 @@ export class RemoteControlPeer {
     if (!this.video || this.stopped || this.videoCallback !== null || typeof this.video.requestVideoFrameCallback !== 'function') return;
     this.videoCallback = this.video.requestVideoFrameCallback(() => { this.videoCallback = null; this.frameRendered(); this.watchFrame(); });
   }
-  private frameRendered() { this.lastFrame = this.now(); this.frameCount++; this.frozen = false; }
+  private frameRendered() {
+    if (this.layout && !this.decodedGeometryReady()) return;
+    this.lastFrame = this.now(); this.frameCount++; this.frozen = false;
+  }
   private tick() {
     if (this.stopped) return;
     const now = this.now();
     if (!this.lease && now >= this.connectDeadline) { this.end('REMOTE_CONNECT_TIMEOUT'); return; }
     if (this.connectionProof && now - this.lastHeartbeat >= 3000) { this.end('REMOTE_HEARTBEAT_TIMEOUT'); return; }
-    if (this.connectionProof && now - this.lastHeartbeatSent >= 1000) { this.lastHeartbeatSent = now; this.sendState('heartbeat', { renderedFrames: this.frameCount }); }
+    // Certificate hashing is asynchronous. Wait for the host's hello receipt so
+    // a periodic heartbeat can never overtake the authenticated handshake.
+    if (this.helloReceived && now - this.lastHeartbeatSent >= 1000) { this.lastHeartbeatSent = now; this.sendState('heartbeat', { renderedFrames: this.frameCount }); }
     if (!this.lease) return;
+    if (this.layout) { this.decodedGeometryReady(); if (this.stopped) return; }
     if (now >= this.lease.deadline) { this.end('REMOTE_LEASE_EXPIRED'); return; }
     if (this.video && typeof this.video.requestVideoFrameCallback !== 'function') {
       const frames = this.video.getVideoPlaybackQuality?.().totalVideoFrames || 0;

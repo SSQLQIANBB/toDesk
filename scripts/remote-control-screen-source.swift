@@ -38,7 +38,177 @@ private func report(_ message: [String: Any]) {
     }
 }
 
+private struct DisplaySnapshot: Equatable {
+    let id: CGDirectDisplayID
+    let bounds: CGRect
+    var pixelWidth: Int
+    let pixelHeight: Int
+    let modeWidth: Int
+    let modeHeight: Int
+    let rotation: Int
+
+    static func primary() throws -> DisplaySnapshot {
+        let id = CGMainDisplayID()
+        let bounds = CGDisplayBounds(id)
+        let angle = CGDisplayRotation(id)
+        guard id != 0, let mode = CGDisplayCopyDisplayMode(id),
+              [bounds.minX, bounds.minY, bounds.width, bounds.height].allSatisfy({ $0.isFinite }),
+              abs(bounds.origin.x) <= 1_000_000, abs(bounds.origin.y) <= 1_000_000,
+              bounds.width >= 1, bounds.width <= 16_384, bounds.height >= 1, bounds.height <= 16_384,
+              [0.0, 90.0, 180.0, 270.0].contains(angle),
+              [mode.width, mode.height, mode.pixelWidth, mode.pixelHeight].allSatisfy({ $0 > 0 && $0 <= 16_384 }) else {
+            throw NSError(domain: "InvalidDisplayGeometry", code: 1)
+        }
+        let pixels: (Int, Int)
+        if CGFloat(mode.width) == bounds.width, CGFloat(mode.height) == bounds.height {
+            pixels = (mode.pixelWidth, mode.pixelHeight)
+        } else if CGFloat(mode.width) == bounds.height, CGFloat(mode.height) == bounds.width {
+            pixels = (mode.pixelHeight, mode.pixelWidth)
+        } else { throw NSError(domain: "UnknownDisplayOrientation", code: 1) }
+        guard CGMainDisplayID() == id else { throw NSError(domain: "PrimaryDisplayChanged", code: 1) }
+        return DisplaySnapshot(id: id, bounds: bounds, pixelWidth: pixels.0, pixelHeight: pixels.1,
+                               modeWidth: mode.width, modeHeight: mode.height, rotation: Int(angle))
+    }
+}
+
+private func rectFields(_ rect: CGRect) -> [String: CGFloat] {
+    ["x": rect.origin.x, "y": rect.origin.y, "width": rect.width, "height": rect.height]
+}
+
+private struct CapturedLayout: Equatable {
+    let display: DisplaySnapshot
+    let encodedWidth: Int
+    let encodedHeight: Int
+    let contentRect: CGRect
+    let sourceContentRect: CGRect
+    let contentScale: CGFloat
+    let scaleFactor: CGFloat
+
+    static func observed(_ buffer: CVPixelBuffer, _ info: [SCStreamFrameInfo: Any], _ display: DisplaySnapshot) throws -> CapturedLayout {
+        guard let rawRect = info[.contentRect] as? [String: Any],
+              let rect = CGRect(dictionaryRepresentation: rawRect as CFDictionary),
+              let contentScale = info[.contentScale] as? CGFloat,
+              let scaleFactor = info[.scaleFactor] as? CGFloat,
+              [rect.minX, rect.minY, rect.width, rect.height, contentScale, scaleFactor].allSatisfy({ $0.isFinite }),
+              rect.origin.x >= 0, rect.origin.y >= 0, rect.size.width > 0, rect.size.height > 0,
+              contentScale > 0, scaleFactor >= 1, scaleFactor <= 4 else {
+            throw NSError(domain: "UnknownCaptureGeometry", code: 1)
+        }
+        let w = CVPixelBufferGetWidth(buffer), h = CVPixelBufferGetHeight(buffer)
+        // contentRect is already scaled in surface points. Only scaleFactor
+        // converts it to surface pixels; multiplying contentScale again is wrong.
+        let pixels = CGRect(x: rect.minX * scaleFactor, y: rect.minY * scaleFactor,
+                            width: rect.width * scaleFactor, height: rect.height * scaleFactor)
+        let tolerance: CGFloat = 0.5
+        guard w == width, h == height, pixels.maxX <= CGFloat(w), pixels.maxY <= CGFloat(h),
+              abs(rect.width / contentScale - display.bounds.width) <= tolerance,
+              abs(rect.height / contentScale - display.bounds.height) <= tolerance,
+              abs(scaleFactor - CGFloat(display.pixelWidth) / display.bounds.width) <= 0.0001,
+              abs(scaleFactor - CGFloat(display.pixelHeight) / display.bounds.height) <= 0.0001 else {
+            throw NSError(domain: "PartialOrMismatchedCapture", code: 1)
+        }
+        return CapturedLayout(display: display, encodedWidth: w, encodedHeight: h, contentRect: pixels,
+                              sourceContentRect: rect, contentScale: contentScale, scaleFactor: scaleFactor)
+    }
+
+    var message: [String: Any] {
+        ["type": "screen-source-layout", "screenId": "primary", "layoutVersion": 1,
+         "geometry": ["displayId": display.id, "coordinateSpace": "quartz-global-logical",
+                      "displayBounds": rectFields(display.bounds),
+                      "displayPixels": ["width": display.pixelWidth, "height": display.pixelHeight],
+                      "rotationDegrees": display.rotation,
+                      "encodedSize": ["width": encodedWidth, "height": encodedHeight],
+                      "contentRect": rectFields(contentRect)]]
+    }
+}
+
+private enum H264EncoderMode: String {
+    case hardware
+    case software
+}
+
+private func supportedH264SPS(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
+    // RFC 6184 constrained baseline, level 3.1; constraint_set0/2 do not change
+    // the negotiated profile. Never relabel unconstrained 42001f as 42e01f.
+    count >= 4 && bytes[0] & 0x1f == 7 && bytes[1] == 66
+        && bytes[2] & 0x4f == 0x40 && bytes[3] == 31
+}
+
+// Try each backend at most once before capture starts. Once media is active,
+// encoder failures still end the session; they never reset layout or liveness.
+private func selectH264Encoder<T>(_ create: (H264EncoderMode) throws -> T) throws -> (T, H264EncoderMode) {
+    do { return (try create(.hardware), .hardware) }
+    catch {
+        let hardwareError = error
+        do { return (try create(.software), .software) }
+        catch {
+            throw NSError(domain: "H264_ENCODER_UNAVAILABLE", code: 1,
+                          userInfo: ["hardware": String(describing: hardwareError),
+                                     "software": String(describing: error)])
+        }
+    }
+}
+
+private func createH264Encoder(_ mode: H264EncoderMode,
+                               callback: VTCompressionOutputCallback?, context: UnsafeMutableRawPointer?) throws -> VTCompressionSession {
+    var session: VTCompressionSession?
+    let specification: [CFString: Any] = mode == .hardware
+        ? [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true]
+        : [kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: false]
+    var ready = false
+    defer { if !ready, let session { VTCompressionSessionInvalidate(session) } }
+    let status = VTCompressionSessionCreate(
+        allocator: nil, width: Int32(width), height: Int32(height), codecType: kCMVideoCodecType_H264,
+        encoderSpecification: specification as CFDictionary,
+        imageBufferAttributes: nil, compressedDataAllocator: nil,
+        outputCallback: callback, refcon: context, compressionSessionOut: &session)
+    guard status == noErr, let session else { throw NSError(domain: "VTCreate", code: Int(status)) }
+    let properties: [(CFString, CFTypeRef)] = [
+        (kVTCompressionPropertyKey_RealTime, kCFBooleanTrue),
+        (kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse),
+        // Apple's software encoder rejects ConstrainedBaseline_AutoLevel but
+        // its fixed Baseline 3.1 output carries the constrained-baseline bits.
+        // Actual SPS is checked before any access unit leaves this process.
+        (kVTCompressionPropertyKey_ProfileLevel, mode == .hardware
+            ? kVTProfileLevel_H264_ConstrainedBaseline_AutoLevel : kVTProfileLevel_H264_Baseline_3_1),
+        (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: 1_000_000)),
+        (kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: fps)),
+        (kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: fps)),
+    ]
+    for (key, value) in properties {
+        let status = VTSessionSetProperty(session, key: key, value: value)
+        guard status == noErr else { throw NSError(domain: "VTConfigure", code: Int(status)) }
+    }
+    let prepared = VTCompressionSessionPrepareToEncodeFrames(session)
+    guard prepared == noErr else { throw NSError(domain: "VTPrepare", code: Int(prepared)) }
+    var rawHardware: UnsafeRawPointer?
+    let inspected = VTSessionCopyProperty(session, key: kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder,
+                                         allocator: nil, valueOut: &rawHardware)
+    let actualHardware = rawHardware.map { Unmanaged<AnyObject>.fromOpaque($0).takeRetainedValue() as? Bool } ?? nil
+    // Software encoders can omit this hardware-only inspection property. The
+    // explicit EnableHardware=false specification still forbids a hardware
+    // backend; if a backend does expose the property it must confirm false.
+    let expectedBackend = mode == .hardware
+        ? inspected == noErr && actualHardware == true
+        : (inspected == kVTPropertyNotSupportedErr && actualHardware == nil)
+            || (inspected == noErr && actualHardware == false)
+    guard expectedBackend else {
+        throw NSError(domain: "VTEncoderSelection", code: Int(inspected))
+    }
+    ready = true
+    return session
+}
+
 #if REMOTE_CONTROL_TEST_FAULTS
+private struct SourceTestOptions {
+    let fault: SourceTestFault?
+    let letterbox: Bool
+    static func parse(_ args: [String]) throws -> SourceTestOptions {
+        guard args.filter({ $0 == "--test-letterbox" }).count <= 1 else { throw NSError(domain: "InvalidTestFault", code: 1) }
+        return SourceTestOptions(fault: try SourceTestFault.parse(args.filter { $0 != "--test-letterbox" }),
+                                 letterbox: args.contains("--test-letterbox"))
+    }
+}
 // Exists only in an explicitly compiled test executable, never in a normal source binary.
 private final class SourceTestFault: @unchecked Sendable {
     private let lock = NSLock()
@@ -70,7 +240,7 @@ private final class SourceTestFault: @unchecked Sendable {
                   let value = UInt64(raw), value <= 40_000 else { throw NSError(domain: "InvalidTestFault", code: 1) }
             return value
         }
-        guard let stage = fields["--test-freeze-stage"], ["capture", "encode"].contains(stage) else {
+        guard let stage = fields["--test-freeze-stage"], ["capture", "encode", "layout"].contains(stage) else {
             throw NSError(domain: "InvalidTestFault", code: 1)
         }
         let after = try number("--test-freeze-after-ms")
@@ -120,6 +290,8 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     private var captureMonotonicNs: UInt64 = 0
     private var encodedSeq: UInt64 = 0
     private var encodedMonotonicNs: UInt64 = 0
+    private var displaySnapshot: DisplaySnapshot?
+    private var capturedLayout: CapturedLayout?
     private var capturedFrames = 0
     private var encodedFrames = 0
     private var encodedBytes = 0
@@ -148,6 +320,32 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         lock.unlock()
     }
 
+    func bindPrimaryDisplay(_ id: CGDirectDisplayID) throws {
+        let snapshot = try DisplaySnapshot.primary()
+        guard snapshot.id == id else { throw NSError(domain: "DisplayChangedBeforeCapture", code: 1) }
+        lock.lock()
+        displaySnapshot = snapshot
+        lock.unlock()
+    }
+
+    private func currentDisplayIsBound() -> Bool {
+        do {
+            var actual = try DisplaySnapshot.primary()
+#if REMOTE_CONTROL_TEST_FAULTS
+            // Exercise the same comparison without publishing forged geometry.
+            if testFault?.suppresses("layout") == true { actual.pixelWidth += 2 }
+#endif
+            lock.lock()
+            let unchanged = displaySnapshot == actual
+            lock.unlock()
+            if !unchanged { requestStop("MEDIA_LAYOUT_CHANGED") }
+            return unchanged
+        } catch {
+            requestStop("MEDIA_LAYOUT_CHANGED")
+            return false
+        }
+    }
+
     func reason() -> String? {
         lock.lock()
         defer { lock.unlock() }
@@ -168,12 +366,28 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         guard type == .screen, sample.isValid,
               let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
               let status = attachments.first?[.status] as? Int else { return }
+        // Check even idle callbacks, before test freezes or any cached encoding.
+        guard currentDisplayIsBound() else { return }
 #if REMOTE_CONTROL_TEST_FAULTS
         if testFault?.suppresses("capture") == true { return }
 #endif
         lock.lock()
         var healthy = false
         if SCFrameStatus(rawValue: status) == .complete, let buffer = sample.imageBuffer {
+            do {
+                guard let displaySnapshot else { throw NSError(domain: "UnboundDisplay", code: 1) }
+                let observed = try CapturedLayout.observed(buffer, attachments[0], displaySnapshot)
+                if let capturedLayout, capturedLayout != observed {
+                    stopReason = stopReason ?? "MEDIA_LAYOUT_CHANGED"
+                    lock.unlock()
+                    return
+                }
+                capturedLayout = observed
+            } catch {
+                stopReason = stopReason ?? (capturedLayout == nil ? "MEDIA_LAYOUT_INVALID" : "MEDIA_LAYOUT_CHANGED")
+                lock.unlock()
+                return
+            }
             latest = buffer
             capturedFrames += 1
             healthy = true
@@ -197,36 +411,16 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     }
 
     func configure() throws {
-        let status = VTCompressionSessionCreate(
-            allocator: nil, width: Int32(width), height: Int32(height), codecType: kCMVideoCodecType_H264,
-            encoderSpecification: [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true] as CFDictionary,
-            imageBufferAttributes: nil, compressedDataAllocator: nil,
-            outputCallback: { context, _, status, _, sample in
+        let (configured, mode) = try selectH264Encoder { mode in
+            try createH264Encoder(mode, callback: { context, _, status, _, sample in
                 guard let context else { return }
                 let encoder = Unmanaged<ScreenEncoder>.fromOpaque(context).takeUnretainedValue()
                 guard status == noErr, let sample else { encoder.requestStop("ENCODE_ERROR"); return }
                 encoder.output(sample)
-            }, refcon: Unmanaged.passUnretained(self).toOpaque(), compressionSessionOut: &session)
-        guard status == noErr, let session else { throw NSError(domain: "VTCreate", code: Int(status)) }
-        let properties: [(CFString, CFTypeRef)] = [
-            (kVTCompressionPropertyKey_RealTime, kCFBooleanTrue),
-            (kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse),
-            (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_Baseline_3_1),
-            (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: 1_000_000)),
-            (kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: fps)),
-            (kVTCompressionPropertyKey_MaxKeyFrameInterval, NSNumber(value: fps)),
-        ]
-        for (key, value) in properties {
-            let status = VTSessionSetProperty(session, key: key, value: value)
-            guard status == noErr else { throw NSError(domain: "VTConfigure", code: Int(status)) }
+            }, context: Unmanaged.passUnretained(self).toOpaque())
         }
-        guard VTCompressionSessionPrepareToEncodeFrames(session) == noErr else {
-            throw NSError(domain: "VTPrepare", code: 1)
-        }
-        var rawHardware: UnsafeRawPointer?
-        VTSessionCopyProperty(session, key: kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder,
-                              allocator: nil, valueOut: &rawHardware)
-        if let rawHardware { hardware = (Unmanaged<AnyObject>.fromOpaque(rawHardware).takeRetainedValue() as? Bool) ?? false }
+        session = configured
+        hardware = mode == .hardware
         // Nonblocking output prevents a stalled parent from stopping the native
         // supervisor. Any incomplete/slow record ends the stream; never replay.
         let flags = fcntl(STDOUT_FILENO, F_GETFL)
@@ -253,10 +447,12 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
 
     private func reportProgress() {
         lock.lock()
+        let layout = capturedLayout?.message
         let message: [String: Any] = ["type": "screen-source-progress", "captureSeq": captureSeq,
             "captureMonotonicNs": String(captureMonotonicNs), "encodedSeq": encodedSeq,
             "encodedMonotonicNs": String(encodedMonotonicNs)]
         lock.unlock()
+        if let layout { report(layout) }
         report(message)
     }
 
@@ -289,7 +485,7 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         var count = 0
         guard CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, parameterSetIndex: 0,
             parameterSetPointerOut: nil, parameterSetSizeOut: nil, parameterSetCountOut: &count,
-            nalUnitHeaderLengthOut: &headerSize) == noErr, headerSize == 4 else {
+            nalUnitHeaderLengthOut: &headerSize) == noErr, headerSize == 4, count >= 2, count <= 8 else {
             requestStop("INVALID_H264_FORMAT"); return
         }
         var accessUnit = Data()
@@ -300,6 +496,7 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
             guard CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format, parameterSetIndex: index,
                 parameterSetPointerOut: &pointer, parameterSetSizeOut: &size, parameterSetCountOut: nil,
                 nalUnitHeaderLengthOut: nil) == noErr, let pointer else { requestStop("MISSING_PARAMETER_SET"); return }
+            if index == 0 && !supportedH264SPS(pointer, count: size) { requestStop("UNSUPPORTED_H264_PROFILE"); return }
             accessUnit.append(contentsOf: [0, 0, 0, 1])
             accessUnit.append(pointer, count: size)
             if index == 0 && size >= 4 {
@@ -395,8 +592,8 @@ struct ScreenSource {
         let diagnosticsFlags = fcntl(STDERR_FILENO, F_GETFL)
         guard diagnosticsFlags >= 0, fcntl(STDERR_FILENO, F_SETFL, diagnosticsFlags | O_NONBLOCK) == 0 else { exit(2) }
 #if REMOTE_CONTROL_TEST_FAULTS
-        let testFault: SourceTestFault?
-        do { testFault = try SourceTestFault.parse(Array(CommandLine.arguments.dropFirst())) }
+        let testOptions: SourceTestOptions
+        do { testOptions = try SourceTestOptions.parse(Array(CommandLine.arguments.dropFirst())) }
         catch { report(["type": "error", "reason": "INVALID_TEST_SOURCE_ARGUMENTS"]); exit(2) }
 #else
         guard CommandLine.arguments.count == 1 else { report(["type": "error", "reason": "SOURCE_ARGUMENTS_FORBIDDEN"]); exit(2) }
@@ -406,7 +603,7 @@ struct ScreenSource {
             exit(2)
         }
 #if REMOTE_CONTROL_TEST_FAULTS
-        let encoder = ScreenEncoder(testFault: testFault)
+        let encoder = ScreenEncoder(testFault: testOptions.fault)
 #else
         let encoder = ScreenEncoder()
 #endif
@@ -430,6 +627,7 @@ struct ScreenSource {
             guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
                 throw NSError(domain: "NoPrimaryDisplay", code: 1)
             }
+            try encoder.bindPrimaryDisplay(display.displayID)
             let config = SCStreamConfiguration()
             config.width = width
             config.height = height
@@ -437,6 +635,9 @@ struct ScreenSource {
             config.capturesAudio = false
             config.showsCursor = true
             config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(fps))
+#if REMOTE_CONTROL_TEST_FAULTS
+            if testOptions.letterbox { config.destinationRect = CGRect(x: 160, y: 90, width: 960, height: 540) }
+#endif
             let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: config, delegate: encoder)
             try stream.addStreamOutput(encoder, type: .screen, sampleHandlerQueue: DispatchQueue(label: "todesk.screen-probe.capture"))
             try await stream.startCapture()

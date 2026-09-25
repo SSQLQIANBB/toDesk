@@ -54,4 +54,4 @@ export const getRemoteTargets = (userId: number) => http.get<{ targets: RemoteTa
 export const getRemoteSessions = () => http.get<{ sessions: RemoteSessionRecord[] }>('/api/remote-control/sessions');
 
 export const getRemoteSigningKeys = () => http.get<{ keys: import('@/services/remoteControlProof').RemoteSigningKey[] }>('/api/remote-control/signing-keys');
-export const getRemoteSessionIce = (sessionId: string) => http.get<{ iceServers: RTCIceServer[]; iceTransportPolicy: RTCIceTransportPolicy; expiresAt: number }>(`/api/remote-control/sessions/${encodeURIComponent(sessionId)}/ice`);
+export const getRemoteSessionIce = (sessionId: string) => http.get<import('@/services/remoteControlIce').RemoteIceConfiguration>(`/api/remote-control/sessions/${encodeURIComponent(sessionId)}/ice`);

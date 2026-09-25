@@ -5,17 +5,21 @@ use super::{
     authorization::VerifiedLease,
     host_runtime::{HostResult, MediaDriver},
     ipc::{self, IpcCodec, IpcMessage, IpcSession},
+    media_layout::{LayoutTracker, MediaLayout},
     media_liveness::{self, NativeMediaProgress},
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use serde::Deserialize;
 use serde_json::{json, Value};
+#[cfg(feature = "remote-control-harness")]
 use sha2::{Digest, Sha256};
+#[cfg(feature = "remote-control-harness")]
 use std::{
     ffi::OsString,
     fs::File,
+    path::{Path, PathBuf},
+};
+use std::{
     io::{BufRead, BufReader, Read, Write},
-    path::{Component, Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -28,49 +32,13 @@ use std::{
 use zeroize::Zeroizing;
 
 const MAX_PROGRAM_BYTES: u64 = 256 * 1024 * 1024;
-const BUNDLED: &str = include_str!("../../remote-control-sidecars.json");
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ProgramSpec {
-    role: String,
-    path: String,
-    sha256: String,
-}
+#[cfg(feature = "remote-control-harness")]
 pub(super) struct VerifiedProgram {
     path: PathBuf,
     sha256: String,
 }
+#[cfg(feature = "remote-control-harness")]
 impl VerifiedProgram {
-    pub fn bundled(root: &Path, role: &str) -> HostResult<Self> {
-        let specs: Vec<ProgramSpec> =
-            serde_json::from_str(BUNDLED).map_err(|_| "REMOTE_SIDECAR_NOT_CONFIGURED")?;
-        let spec = specs
-            .into_iter()
-            .find(|spec| spec.role == role)
-            .ok_or("REMOTE_SIDECAR_NOT_CONFIGURED")?;
-        if Path::new(&spec.path)
-            .components()
-            .any(|part| !matches!(part, Component::Normal(_)))
-        {
-            return Err("REMOTE_SIDECAR_PATH_REJECTED");
-        }
-        let root = root
-            .canonicalize()
-            .map_err(|_| "REMOTE_SIDECAR_PATH_REJECTED")?;
-        let path = root
-            .join(spec.path)
-            .canonicalize()
-            .map_err(|_| "REMOTE_SIDECAR_PATH_REJECTED")?;
-        if !path.starts_with(&root) {
-            return Err("REMOTE_SIDECAR_PATH_REJECTED");
-        }
-        let program = Self {
-            path,
-            sha256: spec.sha256,
-        };
-        program.verify()?;
-        Ok(program)
-    }
     #[cfg(feature = "remote-control-harness")]
     pub fn harness(path: &Path, sha256: &str) -> HostResult<Self> {
         // Preserve an explicit virtualenv launcher path; replacing its symlink
@@ -127,6 +95,7 @@ struct ProcessState {
     codec: Mutex<IpcCodec>,
     alive: Arc<AtomicBool>,
     progress: Mutex<NativeMediaProgress>,
+    layout: Mutex<LayoutTracker>,
 }
 // Own the child immediately after spawn, including every early-error path.
 // Dropping std::process::Child alone neither terminates nor reaps it.
@@ -168,6 +137,25 @@ impl Drop for ReapedChild {
 #[derive(Clone)]
 pub(super) struct ProcessMediaDriver(Arc<ProcessState>);
 impl ProcessMediaDriver {
+    #[cfg(all(test, unix))]
+    pub(super) fn idle_test_process(session_id: &str) -> HostResult<(Self, Receiver<IpcMessage>)> {
+        let mut command = Command::new("/bin/sleep");
+        command.arg("60");
+        Self::spawn_command(command, session_id)
+    }
+    /// Native-only product factory. Resource location comes from Tauri itself.
+    pub fn spawn_bundled(
+        app: &tauri::AppHandle,
+        session_id: &str,
+    ) -> HostResult<(Self, Receiver<IpcMessage>)> {
+        let bundle = super::engine_bundle::TrustedEngineBundle::from_app(app)
+            .map_err(|_| "REMOTE_ENGINE_BUNDLE_REJECTED")?;
+        let command = bundle
+            .command()
+            .map_err(|_| "REMOTE_ENGINE_BUNDLE_REJECTED")?;
+        Self::spawn_command(command, session_id)
+    }
+    #[cfg(feature = "remote-control-harness")]
     pub fn spawn(
         program: VerifiedProgram,
         script: Option<VerifiedProgram>,
@@ -178,19 +166,22 @@ impl ProcessMediaDriver {
         if let Some(script) = &script {
             script.verify()?;
         }
+        let mut command = Command::new(&program.path);
+        if let Some(script) = &script {
+            command.arg(&script.path);
+        }
+        command.args(args);
+        Self::spawn_command(command, session_id)
+    }
+    fn spawn_command(
+        mut command: Command,
+        session_id: &str,
+    ) -> HostResult<(Self, Receiver<IpcMessage>)> {
         let session = IpcSession::new(session_id).map_err(|_| "REMOTE_IPC_BOOTSTRAP_FAILED")?;
         let bootstrap = session
             .bootstrap_line()
             .map_err(|_| "REMOTE_IPC_BOOTSTRAP_FAILED")?;
-        let mut command = Command::new(&program.path);
-        // Production does not inherit arbitrary interpreter/plugin search paths.
-        #[cfg(not(feature = "remote-control-harness"))]
-        command.env_clear();
-        if let Some(script) = &script {
-            command.arg(&script.path);
-        }
         command
-            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -221,6 +212,7 @@ impl ProcessMediaDriver {
             codec: Mutex::new(session.supervisor_codec()),
             alive,
             progress: Mutex::new(NativeMediaProgress::default()),
+            layout: Mutex::new(LayoutTracker::default()),
         });
         let (event_tx, event_rx) = mpsc::sync_channel(128);
         let weak = Arc::downgrade(&state);
@@ -252,6 +244,24 @@ impl ProcessMediaDriver {
                 let Some(message) = message else {
                     break;
                 };
+                if message.kind == "media-layout"
+                    && state
+                        .layout
+                        .lock()
+                        .ok()
+                        .and_then(|mut layout| layout.observe(message.payload.clone()).ok())
+                        .is_none()
+                {
+                    break;
+                }
+                if message.kind == "error"
+                    && message.payload.get("reason").and_then(Value::as_str)
+                        == Some("MEDIA_LAYOUT_CHANGED")
+                {
+                    if let Ok(mut layout) = state.layout.lock() {
+                        layout.invalidate();
+                    }
+                }
                 if message.kind == "media-progress" {
                     let observed = media_liveness::clock_sample().and_then(|(clock, at)| {
                         state
@@ -269,7 +279,7 @@ impl ProcessMediaDriver {
                 }
             }
             read_alive.store(false, Ordering::Release);
-            let _=event_tx.try_send(IpcMessage{kind:if clean_eof {"pipe-closed"} else {"error"}.into(),payload:json!({"code":if clean_eof {"REMOTE_IPC_CLOSED"} else {"REMOTE_IPC_REJECTED"}})});
+            let _=event_tx.try_send(IpcMessage{kind:if clean_eof {"pipe-closed"} else {"error"}.into(),payload:json!({"code":if clean_eof {"REMOTE_IPC_CLOSED"} else {"REMOTE_IPC_REJECTED"}}),received_at:Instant::now()});
         });
         // Drain diagnostics without disclosing SDP, key material or captured data.
         thread::spawn(move || {
@@ -383,6 +393,13 @@ impl MediaDriver for ProcessMediaDriver {
             .lock()
             .map(|progress| *progress)
             .map_err(|_| "REMOTE_MEDIA_PROGRESS_INVALID")
+    }
+    fn media_layout(&self) -> HostResult<Option<MediaLayout>> {
+        self.0
+            .layout
+            .lock()
+            .map_err(|_| "REMOTE_MEDIA_LAYOUT_CHANGED")?
+            .snapshot()
     }
 }
 impl Drop for ProcessState {

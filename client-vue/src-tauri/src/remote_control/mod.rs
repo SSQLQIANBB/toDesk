@@ -4,18 +4,23 @@
 
 mod authorization;
 mod device_store;
+mod engine_bundle;
+mod engine_bundle_format;
 mod guard;
 #[cfg(feature = "remote-control-harness")]
 mod harness;
 mod host_process;
 mod host_runtime;
+mod host_transport;
 mod input;
 mod ipc;
+mod media_layout;
 mod media_liveness;
 #[cfg(feature = "remote-control-harness")]
 pub fn run_host_harness() -> Result<(), &'static str> {
     harness::run()
 }
+mod ice;
 mod identity;
 mod platform;
 #[cfg(all(feature = "remote-control-harness", not(debug_assertions)))]
@@ -80,35 +85,45 @@ impl RemoteControlState {
     fn connect_native_host(
         &self,
         connection: &authorization::SignedEnvelope,
-        transport: authorization::ObservedTransport,
-        driver: Box<dyn host_runtime::MediaDriver>,
+        transport: &mut host_transport::HostTransport,
+        mut driver: Box<dyn host_runtime::MediaDriver>,
         input: Box<dyn input::InputExecutor>,
         probe: host_runtime::AvailabilityProbe,
-        layout_version: u64,
     ) -> Result<Arc<Mutex<host_runtime::HostRuntime>>, &'static str> {
-        let mut slot = self.host.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
-        if let Some(host) = slot.as_mut() {
-            if !host
-                .runtime()
-                .lock()
-                .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
-                .ended()
-            {
-                return Err("REMOTE_LOCAL_SESSION_BUSY");
-            }
-            host.stop(guard::StopReason::LocalStop)?;
-            *slot = None;
+        if !transport.belongs_to(&self.identity) {
+            let _ = driver.terminate();
+            return Err("REMOTE_LOCAL_CONSENT_REQUIRED");
         }
-        let runtime = host_runtime::HostRuntime::connect(
-            self.identity.clone(),
-            identity::trusted_keys()?,
+        let prepared = (|| {
+            let mut slot = self.host.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+            if let Some(host) = slot.as_mut() {
+                if !host
+                    .runtime()
+                    .lock()
+                    .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
+                    .ended()
+                {
+                    return Err("REMOTE_LOCAL_SESSION_BUSY");
+                }
+                host.stop(guard::StopReason::LocalStop)?;
+                *slot = None;
+            }
+            Ok((slot, identity::trusted_keys()?, identity::wall_ms()?))
+        })();
+        let (mut slot, keys, now_ms) = match prepared {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = driver.terminate();
+                return Err(error);
+            }
+        };
+        let runtime = transport.connect(
+            keys,
             connection,
-            transport,
             driver,
             input,
             probe,
-            layout_version,
-            identity::wall_ms()?,
+            now_ms,
             Instant::now(),
         )?;
         let host = host_runtime::HostSupervisor::spawn(runtime);

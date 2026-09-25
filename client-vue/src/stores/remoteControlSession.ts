@@ -1,3 +1,4 @@
+import { validateRemoteIceConfiguration } from '@/services/remoteControlIce';
 import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 import { getRemoteSessionIce, getRemoteSigningKeys, type RemoteTarget } from '@/api/remoteControl';
@@ -88,7 +89,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
       deadline = setTimeout(() => end('REMOTE_CONNECT_TIMEOUT'), Math.min(30000, event.value.hardDeadline - Date.now()));
       const [ice, keyset] = await Promise.all([getRemoteSessionIce(event.value.sessionId), getRemoteSigningKeys()]);
       if (current !== generation) return;
-      if (!Array.isArray(ice.iceServers) || ice.iceServers.length > 8 || !['all', 'relay'].includes(ice.iceTransportPolicy) || !Number.isFinite(ice.expiresAt) || ice.expiresAt <= Date.now()) throw new Error('REMOTE_ICE_CONFIGURATION');
+      validateRemoteIceConfiguration(ice, event.value.hardDeadline);
       const { host, controller, consentNonce, screenId, negotiationId } = event.value;
       peer = new RemoteControlPeer({
         binding: { sessionId: event.value.sessionId, host, controller, consentNonce, screenId, negotiationId },
@@ -127,6 +128,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
   }
 
   function attachVideo(video: HTMLVideoElement | null) { videoElement = video; peer?.attachVideo(video); }
+  function mapPointer(clientX: number, clientY: number) { return peer?.mapPointer(clientX, clientY) ?? null; }
   function sendInput(event: RemoteInputEvent) { return !!peer?.sendInput(event); }
   function continueInput() {
     videoElement?.focus();
@@ -165,5 +167,5 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     else currentAdapter?.dispose();
   }
   registerRemoteControlCleanup(reason => end(reason));
-  return { phase, device, sessionId, stream, stats, scope, inputArmed, needsApproval, statusMessage, visible, start, attachVideo, sendInput, continueInput, commitText, requestControl, pauseInput, end };
+  return { phase, device, sessionId, stream, stats, scope, inputArmed, needsApproval, statusMessage, visible, start, attachVideo, mapPointer, sendInput, continueInput, commitText, requestControl, pauseInput, end };
 });

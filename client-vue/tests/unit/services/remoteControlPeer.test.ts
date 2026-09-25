@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash, webcrypto } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { RemoteControlPeer, type RemotePeerOptions } from '@/services/remoteControlPeer';
+import type { RemoteControlLayout } from '@/services/remoteControlGeometry';
 
 const certificate = new Uint8Array([1, 2, 3]).buffer;
 const fingerprint = createHash('sha256').update(new Uint8Array(certificate)).digest('hex').toUpperCase();
 const endpoint = { userId: 1, sid: 'sid', authVersion: 'version', endpointId: 'device', connectionId: 'socket', generation: 1 };
 const binding = { sessionId: 'session', host: endpoint, controller: { ...endpoint, userId: 2 }, negotiationId: 'negotiation', consentNonce: 'nonce', screenId: 'primary' };
 const envelope = { format: 'rc-signed-v1' as const, keyId: 'test', payload: 'payload', signature: 'signature' };
+const layout = JSON.parse(readFileSync(resolve(process.cwd(), '../fixtures/remote-control-layout-v1.json'), 'utf8')).cases[0].layout as RemoteControlLayout;
 class Channel {
   readyState = 'open'; bufferedAmount = 0;
   send = vi.fn((_data: string) => {});
@@ -25,6 +29,7 @@ let input: Channel;
 let video: HTMLVideoElement;
 let rendered: (() => void) | null;
 let now: number;
+let decodedSize: { width: number; height: number };
 const onPause = vi.fn();
 const onEnd = vi.fn();
 const onArmed = vi.fn();
@@ -39,8 +44,9 @@ function acceptArm() {
   host('input-armed', context);
   host('input-window', { ...context, inputWindowId: 'ticket' });
 }
-beforeEach(async () => {
+async function setup(sendLayout = true, completeHandshake = true) {
   vi.useFakeTimers(); vi.clearAllMocks(); now = 0; rendered = null;
+  decodedSize = { width: 1280, height: 720 };
   let leaseSeq = 0;
   vi.stubGlobal('crypto', webcrypto);
   vi.stubGlobal('MediaStream', Stream);
@@ -62,20 +68,41 @@ beforeEach(async () => {
   });
   peer = new RemoteControlPeer({ binding, iceServers: [], iceTransportPolicy: 'all', keys: [], onSignal: vi.fn(), onReady: vi.fn(), onStream: vi.fn(), onPauseInput: onPause, onEnd, onInputArmed: onArmed, now: () => now, createPeer: () => rtc as unknown as RTCPeerConnection, verifyProof });
   video = document.createElement('video'); video.tabIndex = 0; document.body.append(video); video.focus();
+  vi.spyOn(video, 'videoWidth', 'get').mockImplementation(() => decodedSize.width);
+  vi.spyOn(video, 'videoHeight', 'get').mockImplementation(() => decodedSize.height);
+  vi.spyOn(video, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 1000, height: 1000 } as DOMRect);
   video.play = vi.fn().mockResolvedValue(undefined);
   video.requestVideoFrameCallback = vi.fn(callback => { rendered = () => callback(now, {} as VideoFrameCallbackMetadata); return 1; });
   video.cancelVideoFrameCallback = vi.fn();
   peer.attachVideo(video);
   rtc.ontrack?.({ track: { kind: 'video', stop: vi.fn(), onended: null } });
   await peer.installConnectionProof(envelope);
+  if (!completeHandshake) return;
   host('hello', { proofSignature: envelope.signature });
   await peer.installMediaLease(envelope);
-  host('layout', { screenId: 'primary', layoutVersion: 1 });
+  if (sendLayout) host('layout', layout);
   state.send.mockClear();
-});
+}
+beforeEach(() => setup());
 afterEach(() => { peer.end('TEST_CLEANUP'); video.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('主控启用输入前报告真实渲染进度', () => {
+  it('握手确认前不发送周期心跳，确认后才开始发送', async () => {
+    peer.end('RECREATE'); video.remove(); await setup(false, false);
+    expect(messages().map(message => message.type)).toEqual(['hello']);
+    now = 1500; await vi.advanceTimersByTimeAsync(1500);
+    expect(messages().map(message => message.type)).toEqual(['hello']);
+    expect(onEnd).not.toHaveBeenCalled();
+    host('hello', { proofSignature: envelope.signature });
+    now = 1600; await vi.advanceTimersByTimeAsync(100);
+    expect(messages().map(message => message.type)).toEqual(['hello', 'heartbeat']);
+  });
+  it('未收到握手确认仍按原有三秒活性期限结束', async () => {
+    peer.end('RECREATE'); video.remove(); await setup(false, false);
+    now = 3000; await vi.advanceTimersByTimeAsync(3000);
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_HEARTBEAT_TIMEOUT');
+    expect(messages().some(message => message.type === 'heartbeat')).toBe(false);
+  });
   it('首帧之后在同一通道先报告渲染计数再请求启用，仍须宿主窗口才可输入', async () => {
     render();
     expect(peer.requestInputArm()).toBe(true);
@@ -122,5 +149,62 @@ describe('主控启用输入前报告真实渲染进度', () => {
     expect(onPause).toHaveBeenCalledExactlyOnceWith('REMOTE_HOST_PAUSED');
     expect(peer.requestInputArm()).toBe(false);
     expect(state.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('布局和解码尺寸绑定', () => {
+  it('未收到geometry即使已经出帧也不能请求启用，收到布局后才允许', async () => {
+    peer.end('RECREATE'); video.remove(); await setup(false); render();
+    expect(peer.requestInputArm()).toBe(false); expect(peer.mapPointer(510, 520)).toBeNull();
+    expect(state.send).not.toHaveBeenCalled();
+    host('layout', layout);
+    expect(peer.requestInputArm()).toBe(true);
+  });
+  it('尚无解码尺寸不能启用，首帧尺寸有效后可以显式请求', () => {
+    decodedSize = { width: 0, height: 0 }; render();
+    expect(peer.requestInputArm()).toBe(false); expect(onEnd).not.toHaveBeenCalled();
+    decodedSize = { width: 1280, height: 720 }; render();
+    expect(peer.requestInputArm()).toBe(true);
+  });
+  it('peer映射统一拒绝两层黑边，返回内容归一化坐标', () => {
+    expect(peer.mapPointer(510, 520)).toEqual({ x: 0.5, y: 0.5 });
+    expect(peer.mapPointer(60, 238.75)).toEqual({ x: 0, y: 0 });
+    expect(peer.mapPointer(20, 520)).toBeNull();
+    expect(peer.mapPointer(510, 21)).toBeNull();
+  });
+  it.each([
+    ['版本', (value: RemoteControlLayout) => { value.layoutVersion++; }],
+    ['同版本内容区', (value: RemoteControlLayout) => { value.geometry.contentRect.x++; }],
+    ['同版本DPI', (value: RemoteControlLayout) => { value.geometry.displayPixels.width++; }],
+    ['同版本旋转', (value: RemoteControlLayout) => { value.geometry.rotationDegrees = 90; }],
+    ['同版本桌面原点', (value: RemoteControlLayout) => { value.geometry.displayBounds.x--; }],
+  ] as const)('%s变更立即释放并结束', (_name, change) => {
+    render(); peer.requestInputArm(); acceptArm();
+    const changed = structuredClone(layout); change(changed); host('layout', changed);
+    expect(peer.input.armed).toBe(false); expect(onEnd).toHaveBeenCalledWith('REMOTE_LAYOUT_CHANGED');
+  });
+  it('完全相同的重复布局不停止；未知字段拒绝', () => {
+    host('layout', { geometry: layout.geometry, layoutVersion: 1, screenId: 'primary' });
+    expect(onEnd).not.toHaveBeenCalled();
+    host('layout', { ...layout, extra: true });
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_LAYOUT_INVALID');
+  });
+  it('旧版只有layoutVersion的消息不能授权输入', () => {
+    host('layout', { screenId: 'primary', layoutVersion: 1 });
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_LAYOUT_INVALID');
+    expect(peer.requestInputArm()).toBe(false);
+  });
+  it.each(['resize', 'input', 'queued-move'] as const)('%s发现解码尺寸变化，停止并且不发送旧坐标', async path => {
+    render(); peer.requestInputArm(); acceptArm();
+    if (path === 'queued-move') {
+      peer.sendInput({ type: 'move', payload: { x: 0.1, y: 0.1 } });
+      now = 1; peer.sendInput({ type: 'move', payload: { x: 0.2, y: 0.2 } });
+    }
+    input.send.mockClear(); decodedSize.width = 640;
+    if (path === 'resize') video.dispatchEvent(new Event('resize'));
+    else if (path === 'input') expect(peer.sendInput({ type: 'key', payload: { code: 'KeyA', down: true } })).toBe(false);
+    else { now = 40; await vi.advanceTimersByTimeAsync(50); }
+    expect(input.send).not.toHaveBeenCalled(); expect(peer.input.armed).toBe(false);
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_VIDEO_GEOMETRY_MISMATCH');
   });
 });

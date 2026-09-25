@@ -234,8 +234,24 @@ impl SessionGuard {
         Ok(self.context().expect("armed context"))
     }
     pub fn heartbeat_controller(&mut self, now: Instant) -> GuardResult<()> {
+        self.heartbeat_controller_received(now, now)
+    }
+    pub fn heartbeat_controller_received(
+        &mut self,
+        received_at: Instant,
+        now: Instant,
+    ) -> GuardResult<()> {
         self.check_live(now, true)?;
-        self.last_control_heartbeat = Some(now);
+        if received_at > now || now.duration_since(received_at) >= HEARTBEAT_TIMEOUT {
+            return Err((
+                StopReason::HeartbeatExpired,
+                self.stop(StopReason::HeartbeatExpired),
+            ));
+        }
+        self.last_control_heartbeat = Some(
+            self.last_control_heartbeat
+                .map_or(received_at, |old| old.max(received_at)),
+        );
         Ok(())
     }
     pub fn heartbeat_supervisor(&mut self, now: Instant) -> GuardResult<()> {

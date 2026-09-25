@@ -21,6 +21,9 @@ struct Log {
     progress: NativeMediaProgress,
     deadlines: Vec<Instant>,
     unhealthy: bool,
+    layout: Option<MediaLayout>,
+    display: Option<DisplaySnapshot>,
+    layout_failed: bool,
 }
 struct Driver(Arc<Mutex<Log>>);
 impl MediaDriver for Driver {
@@ -59,9 +62,24 @@ impl MediaDriver for Driver {
     fn media_progress(&self) -> HostResult<NativeMediaProgress> {
         Ok(self.0.lock().unwrap().progress)
     }
+    fn media_layout(&self) -> HostResult<Option<MediaLayout>> {
+        let log = self.0.lock().unwrap();
+        if log.layout_failed {
+            Err("REMOTE_MEDIA_LAYOUT_CHANGED")
+        } else {
+            Ok(log.layout.clone())
+        }
+    }
 }
 struct Sink(Arc<Mutex<Log>>, Arc<AtomicBool>);
 impl InputExecutor for Sink {
+    fn display_snapshot(&mut self) -> Result<DisplaySnapshot, InputError> {
+        self.0
+            .lock()
+            .unwrap()
+            .display
+            .ok_or(InputError::LayoutChanged)
+    }
     fn preflight(&mut self) -> Result<InputEnvironment, InputError> {
         Ok(InputEnvironment {
             screen_id: "primary".into(),
@@ -151,7 +169,12 @@ fn fixture(scope: &str) -> Fixture {
         "hostFingerprint":"AB".repeat(32),"controllerFingerprint":"CD".repeat(32),"consentNonce":claims["consentNonce"],"screenId":"primary",
         "scope":scope,"authorizationRevision":1,"controlEpoch":1,"issuedAt":ms,"expiresAt":ms+30000});
     let proof = signed(&body);
-    let log = Arc::new(Mutex::new(Log::default()));
+    let geometry = super::super::media_layout::fixture();
+    let log = Arc::new(Mutex::new(Log {
+        display: Some(geometry.geometry.display_snapshot()),
+        layout: Some(geometry),
+        ..Log::default()
+    }));
     let permission = Arc::new(AtomicBool::new(true));
     let flag = permission.clone();
     let release_fails = Arc::new(AtomicBool::new(false));
@@ -191,6 +214,46 @@ fn hello(f: &mut Fixture) {
     f.host
         .state_message(&serde_json::to_vec(&message).unwrap(), f.now)
         .unwrap();
+}
+#[test]
+fn queued_controller_heartbeat_retains_native_receipt_time() {
+    let mut f = fixture("view");
+    hello(&mut f);
+    let now = f.now;
+    let ms = f.ms;
+    lease(&mut f, "view", 1, 1, 15000, now, ms);
+    let message = json!({"version":1,"sessionId":f.body["sessionId"],"negotiationId":f.body["negotiationId"],"connectionGeneration":f.body["controller"]["generation"],"type":"heartbeat","payload":{"renderedFrames":0}});
+    let receipt = f.now + Duration::from_millis(500);
+    let processed = f.now + Duration::from_secs(2);
+    // Independent supervisor/lease updates can be newer than queued receipt.
+    f.host.supervisor_heartbeat(processed).unwrap();
+    f.host
+        .state_message_received(&serde_json::to_vec(&message).unwrap(), receipt, processed)
+        .unwrap();
+    assert_eq!(f.host.last_controller, receipt);
+    f.host
+        .supervisor_heartbeat(f.now + Duration::from_millis(2900))
+        .unwrap();
+    assert!(f.host.tick(receipt + Duration::from_secs(3)).is_err());
+    assert!(f.host.ended());
+}
+#[test]
+fn expired_or_future_channel_receipt_is_terminal() {
+    for age in [Some(Duration::from_secs(3)), None] {
+        let mut f = fixture("view");
+        hello(&mut f);
+        let received = if age.is_some() {
+            f.now
+        } else {
+            f.now + Duration::from_secs(1)
+        };
+        let processed = f.now + age.unwrap_or_default();
+        assert_eq!(
+            f.host.state_message_received(b"{}", received, processed),
+            Err("REMOTE_CHANNEL_EXPIRED")
+        );
+        assert!(f.host.ended());
+    }
 }
 fn lease(f: &mut Fixture, scope: &str, revision: u64, epoch: u64, ttl: u64, at: Instant, ms: u64) {
     let challenge = f.host.challenge(at).unwrap();
@@ -626,6 +689,11 @@ fn pause_discards_previously_issued_epoch_after_blur_and_rearm() {
 fn crossing_liveness_deadline_inside_executor_pauses_without_ending_view() {
     struct CrossDeadline;
     impl InputExecutor for CrossDeadline {
+        fn display_snapshot(&mut self) -> Result<DisplaySnapshot, InputError> {
+            Ok(super::super::media_layout::fixture()
+                .geometry
+                .display_snapshot())
+        }
         fn preflight(&mut self) -> Result<InputEnvironment, InputError> {
             Ok(InputEnvironment {
                 screen_id: "primary".into(),
@@ -726,4 +794,152 @@ fn engine_exit_at_verified_expiry_is_normal_but_premature_exit_remains_failure()
             expired
         );
     }
+}
+
+#[test]
+fn media_without_trusted_geometry_cannot_arm_until_verified_layout_arrives() {
+    let mut f = fixture("control");
+    f.log.lock().unwrap().layout = None;
+    start(&mut f, "control", 15000);
+    assert!(f.host.media_started());
+    assert_eq!(f.host.arm_input(f.now), Err("REMOTE_MEDIA_LAYOUT_REQUIRED"));
+    assert!(!f
+        .log
+        .lock()
+        .unwrap()
+        .channels
+        .iter()
+        .any(|v| v["type"] == "layout"));
+    let layout = super::super::media_layout::fixture();
+    f.log.lock().unwrap().layout = Some(layout.clone());
+    f.host.tick(f.now).unwrap();
+    assert!(f.host.arm_input(f.now).is_ok());
+    let log = f.log.lock().unwrap();
+    let state = log.channels.iter().find(|v| v["type"] == "layout").unwrap();
+    assert_eq!(state["payload"], serde_json::to_value(layout).unwrap());
+    assert_eq!(log.actions, 0);
+}
+
+#[test]
+fn capture_geometry_change_or_native_snapshot_mismatch_releases_and_stops() {
+    for mode in 0..8 {
+        let mut f = fixture("control");
+        start(&mut f, "control", 15000);
+        key_down(&mut f);
+        {
+            let mut log = f.log.lock().unwrap();
+            match mode {
+                0 => log.layout.as_mut().unwrap().geometry.content_rect.width = 1200.0,
+                1 => log.layout.as_mut().unwrap().layout_version = 2,
+                2 => log.layout.as_mut().unwrap().geometry.encoded_size.width = 1300,
+                3 => log.display.as_mut().unwrap().display_id = 2,
+                4 => log.display.as_mut().unwrap().bounds.x = -1920.0,
+                5 => log.display.as_mut().unwrap().pixels.width = 1920,
+                6 => {
+                    log.display.as_mut().unwrap().rotation_degrees = 180;
+                    log.layout.as_mut().unwrap().geometry.rotation_degrees = 180;
+                }
+                _ => {
+                    log.layout_failed = true;
+                    log.unhealthy = true;
+                }
+            }
+        }
+        assert!(f.host.tick(f.now).is_err());
+        assert!(f.host.ended());
+        assert!(!f.host.media_started());
+        assert_eq!(f.host.stop_reason(), Some(StopReason::LayoutChanged));
+        let log = f.log.lock().unwrap();
+        assert_eq!(log.released, vec!["KeyA"]);
+        assert_eq!(log.terminates, 1);
+    }
+}
+
+#[test]
+fn authenticated_layout_is_not_forwarded_before_the_first_verified_lease() {
+    let mut f = fixture("view");
+    hello(&mut f);
+    assert!(!f
+        .log
+        .lock()
+        .unwrap()
+        .channels
+        .iter()
+        .any(|v| v["type"] == "layout"));
+    let now = f.now;
+    let ms = f.ms;
+    lease(&mut f, "view", 1, 1, 15000, now, ms);
+    assert_eq!(
+        f.log
+            .lock()
+            .unwrap()
+            .channels
+            .iter()
+            .filter(|v| v["type"] == "layout")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn layout_change_during_input_preflight_never_reaches_executor_or_ack() {
+    struct ChangingSink {
+        log: Arc<Mutex<Log>>,
+        preflights: u8,
+    }
+    impl InputExecutor for ChangingSink {
+        fn display_snapshot(&mut self) -> Result<DisplaySnapshot, InputError> {
+            Ok(self.log.lock().unwrap().display.unwrap())
+        }
+        fn preflight(&mut self) -> Result<InputEnvironment, InputError> {
+            self.preflights += 1;
+            if self.preflights == 2 {
+                self.log
+                    .lock()
+                    .unwrap()
+                    .layout
+                    .as_mut()
+                    .unwrap()
+                    .geometry
+                    .content_rect
+                    .width = 1200.0;
+            }
+            Ok(InputEnvironment {
+                screen_id: "primary".into(),
+                layout_version: 1,
+            })
+        }
+        fn execute(&mut self, _: &InputAction, _: Instant) -> Result<(), InputError> {
+            self.log.lock().unwrap().actions += 1;
+            Ok(())
+        }
+        fn release(&mut self, plan: &ReleasePlan) -> Result<(), InputError> {
+            self.log
+                .lock()
+                .unwrap()
+                .released
+                .extend(plan.keys.iter().cloned());
+            Ok(())
+        }
+    }
+    let mut f = fixture("control");
+    start(&mut f, "control", 15000);
+    key_down(&mut f);
+    let context = f.host.guard.context().unwrap();
+    let window = f.host.input_window(f.now).unwrap();
+    f.host.input = Box::new(ChangingSink {
+        log: f.log.clone(),
+        preflights: 0,
+    });
+    let bytes=serde_json::to_vec(&json!({"version":1,"sessionId":context.session_id,"controlEpoch":context.control_epoch,"inputEpoch":context.input_epoch,"layoutVersion":context.layout_version,"seq":2,"inputWindowId":window.input_window_id,"type":"move","payload":{"x":0.5,"y":0.5}})).unwrap();
+    assert_eq!(
+        f.host.input_message(&bytes, f.now),
+        Err("REMOTE_INPUT_REJECTED")
+    );
+    assert_eq!(f.host.stop_reason(), Some(StopReason::LayoutChanged));
+    assert!(f.host.ended());
+    let log = f.log.lock().unwrap();
+    assert_eq!(log.actions, 1);
+    assert_eq!(log.released, vec!["KeyA"]);
+    assert!(!log.channels.iter().any(|v| v["type"] == "input-ack"));
 }

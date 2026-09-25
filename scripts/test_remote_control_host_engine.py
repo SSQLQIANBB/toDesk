@@ -1,5 +1,6 @@
 """Standard-library safety checks; the separate loopback harness tests real media."""
 import base64
+import copy
 import hashlib
 import importlib.util
 import io
@@ -21,6 +22,109 @@ spec.loader.exec_module(engine)
 
 
 class EngineContractTests(unittest.TestCase):
+    @staticmethod
+    def layout_message():
+        return {"type": "screen-source-layout", "screenId": "primary", "layoutVersion": 1, "geometry": {
+            "displayId": 2, "coordinateSpace": "quartz-global-logical",
+            "displayBounds": {"x": 0, "y": 0, "width": 1920, "height": 1080},
+            "displayPixels": {"width": 3840, "height": 2160}, "rotationDegrees": 0,
+            "encodedSize": {"width": 1280, "height": 720},
+            "contentRect": {"x": 160, "y": 90, "width": 960, "height": 540}}}
+
+    def test_layout_preserves_real_letterbox_geometry_and_repeats_immutable_snapshots(self):
+        tracker = engine.MediaLayoutTracker()
+        self.assertIsNone(tracker.snapshot())
+        message = self.layout_message()
+        tracker.source(message)
+        snapshot = tracker.snapshot()
+        tracker.source(copy.deepcopy(message))
+        self.assertEqual(tracker.snapshot(), snapshot)
+        self.assertEqual(snapshot["geometry"]["contentRect"], {"x": 160, "y": 90, "width": 960, "height": 540})
+        message["geometry"]["contentRect"]["x"] = 0
+        snapshot["geometry"]["displayPixels"]["width"] = 1
+        self.assertEqual(tracker.snapshot()["geometry"]["displayPixels"]["width"], 3840)
+        self.assertEqual(tracker.snapshot()["geometry"]["contentRect"]["x"], 160)
+
+    def test_layout_rejects_changes_without_replacing_the_previous_authoritative_snapshot(self):
+        tracker = engine.MediaLayoutTracker()
+        tracker.source(self.layout_message())
+        previous = tracker.snapshot()
+        for path, value in [(('layoutVersion',), 2), (('geometry', 'displayId'), 3),
+                            (('geometry', 'rotationDegrees'), 90), (('geometry', 'displayPixels', 'width'), 3838),
+                            (('geometry', 'contentRect', 'x'), 159.5), (('geometry', 'encodedSize', 'width'), 1282),
+                            (('geometry', 'displayBounds', 'x'), -100)]:
+            message = self.layout_message()
+            target = message
+            for key in path[:-1]: target = target[key]
+            target[path[-1]] = value
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'MEDIA_LAYOUT_CHANGED'):
+                tracker.source(message)
+            self.assertEqual(tracker.snapshot(), previous)
+
+    def test_layout_strictly_rejects_unknown_nonfinite_out_of_range_or_outside_content(self):
+        invalid = [
+            (('accepted',), True), (('type',), 'media-layout'), (('screenId',), 'other'),
+            (('layoutVersion',), True), (('layoutVersion',), 0), (('layoutVersion',), engine.MAX_SAFE_SEQUENCE + 1),
+            (('geometry', 'unknown'), 0), (('geometry', 'displayId'), 0), (('geometry', 'displayId'), 1 << 32),
+            (('geometry', 'coordinateSpace'), 'pixels'), (('geometry', 'rotationDegrees'), 45),
+            (('geometry', 'displayPixels', 'width'), 0), (('geometry', 'displayPixels', 'width'), 16385),
+            (('geometry', 'encodedSize', 'height'), 720.5), (('geometry', 'contentRect', 'x'), -0.5),
+            (('geometry', 'contentRect', 'width'), 1200), (('geometry', 'contentRect', 'height'), 0),
+            (('geometry', 'displayBounds', 'x'), float('nan')), (('geometry', 'displayBounds', 'y'), float('inf')),
+            (('geometry', 'displayBounds', 'width'), True), (('geometry', 'contentRect', 'x'), '160'),
+            (('geometry', 'displayBounds', 'width'), 0.5), (('geometry', 'displayBounds', 'x'), 1_000_001),
+        ]
+        for path, value in invalid:
+            message = self.layout_message()
+            target = message
+            for key in path[:-1]: target = target[key]
+            target[path[-1]] = value
+            tracker = engine.MediaLayoutTracker()
+            with self.subTest(path=path, value=value), self.assertRaises(ValueError): tracker.source(message)
+            self.assertIsNone(tracker.snapshot())
+
+    def test_diagnostics_layout_change_stops_without_forwarding_untrusted_replacement(self):
+        messages = [self.layout_message(), self.layout_message()]
+        messages[1]['geometry']['displayPixels']['width'] += 2
+        instance = object.__new__(engine.Engine)
+        instance.layout = engine.MediaLayoutTracker()
+        instance.screen = SimpleNamespace(stderr=io.BytesIO(('\n'.join(json.dumps(message) for message in messages) + '\n').encode()))
+        failures, sent = [], []
+        instance.fail = failures.append
+        instance.send = lambda *args: sent.append(args)
+        instance.read_diagnostics()
+        self.assertEqual(instance.layout.snapshot()['geometry']['displayPixels']['width'], 3840)
+        self.assertEqual(sent, [('error', {'reason': 'MEDIA_LAYOUT_CHANGED'})])
+        self.assertEqual(failures, ['MEDIA_LAYOUT_CHANGED'])
+
+    def test_diagnostics_reject_duplicate_nested_layout_fields_and_partial_lines(self):
+        valid = json.dumps(self.layout_message()).encode()
+        invalid = [valid.replace(b'"displayId": 2', b'"displayId": 2, "displayId": 3') + b'\n',
+                   valid.replace(b'"rotationDegrees": 0', b'"rotationDegrees": NaN') + b'\n', valid]
+        for raw in invalid:
+            instance = object.__new__(engine.Engine)
+            instance.layout = engine.MediaLayoutTracker()
+            instance.screen = SimpleNamespace(stderr=io.BytesIO(raw))
+            failures = []
+            instance.fail = failures.append
+            instance.send = lambda *_: self.fail('invalid diagnostics escaped')
+            instance.read_diagnostics()
+            self.assertEqual(failures, ['SCREEN_DIAGNOSTICS_FAILED'])
+            self.assertIsNone(instance.layout.snapshot())
+
+    def test_only_fixed_source_layout_change_reason_is_preserved(self):
+        for message, expected in [({'type': 'screen-source-stopped', 'reason': 'MEDIA_LAYOUT_CHANGED'}, 'MEDIA_LAYOUT_CHANGED'),
+                                  ({'type': 'error', 'reason': 'MEDIA_LAYOUT_CHANGED'}, 'MEDIA_LAYOUT_CHANGED'),
+                                  ({'type': 'error', 'reason': 'arbitrary-user-value'}, 'SCREEN_SOURCE_ERROR')]:
+            instance = object.__new__(engine.Engine)
+            instance.screen = SimpleNamespace(stderr=io.BytesIO((json.dumps(message) + '\n').encode()))
+            failures, sent = [], []
+            instance.fail = failures.append
+            instance.send = lambda *args: sent.append(args)
+            instance.read_diagnostics()
+            self.assertEqual(failures, [expected])
+            self.assertEqual(sent, [('error', {'reason': 'MEDIA_LAYOUT_CHANGED'})] if expected == 'MEDIA_LAYOUT_CHANGED' else [])
+
     @staticmethod
     def progress_message(capture=0, captured="0", encoded=0, encoded_at="0"):
         return {"type": "screen-source-progress", "captureSeq": capture, "captureMonotonicNs": captured,
@@ -92,6 +196,7 @@ class EngineContractTests(unittest.TestCase):
         instance = object.__new__(engine.Engine)
         instance.closed = threading.Event()
         instance.progress = engine.MediaProgressTracker()
+        instance.layout = engine.MediaLayoutTracker()
         instance.screen = None
         sent = []
         instance.send = lambda *args: sent.append(args)
@@ -106,6 +211,22 @@ class EngineContractTests(unittest.TestCase):
         instance.closed.set()
         self.assertFalse(instance.report_progress())
         self.assertEqual(len(sent), 2)
+
+    def test_valid_layout_is_repeated_before_progress_but_unknown_layout_is_not_invented(self):
+        instance = object.__new__(engine.Engine)
+        instance.closed = threading.Event()
+        instance.progress = engine.MediaProgressTracker()
+        instance.layout = engine.MediaLayoutTracker()
+        instance.screen = object()
+        sent = []
+        instance.send = lambda *args: sent.append(args)
+        instance.report_progress()
+        self.assertEqual([kind for kind, _ in sent], ['media-progress'])
+        instance.layout.source(self.layout_message())
+        instance.report_progress()
+        instance.report_progress()
+        self.assertEqual([kind for kind, _ in sent], ['media-progress', 'media-layout', 'media-progress', 'media-layout', 'media-progress'])
+        self.assertEqual(sent[1], sent[3])
 
     def test_forward_progress_requires_a_successful_gstreamer_push(self):
         for succeeds in [False, True]:
@@ -205,6 +326,63 @@ class EngineContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 engine.certificate_fingerprint(invalid)
 
+    def test_turn_uris_escape_timestamp_username_and_base64_password(self):
+        config = {"iceServers": [{"urls": ["stun:turn.example.com:3478"]},
+                                  {"urls": ["turn:turn.example.com:3478?transport=udp", "turns:turn.example.com:5349?transport=tcp"],
+                                   "username": "1700000000:rc:opaque", "credential": "test+/="}],
+                  "iceTransportPolicy": "all", "expiresAt": 60000}
+        stun, turns = engine.ice_configuration(config, 0)
+        self.assertEqual(stun, "stun://turn.example.com:3478")
+        self.assertEqual(turns, ["turn://1700000000%3Arc%3Aopaque:test%2B%2F%3D@turn.example.com:3478?transport=udp",
+                                 "turns://1700000000%3Arc%3Aopaque:test%2B%2F%3D@turn.example.com:5349?transport=tcp"])
+        for field, value in [('expiresAt', 0), ('expiresAt', True), ('expiresAt', 3_900_001), ('iceTransportPolicy', 'auto'), ('iceServers', [])]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                engine.ice_configuration({**config, field: value}, 0)
+        for url in ['turn:user:pass@host:3478?transport=udp', 'turns:host:5349?transport=udp', 'turn:bad..host:3478?transport=tcp', 'turn:host:0?transport=tcp', 'https://host:443']:
+            invalid = {**config, 'iceServers': [{'urls': [url], 'username': 'test', 'credential': 'test'}]}
+            with self.subTest(url=url), self.assertRaises(ValueError): engine.ice_configuration(invalid, 0)
+
+    def test_network_configuration_is_once_before_offer_and_does_not_start_media(self):
+        payload = {"iceServers": [{"urls": ["turn:turn.example.com:3478?transport=udp"], "username": "test:user", "credential": "test+/="}],
+                   "iceTransportPolicy": "relay", "expiresAt": 60000}
+        instance = object.__new__(engine.Engine)
+        instance.offer_received = False
+        instance.ice_policy = "loopback"
+        instance.ice_expires_at = None
+        calls, sent = [], []
+        instance.peer = SimpleNamespace(set_property=lambda *args: calls.append(args), emit=lambda *args: calls.append(args) or True)
+        instance.WebRTC = SimpleNamespace(WebRTCICETransportPolicy=SimpleNamespace(ALL=0, RELAY=1))
+        instance.send = lambda *args: sent.append(args)
+        instance.start_media = lambda: self.fail('ICE config started capture')
+        with patch.object(engine.time, 'time_ns', return_value=0), patch.object(engine, 'clock_ns', return_value=100):
+            instance.command({'kind': 'configure-ice', 'payload': payload}, 100)
+        self.assertEqual(instance.ice_policy, 'relay')
+        self.assertEqual(instance.ice_expires_at, 60_000_000_100)
+        self.assertEqual(calls[0], ('ice-transport-policy', 1))
+        self.assertEqual(sent, [('network-configured', {'iceTransportPolicy': 'relay'})])
+        self.assertNotIn('test:user', str(sent))
+        with self.assertRaises(ValueError): instance.command({'kind': 'configure-ice', 'payload': payload}, 100)
+        instance.ice_policy = 'loopback'; instance.offer_received = True
+        with self.assertRaises(ValueError): instance.command({'kind': 'configure-ice', 'payload': payload}, 100)
+
+    def test_network_candidate_policy_keeps_loopback_default_and_filters_relay_signaling(self):
+        candidate = 'candidate:1 1 udp 123 203.0.113.9 44000 typ relay raddr 0.0.0.0 rport 0'
+        self.assertTrue(engine.network_candidate(candidate, 'relay'))
+        self.assertFalse(engine.network_candidate(candidate))
+        host = 'candidate:1 1 udp 123 192.168.1.2 5000 typ host'
+        self.assertTrue(engine.network_candidate(host, 'all'))
+        for invalid in [candidate + '\r\n', candidate.replace('203.0.113.9', '0.0.0.0'), candidate.replace('203.0.113.9', 'test.local'), candidate + ' raddr', candidate.replace('44000', '65536')]:
+            self.assertFalse(engine.network_candidate(invalid, 'all'))
+        instance = object.__new__(engine.Engine)
+        instance.ice_policy = 'relay'
+        sent = []
+        instance.send = lambda *args: sent.append(args)
+        instance.fail = lambda _: self.fail('unexpected rejection')
+        instance.local_ice(0, host)
+        self.assertEqual(sent, [])
+        instance.local_ice(0, candidate)
+        self.assertEqual(sent, [('ice', {'sdpMLineIndex': 0, 'candidate': candidate})])
+
     def test_only_bounded_loopback_host_ice_is_accepted(self):
         self.assertTrue(engine.loopback_candidate("candidate:1 1 udp 123 127.0.0.1 50000 typ host"))
         self.assertTrue(engine.loopback_candidate("candidate:1 1 udp 123 ::1 50000 typ host"))
@@ -215,9 +393,9 @@ class EngineContractTests(unittest.TestCase):
             self.assertFalse(engine.loopback_candidate(invalid))
 
     def test_codec_selection_is_video_scoped_and_checks_embedded_ice(self):
-        sdp = "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 103\r\na=recvonly\r\na=rtpmap:103 H264/90000\r\na=fmtp:103 packetization-mode=1;profile-level-id=42001f\r\n"
+        sdp = "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 103\r\na=recvonly\r\na=rtpmap:103 H264/90000\r\na=fmtp:103 packetization-mode=1;profile-level-id=42e01f\r\n"
         self.assertEqual(engine.h264_payload(sdp), 103)
-        for invalid in [sdp.replace("42001f", "64001f"), sdp + "m=video 9 UDP/TLS/RTP/SAVPF 103\r\n", sdp + "m=audio 9 RTP/AVP 0\r\n",
+        for invalid in [sdp.replace("42e01f", "42001f"), sdp.replace("42e01f", "64001f"), sdp + "m=video 9 UDP/TLS/RTP/SAVPF 103\r\n", sdp + "m=audio 9 RTP/AVP 0\r\n",
                         sdp + "a=candidate:1 1 udp 123 8.8.8.8 50000 typ host\r\n", "x" * 65537]:
             with self.assertRaises(ValueError):
                 engine.h264_payload(invalid)
@@ -301,6 +479,7 @@ class EngineContractTests(unittest.TestCase):
             {"kind": "exec", "payload": {"command": "whoami"}},
             {"kind": "input", "payload": {"accepted": True, "code": "KeyA"}},
             {"kind": "test-source-faults", "payload": {"stage": "forwarded", "afterMs": 2500}},
+            {"kind": "media-layout", "payload": {"screenId": "primary", "layoutVersion": 1, "geometry": {}}},
             {"kind": "start-media", "payload": {"mediaLeaseSeq": 1, "ttlMs": 1000, "monotonicDeadlineNs": "9000000000", "testForwardFreezeAfterMs": 2500}},
         ]:
             with self.assertRaises(ValueError):

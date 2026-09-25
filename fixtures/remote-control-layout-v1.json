@@ -1,0 +1,63 @@
+{
+  "description": "共享坐标合同：输入相对有效内容归一化；桌面坐标为当前显示方向的全局逻辑点，边缘钳制到最后一个物理像素。",
+  "cases": [
+    {
+      "name": "retina-landscape-letterbox",
+      "layout": {
+        "screenId": "primary",
+        "layoutVersion": 1,
+        "geometry": {
+          "displayId": 1,
+          "coordinateSpace": "quartz-global-logical",
+          "displayBounds": { "x": 0, "y": 0, "width": 1440, "height": 900 },
+          "displayPixels": { "width": 2880, "height": 1800 },
+          "rotationDegrees": 0,
+          "encodedSize": { "width": 1280, "height": 720 },
+          "contentRect": { "x": 64, "y": 0, "width": 1152, "height": 720 }
+        }
+      },
+      "surface": { "left": 10, "top": 20, "width": 1000, "height": 1000 },
+      "controllerCases": [
+        { "clientX": 60, "clientY": 238.75, "normalized": { "x": 0, "y": 0 } },
+        { "clientX": 510, "clientY": 520, "normalized": { "x": 0.5, "y": 0.5 } },
+        { "clientX": 960, "clientY": 801.25, "normalized": { "x": 1, "y": 1 } },
+        { "clientX": 20, "clientY": 520, "normalized": null },
+        { "clientX": 510, "clientY": 21, "normalized": null },
+        { "clientX": 960.1, "clientY": 520, "normalized": null }
+      ],
+      "nativeCases": [
+        { "normalized": { "x": 0, "y": 0 }, "point": { "x": 0, "y": 0 } },
+        { "normalized": { "x": 0.5, "y": 0.5 }, "point": { "x": 720, "y": 450 } },
+        { "normalized": { "x": 1, "y": 1 }, "point": { "x": 1439.5, "y": 899.5 } }
+      ]
+    },
+    {
+      "name": "portrait-rotated-negative-origin",
+      "layout": {
+        "screenId": "primary",
+        "layoutVersion": 3,
+        "geometry": {
+          "displayId": 2,
+          "coordinateSpace": "quartz-global-logical",
+          "displayBounds": { "x": -900, "y": 120, "width": 900, "height": 1440 },
+          "displayPixels": { "width": 1800, "height": 2880 },
+          "rotationDegrees": 90,
+          "encodedSize": { "width": 1280, "height": 720 },
+          "contentRect": { "x": 415, "y": 0, "width": 450, "height": 720 }
+        }
+      },
+      "surface": { "left": 10, "top": 20, "width": 640, "height": 360 },
+      "controllerCases": [
+        { "clientX": 217.5, "clientY": 20, "normalized": { "x": 0, "y": 0 } },
+        { "clientX": 330, "clientY": 200, "normalized": { "x": 0.5, "y": 0.5 } },
+        { "clientX": 442.5, "clientY": 380, "normalized": { "x": 1, "y": 1 } },
+        { "clientX": 217.4, "clientY": 200, "normalized": null }
+      ],
+      "nativeCases": [
+        { "normalized": { "x": 0, "y": 0 }, "point": { "x": -900, "y": 120 } },
+        { "normalized": { "x": 0.5, "y": 0.5 }, "point": { "x": -450, "y": 840 } },
+        { "normalized": { "x": 1, "y": 1 }, "point": { "x": -0.5, "y": 1559.5 } }
+      ]
+    }
+  ]
+}

@@ -8,8 +8,9 @@ use super::{
         SignedEnvelope, VerifiedLease,
     },
     guard::{InputContext, InputWindow, ReleasePlan, SessionGuard, StopReason},
-    identity::IdentityState,
+    identity::{IdentityState, RuntimeClaim},
     input::{self, InputAck, InputExecutor},
+    media_layout::{DisplaySnapshot, MediaLayout},
     media_liveness::{MediaHealth, MediaLiveness, MediaStatus, NativeMediaProgress},
 };
 use serde::Deserialize;
@@ -34,24 +35,48 @@ pub(super) trait MediaDriver: Send {
     fn send_channel(&mut self, label: &str, data: &[u8]) -> HostResult<()>;
     fn healthy(&self) -> bool;
     fn media_progress(&self) -> HostResult<NativeMediaProgress>;
+    fn media_layout(&self) -> HostResult<Option<MediaLayout>>;
 }
 
 /// The existing executor checks this minimum before each actual OS post, even
 /// when decoding/preflight/Unicode preparation takes us across a freeze limit.
 struct LiveInput<'a> {
     inner: &'a mut dyn InputExecutor,
+    media: &'a mut dyn MediaDriver,
+    expected_layout: &'a MediaLayout,
     deadline: Instant,
     expired: bool,
 }
+impl LiveInput<'_> {
+    fn check_layout(&mut self) -> Result<(), input::InputError> {
+        if self
+            .media
+            .media_layout()
+            .map_err(|_| input::InputError::LayoutChanged)?
+            .as_ref()
+            != Some(self.expected_layout)
+            || self.inner.display_snapshot()? != self.expected_layout.geometry.display_snapshot()
+        {
+            return Err(input::InputError::LayoutChanged);
+        }
+        Ok(())
+    }
+}
 impl InputExecutor for LiveInput<'_> {
+    fn display_snapshot(&mut self) -> Result<DisplaySnapshot, input::InputError> {
+        self.inner.display_snapshot()
+    }
     fn preflight(&mut self) -> Result<input::InputEnvironment, input::InputError> {
-        self.inner.preflight()
+        let environment = self.inner.preflight()?;
+        self.check_layout()?;
+        Ok(environment)
     }
     fn execute(
         &mut self,
         action: &input::InputAction,
         deadline: Instant,
     ) -> Result<(), input::InputError> {
+        self.check_layout()?;
         if Instant::now() >= self.deadline {
             self.expired = true;
             return Err(input::InputError::Expired);
@@ -87,6 +112,8 @@ pub(super) struct HostRuntime {
     media: Box<dyn MediaDriver>,
     probe: AvailabilityProbe,
     layout_version: u64,
+    bound_layout: Option<MediaLayout>,
+    layout_sent: bool,
     latest_lease: Option<VerifiedLease>,
     ready: bool,
     paused: bool,
@@ -114,11 +141,40 @@ impl HostRuntime {
         now_ms: u64,
         now: Instant,
     ) -> HostResult<Self> {
-        let claimed = identity
-            .lock()
-            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
-            .claim_for_runtime(now);
-        let (local, generation) = match claimed {
+        let claim = match RuntimeClaim::reserve(identity, now) {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = media.terminate();
+                return Err(error);
+            }
+        };
+        Self::connect_claimed(
+            claim,
+            keys,
+            connection,
+            transport,
+            media,
+            input,
+            probe,
+            layout_version,
+            now_ms,
+            now,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn connect_claimed(
+        claim: RuntimeClaim,
+        keys: PinnedKeys,
+        connection: &SignedEnvelope,
+        transport: ObservedTransport,
+        mut media: Box<dyn MediaDriver>,
+        input: Box<dyn InputExecutor>,
+        probe: AvailabilityProbe,
+        layout_version: u64,
+        now_ms: u64,
+        now: Instant,
+    ) -> HostResult<Self> {
+        let (identity, local, generation) = match claim.transfer(now) {
             Ok(value) => value,
             Err(error) => {
                 let _ = media.terminate();
@@ -158,6 +214,8 @@ impl HostRuntime {
             media,
             probe,
             layout_version,
+            bound_layout: None,
+            layout_sent: false,
             latest_lease: None,
             ready: false,
             paused: false,
@@ -176,6 +234,7 @@ impl HostRuntime {
         if self.ended {
             return Err("REMOTE_SESSION_ENDED");
         }
+        self.check_media_layout()?;
         // Classify a known freeze before a simultaneous sidecar fallback exit.
         self.check_media_liveness(now)?;
         let current = self
@@ -254,6 +313,49 @@ impl HostRuntime {
             MediaStatus::Stalled if !self.paused => self.pause(StopReason::MediaStalled),
             _ => Ok(()),
         }
+    }
+    fn check_media_layout(&mut self) -> HostResult<()> {
+        let result = (|| {
+            let layout = self.media.media_layout()?;
+            let Some(layout) = layout else {
+                return if self.bound_layout.is_some() {
+                    Err("REMOTE_MEDIA_LAYOUT_CHANGED")
+                } else {
+                    Ok(())
+                };
+            };
+            layout.validate()?;
+            if layout.screen_id != self.local.screen_id
+                || layout.layout_version != self.layout_version
+                || self
+                    .bound_layout
+                    .as_ref()
+                    .is_some_and(|bound| *bound != layout)
+                || self
+                    .input
+                    .display_snapshot()
+                    .map_err(|_| "REMOTE_MEDIA_LAYOUT_CHANGED")?
+                    != layout.geometry.display_snapshot()
+            {
+                return Err("REMOTE_MEDIA_LAYOUT_CHANGED");
+            }
+            if self.bound_layout.is_none() {
+                self.bound_layout = Some(layout);
+            }
+            if self.ready && self.latest_lease.is_some() && !self.layout_sent {
+                self.send_state(
+                    "layout",
+                    serde_json::to_value(self.bound_layout.as_ref().unwrap())
+                        .map_err(|_| "REMOTE_MEDIA_LAYOUT_INVALID")?,
+                )?;
+                self.layout_sent = true;
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = self.stop(StopReason::LayoutChanged);
+        }
+        result
     }
     fn live_input_deadline(&self, now: Instant) -> HostResult<Instant> {
         let progress = self.media.media_progress()?;
@@ -348,10 +450,7 @@ impl HostRuntime {
             self.guard_ready(now)?;
         }
         self.start_if_authorized(now)?;
-        self.send_state(
-            "layout",
-            json!({"screenId":self.local.screen_id,"layoutVersion":self.layout_version}),
-        )
+        Ok(())
     }
     fn start_if_authorized(&mut self, now: Instant) -> HostResult<()> {
         self.ensure_live(now)?;
@@ -391,10 +490,20 @@ impl HostRuntime {
         Ok(())
     }
     pub fn controller_heartbeat(&mut self, now: Instant) -> HostResult<()> {
+        self.controller_heartbeat_received(now, now)
+    }
+    fn controller_heartbeat_received(
+        &mut self,
+        received_at: Instant,
+        now: Instant,
+    ) -> HostResult<()> {
         self.ensure_live(now)?;
-        self.last_controller = now;
+        self.last_controller = self.last_controller.max(received_at);
         if self.latest_lease.is_some() {
-            if let Err((reason, release)) = self.guard.heartbeat_controller(now) {
+            if let Err((reason, release)) = self
+                .guard
+                .heartbeat_controller_received(self.last_controller, now)
+            {
                 self.consume_release(release);
                 let _ = self.stop(reason);
                 return Err("REMOTE_HEARTBEAT_EXPIRED");
@@ -416,6 +525,9 @@ impl HostRuntime {
     }
     pub fn arm_input(&mut self, now: Instant) -> HostResult<InputContext> {
         self.ensure_live(now)?;
+        if self.bound_layout.is_none() {
+            return Err("REMOTE_MEDIA_LAYOUT_REQUIRED");
+        }
         self.live_input_deadline(now)?;
         let lease = self.latest_lease.as_ref().ok_or("REMOTE_LEASE_REQUIRED")?;
         if !self.ready || self.paused || !self.media_started || lease.scope() != Scope::Control {
@@ -454,12 +566,17 @@ impl HostRuntime {
     }
     pub fn input(&mut self, bytes: &[u8], now: Instant) -> HostResult<InputAck> {
         self.ensure_live(now)?;
+        if self.bound_layout.is_none() {
+            return Err("REMOTE_MEDIA_LAYOUT_REQUIRED");
+        }
         let deadline = self.live_input_deadline(now)?;
         if self.paused {
             return Err("REMOTE_CONTROL_NOT_ALLOWED");
         }
         let mut executor = LiveInput {
             inner: self.input.as_mut(),
+            media: self.media.as_mut(),
+            expected_layout: self.bound_layout.as_ref().expect("validated media layout"),
             deadline,
             expired: false,
         };
@@ -599,6 +716,14 @@ impl HostRuntime {
     }
     /// Called only for rc-state-v1 bytes from the authenticated engine/DTLS peer.
     pub fn state_message(&mut self, bytes: &[u8], now: Instant) -> HostResult<()> {
+        self.state_message_received(bytes, now, now)
+    }
+    pub fn state_message_received(
+        &mut self,
+        bytes: &[u8],
+        received_at: Instant,
+        now: Instant,
+    ) -> HostResult<()> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase", deny_unknown_fields)]
         struct StateMessage {
@@ -616,6 +741,9 @@ impl HostRuntime {
             return Err("REMOTE_STATE_REJECTED");
         }
         let result = (|| {
+            if received_at > now || now.duration_since(received_at) >= HEARTBEAT_TIMEOUT {
+                return Err("REMOTE_CHANNEL_EXPIRED");
+            }
             self.ensure_live(now)?;
             let message: StateMessage =
                 serde_json::from_slice(bytes).map_err(|_| "REMOTE_STATE_REJECTED")?;
@@ -643,7 +771,7 @@ impl HostRuntime {
                     if proof != self.connection {
                         return Err("REMOTE_HANDSHAKE_PROOF");
                     }
-                    self.controller_heartbeat(now)?;
+                    self.controller_heartbeat_received(received_at, now)?;
                     self.ready(now)?;
                     self.send_state("hello", json!({"proofSignature":self.connection.signature}))?;
                     self.send_state("heartbeat", json!({}))?;
@@ -660,9 +788,9 @@ impl HostRuntime {
                     {
                         return Err("REMOTE_STATE_REJECTED");
                     }
-                    self.controller_heartbeat(now)?;
+                    self.controller_heartbeat_received(received_at, now)?;
                     self.liveness
-                        .rendered(payload["renderedFrames"].as_u64().unwrap(), now)?;
+                        .rendered(payload["renderedFrames"].as_u64().unwrap(), received_at)?;
                     self.check_media_liveness(now)?;
                 }
                 "input-arm" => {
@@ -732,7 +860,9 @@ impl HostRuntime {
         if result.is_err()
             && !matches!(
                 result,
-                Err("REMOTE_MEDIA_NOT_LIVE" | "REMOTE_CONTROL_NOT_ALLOWED")
+                Err("REMOTE_MEDIA_NOT_LIVE"
+                    | "REMOTE_CONTROL_NOT_ALLOWED"
+                    | "REMOTE_MEDIA_LAYOUT_REQUIRED")
             )
         {
             let _ = self.stop(StopReason::ProtocolMismatch);

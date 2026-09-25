@@ -32,7 +32,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { NButton } from 'naive-ui';
 import { useRemoteControlSessionStore } from '@/stores/remoteControlSession';
-import { remoteVideoCoordinates, remoteWheelPixels } from '@/services/remoteControlInput';
+import { remoteWheelPixels } from '@/services/remoteControlInput';
 const session = useRemoteControlSessionStore();
 const route = useRoute();
 const video = ref<HTMLVideoElement | null>(null);
@@ -45,8 +45,7 @@ watch(() => route.fullPath, () => pause());
 function pause() { pressedPointers.clear(); session.pauseInput('CONTROLLER_VIEW_BLURRED'); }
 function minimize() { pause(); compact.value = !compact.value; }
 function position(event: MouseEvent) {
-  const element = video.value;
-  return element ? remoteVideoCoordinates(event.clientX, event.clientY, element.getBoundingClientRect(), element.videoWidth, element.videoHeight) : null;
+  return session.mapPointer(event.clientX, event.clientY);
 }
 function pointer(event: PointerEvent, down: boolean) {
   if (!session.inputArmed || ![0, 1, 2].includes(event.button)) return;

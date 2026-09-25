@@ -1,9 +1,10 @@
 //! Test-key, recording-input-only command line harness. Not a desktop invoke.
 use super::{
-    authorization::{ObservedTransport, PinnedKey, PinnedKeys, SignedEnvelope},
+    authorization::{PinnedKey, PinnedKeys, SignedEnvelope},
     guard::{ReleasePlan, StopReason},
     host_process::{ProcessMediaDriver, VerifiedProgram},
-    host_runtime::{Availability, HostRuntime, HostSupervisor},
+    host_runtime::{Availability, HostSupervisor, MediaDriver},
+    host_transport::{HostTransport, PreparedHost},
     identity::{self, Decision, IdentityState},
     input::{InputAction, InputEnvironment, InputError, InputExecutor},
     ipc::IpcMessage,
@@ -20,6 +21,9 @@ use std::{
 };
 struct RecordingInput;
 impl InputExecutor for RecordingInput {
+    fn display_snapshot(&mut self) -> Result<super::media_layout::DisplaySnapshot, InputError> {
+        super::media_layout::primary_display_snapshot().map_err(|_| InputError::LayoutChanged)
+    }
     fn preflight(&mut self) -> Result<InputEnvironment, InputError> {
         Ok(InputEnvironment {
             screen_id: "primary".into(),
@@ -41,17 +45,6 @@ fn emit(value: Value) {
 }
 fn string<'a>(value: &'a Value, key: &str) -> Result<&'a str, &'static str> {
     value[key].as_str().ok_or("INVALID_HARNESS_MESSAGE")
-}
-fn decode_channel(payload: &Value) -> Result<(&str, Vec<u8>), &'static str> {
-    let label = string(payload, "label")?;
-    let data = string(payload, "data")?;
-    let bytes = URL_SAFE_NO_PAD
-        .decode(data)
-        .map_err(|_| "INVALID_HARNESS_CHANNEL")?;
-    if bytes.len() > 4096 || URL_SAFE_NO_PAD.encode(&bytes) != data {
-        return Err("INVALID_HARNESS_CHANNEL");
-    }
-    Ok((label, bytes))
 }
 pub(super) fn run() -> Result<(), &'static str> {
     let mut args = std::env::args().skip(1);
@@ -75,10 +68,13 @@ pub(super) fn run() -> Result<(), &'static str> {
         Path::new(&program.ok_or("HARNESS_PROGRAM_REQUIRED")?),
         &program_hash.ok_or("HARNESS_HASH_REQUIRED")?,
     )?);
-    let mut script = Some(VerifiedProgram::harness(
-        Path::new(&script.ok_or("HARNESS_SCRIPT_REQUIRED")?),
-        &script_hash.ok_or("HARNESS_HASH_REQUIRED")?,
-    )?);
+    // A fixed embedded-runtime candidate is executable on its own; the older
+    // development Python path still requires a paired script path and digest.
+    let mut script = match (script, script_hash) {
+        (None, None) => None,
+        (Some(path), Some(hash)) => Some(VerifiedProgram::harness(Path::new(&path), &hash)?),
+        _ => return Err("HARNESS_SCRIPT_HASH_PAIR_REQUIRED"),
+    };
     let (commands, receive) = mpsc::sync_channel(32);
     thread::spawn(move || {
         let stdin = io::stdin();
@@ -101,9 +97,7 @@ pub(super) fn run() -> Result<(), &'static str> {
     let mut driver: Option<ProcessMediaDriver> = None;
     let mut events: Option<mpsc::Receiver<IpcMessage>> = None;
     let mut supervisor: Option<HostSupervisor> = None;
-    let mut negotiation = None;
-    let mut dtls = None;
-    let mut pending_channel = Vec::new();
+    let mut transport: Option<HostTransport> = None;
     let mut challenge_sent = false;
     let mut last_supervisor = Instant::now();
     let mut closing = false;
@@ -119,53 +113,169 @@ pub(super) fn run() -> Result<(), &'static str> {
                 }
             };
             if let Some(command) = command {
-                match string(&command,"type")? {
-                    "init"=>{
-                        if identity.is_some(){return Err("HARNESS_ALREADY_INITIALIZED");}
-                        let pinned:Vec<PinnedKey>=serde_json::from_value(command["keys"].clone()).map_err(|_| "INVALID_HARNESS_KEYS")?;
-                        let pinned=PinnedKeys::new(pinned).map_err(|_| "INVALID_HARNESS_KEYS")?;
-                        let approval:SignedEnvelope=serde_json::from_value(command["approval"].clone()).map_err(|_| "INVALID_HARNESS_APPROVAL")?;
-                        let decision=match string(&command,"decision")? {"view"=>Decision::View,"control"=>Decision::Control,_=>return Err("INVALID_HARNESS_DECISION")};
-                        let (state,response)=identity::approve_harness_fixture(&pinned,&approval,decision,identity::wall_ms()?,Instant::now())?;
-                        let serialized=serde_json::to_value(response).map_err(|_| "INVALID_HARNESS_CONSENT")?;
-                        let envelope=&serialized["consent"];
-                        let body=URL_SAFE_NO_PAD.decode(string(envelope,"payload")?).map_err(|_| "INVALID_HARNESS_CONSENT")?;
-                        let claims:Value=serde_json::from_slice(&body).map_err(|_| "INVALID_HARNESS_CONSENT")?;
-                        let session_id=string(&command,"sessionId")?;
-                        if claims["sessionId"]!=session_id {return Err("INVALID_HARNESS_SESSION");}
-                        let (process,reader)=ProcessMediaDriver::spawn(program.take().unwrap(),script.take(),&sidecar_args,session_id)?;
-                        emit(json!({"event":"consent","payload":claims,"envelope":envelope,"enginePid":process.pid()?}));
-                        identity=Some(Arc::new(Mutex::new(state)));keys=Some(pinned);driver=Some(process);events=Some(reader);
-                    },
-                    "offer"=>{
-                        if negotiation.is_some(){return Err("HARNESS_OFFER_REPLAY");}
-                        let id=string(&command,"negotiationId")?;if !super::authorization::uuid(id){return Err("INVALID_HARNESS_NEGOTIATION");}
-                        negotiation=Some(id.to_owned());driver.as_ref().ok_or("HARNESS_NOT_INITIALIZED")?.send("offer",json!({"sdp":string(&command,"sdp")?}))?;
-                    },
-                    "ice"=>driver.as_ref().ok_or("HARNESS_NOT_INITIALIZED")?.send("ice",json!({"candidate":string(&command,"candidate")?,"sdpMLineIndex":command["sdpMLineIndex"]}))?,
-                    "connection"=>{
-                        if supervisor.is_some(){return Err("HARNESS_CONNECTION_REPLAY");}
-                        let observed:Value=dtls.clone().ok_or("HARNESS_NATIVE_DTLS_REQUIRED")?;
-                        let transport=ObservedTransport{negotiation_id:negotiation.clone().ok_or("HARNESS_OFFER_REQUIRED")?,host_fingerprint:string(&observed,"hostFingerprint")?.into(),controller_fingerprint:string(&observed,"controllerFingerprint")?.into()};
-                        let proof:SignedEnvelope=serde_json::from_value(command["envelope"].clone()).map_err(|_| "INVALID_HARNESS_CONNECTION")?;
-                        let host=HostRuntime::connect(identity.as_ref().ok_or("HARNESS_NOT_INITIALIZED")?.clone(),keys.clone().ok_or("HARNESS_NOT_INITIALIZED")?,&proof,transport,
-                            Box::new(driver.as_ref().unwrap().clone()),Box::new(RecordingInput),Box::new(||Availability{capture:super::platform::permissions().0 == super::platform::PermissionState::Granted,input:true}),1,identity::wall_ms()?,Instant::now())?;
-                        supervisor=Some(HostSupervisor::spawn(host));
+                match string(&command, "type")? {
+                    "init" => {
+                        if identity.is_some() {
+                            return Err("HARNESS_ALREADY_INITIALIZED");
+                        }
+                        let pinned: Vec<PinnedKey> =
+                            serde_json::from_value(command["keys"].clone())
+                                .map_err(|_| "INVALID_HARNESS_KEYS")?;
+                        let pinned = PinnedKeys::new(pinned).map_err(|_| "INVALID_HARNESS_KEYS")?;
+                        let approval: SignedEnvelope =
+                            serde_json::from_value(command["approval"].clone())
+                                .map_err(|_| "INVALID_HARNESS_APPROVAL")?;
+                        let decision = match string(&command, "decision")? {
+                            "view" => Decision::View,
+                            "control" => Decision::Control,
+                            _ => return Err("INVALID_HARNESS_DECISION"),
+                        };
+                        let (state, response) = identity::approve_harness_fixture(
+                            &pinned,
+                            &approval,
+                            decision,
+                            identity::wall_ms()?,
+                            Instant::now(),
+                        )?;
+                        let serialized = serde_json::to_value(response)
+                            .map_err(|_| "INVALID_HARNESS_CONSENT")?;
+                        let envelope = &serialized["consent"];
+                        let body = URL_SAFE_NO_PAD
+                            .decode(string(envelope, "payload")?)
+                            .map_err(|_| "INVALID_HARNESS_CONSENT")?;
+                        let claims: Value =
+                            serde_json::from_slice(&body).map_err(|_| "INVALID_HARNESS_CONSENT")?;
+                        let session_id = string(&command, "sessionId")?;
+                        if claims["sessionId"] != session_id {
+                            return Err("INVALID_HARNESS_SESSION");
+                        }
+                        let state = Arc::new(Mutex::new(state));
+                        let prepared =
+                            PreparedHost::prepare(state.clone(), Instant::now(), |reserved| {
+                                if reserved != session_id {
+                                    return Err("INVALID_HARNESS_SESSION");
+                                }
+                                ProcessMediaDriver::spawn(
+                                    program.take().unwrap(),
+                                    script.take(),
+                                    &sidecar_args,
+                                    reserved,
+                                )
+                            })?;
+                        let PreparedHost {
+                            driver: process,
+                            events: reader,
+                            transport: pending,
+                        } = prepared;
+                        transport = Some(pending);
+                        emit(
+                            json!({"event":"consent","payload":claims,"envelope":envelope,"enginePid":process.pid()?}),
+                        );
+                        identity = Some(state);
+                        keys = Some(pinned);
+                        driver = Some(process);
+                        events = Some(reader);
+                    }
+                    "configure-ice" => {
+                        let proof = serde_json::from_value(command["proof"].clone())
+                            .map_err(|_| "INVALID_ICE_PROOF")?;
+                        let payload = transport
+                            .as_mut()
+                            .ok_or("HARNESS_NOT_INITIALIZED")?
+                            .configure_ice(
+                                keys.as_ref().ok_or("HARNESS_NOT_INITIALIZED")?,
+                                &proof,
+                                identity::wall_ms()?,
+                                Instant::now(),
+                            )?;
+                        driver
+                            .as_ref()
+                            .ok_or("HARNESS_NOT_INITIALIZED")?
+                            .send("configure-ice", payload)?;
+                    }
+                    "offer" => {
+                        let payload = transport.as_mut().ok_or("HARNESS_NOT_INITIALIZED")?.offer(
+                            string(&command, "negotiationId")?,
+                            string(&command, "sdp")?,
+                            Instant::now(),
+                        )?;
+                        driver
+                            .as_ref()
+                            .ok_or("HARNESS_NOT_INITIALIZED")?
+                            .send("offer", payload)?;
+                    }
+                    "ice" => {
+                        let started = supervisor.as_ref().is_some_and(|host| {
+                            host.runtime().lock().is_ok_and(|host| host.media_started())
+                        });
+                        let payload=transport.as_mut().ok_or("HARNESS_NOT_INITIALIZED")?.ice(json!({"candidate":string(&command,"candidate")?,"sdpMLineIndex":command["sdpMLineIndex"]}),Instant::now(),started)?;
+                        driver
+                            .as_ref()
+                            .ok_or("HARNESS_NOT_INITIALIZED")?
+                            .send("ice", payload)?;
+                    }
+                    "connection" => {
+                        if supervisor.is_some() {
+                            return Err("HARNESS_CONNECTION_REPLAY");
+                        }
+                        let proof: SignedEnvelope =
+                            serde_json::from_value(command["envelope"].clone())
+                                .map_err(|_| "INVALID_HARNESS_CONNECTION")?;
+                        let host = transport
+                            .as_mut()
+                            .ok_or("HARNESS_NOT_INITIALIZED")?
+                            .connect(
+                                keys.clone().ok_or("HARNESS_NOT_INITIALIZED")?,
+                                &proof,
+                                Box::new(driver.as_ref().unwrap().clone()),
+                                Box::new(RecordingInput),
+                                Box::new(|| Availability {
+                                    capture: super::platform::permissions().0
+                                        == super::platform::PermissionState::Granted,
+                                    input: true,
+                                }),
+                                identity::wall_ms()?,
+                                Instant::now(),
+                            )?;
+                        supervisor = Some(HostSupervisor::spawn(host));
                         emit(json!({"event":"ready","enginePid":driver.as_ref().unwrap().pid()?}));
-                    },
-                    "lease"=>{
-                        let proof=serde_json::from_value(command["envelope"].clone()).map_err(|_| "INVALID_HARNESS_LEASE")?;
-                        supervisor.as_ref().ok_or("HARNESS_CONNECTION_REQUIRED")?.runtime().lock().map_err(|_| "HARNESS_STATE_FAILED")?.accept_lease(&proof,identity::wall_ms()?,Instant::now())?;
+                    }
+                    "lease" => {
+                        let proof = serde_json::from_value(command["envelope"].clone())
+                            .map_err(|_| "INVALID_HARNESS_LEASE")?;
+                        supervisor
+                            .as_ref()
+                            .ok_or("HARNESS_CONNECTION_REQUIRED")?
+                            .runtime()
+                            .lock()
+                            .map_err(|_| "HARNESS_STATE_FAILED")?
+                            .accept_lease(&proof, identity::wall_ms()?, Instant::now())?;
                         emit(json!({"event":"lease-installed"}));
-                    },
-                    "challenge"=>{
-                        let lease=supervisor.as_ref().ok_or("HARNESS_CONNECTION_REQUIRED")?.runtime().lock().map_err(|_| "HARNESS_STATE_FAILED")?.challenge(Instant::now())?;
-                        emit(json!({"event":"challenge","challenge":lease.challenge,"leaseSeq":lease.lease_seq}));
-                    },
-                    "pause"=>{supervisor.as_ref().ok_or("HARNESS_CONNECTION_REQUIRED")?.runtime().lock().map_err(|_| "HARNESS_STATE_FAILED")?.pause(StopReason::LocalStop)?;},
-                    "heartbeat"=>{}, // Operator traffic never substitutes for actual controller DataChannel heartbeats.
-                    "stop"=>closing=true,
-                    _=>return Err("INVALID_HARNESS_COMMAND"),
+                    }
+                    "challenge" => {
+                        let lease = supervisor
+                            .as_ref()
+                            .ok_or("HARNESS_CONNECTION_REQUIRED")?
+                            .runtime()
+                            .lock()
+                            .map_err(|_| "HARNESS_STATE_FAILED")?
+                            .challenge(Instant::now())?;
+                        emit(
+                            json!({"event":"challenge","challenge":lease.challenge,"leaseSeq":lease.lease_seq}),
+                        );
+                    }
+                    "pause" => {
+                        supervisor
+                            .as_ref()
+                            .ok_or("HARNESS_CONNECTION_REQUIRED")?
+                            .runtime()
+                            .lock()
+                            .map_err(|_| "HARNESS_STATE_FAILED")?
+                            .pause(StopReason::LocalStop)?;
+                    }
+                    "heartbeat" => {} // Operator traffic never substitutes for actual controller DataChannel heartbeats.
+                    "stop" => closing = true,
+                    _ => return Err("INVALID_HARNESS_COMMAND"),
                 }
             }
             if let Some(supervisor) = &supervisor {
@@ -194,21 +304,33 @@ pub(super) fn run() -> Result<(), &'static str> {
                     if event.kind == "ready" {
                         event.payload["pid"] = json!(driver.as_ref().unwrap().pid()?);
                     }
-                    if event.kind == "dtls" {
-                        if dtls.is_some() {
-                            return Err("HARNESS_DTLS_REPLACED");
-                        }
-                        dtls = Some(event.payload.clone());
-                    }
-                    if event.kind == "channel-data" {
-                        pending_channel.push(event.payload.clone());
-                        if pending_channel.len() > 32 {
-                            return Err("HARNESS_CHANNEL_BACKPRESSURE");
-                        }
-                    }
+                    let started = supervisor.as_ref().is_some_and(|host| {
+                        host.runtime().lock().is_ok_and(|host| host.media_started())
+                    });
+                    transport
+                        .as_mut()
+                        .ok_or("HARNESS_NOT_INITIALIZED")?
+                        .observe(&event, Instant::now(), started)?;
                     let failed = event.kind == "error";
+                    let layout_changed = failed
+                        && event.payload["reason"] == "MEDIA_LAYOUT_CHANGED"
+                        && driver
+                            .as_ref()
+                            .is_some_and(|driver| driver.media_layout().is_err());
                     emit(json!({"event":"sidecar","kind":event.kind,"payload":event.payload}));
                     if failed && !closing {
+                        if layout_changed {
+                            if let Some(supervisor) = &supervisor {
+                                let shared = supervisor.runtime();
+                                let mut runtime =
+                                    shared.lock().map_err(|_| "HARNESS_STATE_FAILED")?;
+                                let _ = runtime.tick(Instant::now());
+                                if runtime.stop_reason() == Some(StopReason::LayoutChanged) {
+                                    closing = true;
+                                    continue;
+                                }
+                            }
+                        }
                         return Err("REMOTE_ENGINE_FAILED");
                     }
                 }
@@ -217,21 +339,23 @@ pub(super) fn run() -> Result<(), &'static str> {
                 let shared = supervisor.runtime();
                 let mut runtime = shared.lock().map_err(|_| "HARNESS_STATE_FAILED")?;
                 if runtime.ended() {
-                    pending_channel.clear();
+                    transport.as_mut().unwrap().clear_channels();
                 }
-                for payload in pending_channel.drain(..) {
-                    let (label, bytes) = decode_channel(&payload)?;
-                    match label {
+                for (received_at, label, bytes) in
+                    transport.as_mut().unwrap().drain_channels(Instant::now())?
+                {
+                    match label.as_str() {
                         "rc-state-v1" | "rc-input-v1" => {
                             let result = if label == "rc-state-v1" {
-                                runtime.state_message(&bytes, Instant::now())
+                                runtime.state_message_received(&bytes, received_at, Instant::now())
                             } else {
                                 runtime.input_message(&bytes, Instant::now())
                             };
                             match result {
                                 Err(
                                     reason @ ("REMOTE_MEDIA_NOT_LIVE"
-                                    | "REMOTE_CONTROL_NOT_ALLOWED"),
+                                    | "REMOTE_CONTROL_NOT_ALLOWED"
+                                    | "REMOTE_MEDIA_LAYOUT_REQUIRED"),
                                 ) => emit(json!({"event":"input-denied","reason":reason})),
                                 other => other?,
                             }
@@ -259,6 +383,12 @@ pub(super) fn run() -> Result<(), &'static str> {
             }
             if closing {
                 break;
+            }
+            if let Some(transport) = &transport {
+                let started = supervisor.as_ref().is_some_and(|host| {
+                    host.runtime().lock().is_ok_and(|host| host.media_started())
+                });
+                transport.check(Instant::now(), started)?;
             }
             if Instant::now().duration_since(last_supervisor) >= Duration::from_millis(500) {
                 if let Some(driver) = &driver {

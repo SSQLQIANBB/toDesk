@@ -218,6 +218,69 @@ pub(super) struct Operation {
     ticket: u64,
     generation: u64,
 }
+
+/// Exclusive native launch reservation. Dropping a failed/cancelled launch
+/// revokes only its original consent generation, never a newer approval.
+pub(super) struct RuntimeClaim {
+    pub identity: std::sync::Arc<std::sync::Mutex<IdentityState>>,
+    pub local: LocalConsent,
+    pub generation: u64,
+    transferred: bool,
+}
+impl RuntimeClaim {
+    pub fn reserve(
+        identity: std::sync::Arc<std::sync::Mutex<IdentityState>>,
+        now: Instant,
+    ) -> Result<Self, &'static str> {
+        let (local, generation) = identity
+            .lock()
+            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
+            .claim_for_runtime(now)?;
+        Ok(Self {
+            identity,
+            local,
+            generation,
+            transferred: false,
+        })
+    }
+    pub fn check(&self, now: Instant) -> Result<(), &'static str> {
+        if self
+            .identity
+            .lock()
+            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
+            .runtime_is_current(self.generation, &self.local.session_id, now)
+        {
+            Ok(())
+        } else {
+            Err("REMOTE_OPERATION_CANCELLED")
+        }
+    }
+    pub fn transfer(
+        mut self,
+        now: Instant,
+    ) -> Result<
+        (
+            std::sync::Arc<std::sync::Mutex<IdentityState>>,
+            LocalConsent,
+            u64,
+        ),
+        &'static str,
+    > {
+        self.check(now)?;
+        self.transferred = true;
+        Ok((self.identity.clone(), self.local.clone(), self.generation))
+    }
+}
+impl Drop for RuntimeClaim {
+    fn drop(&mut self) {
+        if !self.transferred {
+            self.identity
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .end_runtime(self.generation, &self.local.session_id);
+        }
+    }
+}
 impl IdentityState {
     /// Rust supervisor only. No invoke accepts/returns a LocalConsent.
     pub(super) fn approved_for_runtime(

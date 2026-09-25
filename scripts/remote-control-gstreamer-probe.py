@@ -58,10 +58,10 @@ if args.source == "screen":
     media = (
         "appsrc name=screen is-live=true format=time block=false max-bytes=4194304 "
         "caps=video/x-h264,stream-format=byte-stream,alignment=au,width=1280,height=720,framerate=15/1 ! "
-        "h264parse ! rtph264pay name=screenpay pt=96 config-interval=-1 aggregate-mode=zero-latency ! "
+        "h264parse ! rtph264pay name=screenpay pt=96 config-interval=-1 aggregate-mode=none ! "
         "queue max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
         'capsfilter name=screenrtp caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000,'
-        'packetization-mode=(string)1,profile-level-id=(string)42001f" ! peer.'
+        'packetization-mode=(string)1,profile-level-id=(string){42e01f,42c01f}" ! peer.'
     )
 pipeline = Gst.parse_launch("webrtcbin name=peer bundle-policy=max-bundle " + media)
 peer = pipeline.get_by_name("peer")
@@ -206,7 +206,7 @@ def handle(message):
                     for value, parameters in re.findall(r"a=fmtp:(\d+) ([^\r\n]+)", message["sdp"])}
             payload = next((int(value) for value in re.findall(r"a=rtpmap:(\d+) H264/90000", message["sdp"], re.IGNORECASE)
                             if fmtp.get(int(value), {}).get("packetization-mode") == "1"
-                            and fmtp.get(int(value), {}).get("profile-level-id", "").lower() == "42001f"), None)
+                            and fmtp.get(int(value), {}).get("profile-level-id", "").lower() == "42e01f"), None)
             if payload is None:
                 send({"type": "error", "message": "Browser does not offer H264 baseline 3.1 / packetization-mode=1"})
                 loop.quit()
@@ -214,7 +214,7 @@ def handle(message):
             pipeline.get_by_name("screenpay").set_property("pt", payload)
             pipeline.get_by_name("screenrtp").set_property("caps", Gst.Caps.from_string(
                 f"application/x-rtp,media=video,encoding-name=H264,payload={payload},clock-rate=90000,"
-                "packetization-mode=(string)1,profile-level-id=(string)42001f"))
+                "packetization-mode=(string)1,profile-level-id=(string){42e01f,42c01f}"))
         _, sdp = GstSdp.SDPMessage.new()
         if GstSdp.sdp_message_parse_buffer(encoded, sdp) != GstSdp.SDPResult.OK:
             raise ValueError("Invalid SDP")

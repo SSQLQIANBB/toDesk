@@ -1,4 +1,5 @@
 import { registerRemoteControlCleanup } from './remoteControlSafety';
+import type { RemoteControlGeometry } from './remoteControlGeometry';
 
 /** Controller-side protocol foundation. Native lease/consent validation remains authoritative. */
 export const REMOTE_INPUT_CHANNEL = { label: 'rc-input-v1', options: { ordered: true } } as const;
@@ -150,14 +151,19 @@ export class RemoteInputSender {
   }
 }
 
-/** Coordinates for object-fit: contain; letterbox clicks are rejected. */
-export function remoteVideoCoordinates(clientX: number, clientY: number, rect: { left: number; top: number; width: number; height: number }, videoWidth: number, videoHeight: number) {
-  if (![rect.width, rect.height, videoWidth, videoHeight].every(value => Number.isFinite(value) && value > 0)) return null;
+/** Remove CSS letterboxing and encoded padding. DPI and rotation are already
+ * reflected in the visible content; the native side maps its normalized position. */
+export function remoteVideoCoordinates(clientX: number, clientY: number, rect: { left: number; top: number; width: number; height: number }, videoWidth: number, videoHeight: number, geometry: RemoteControlGeometry | null) {
+  if (!geometry || videoWidth !== geometry.encodedSize.width || videoHeight !== geometry.encodedSize.height
+    || ![clientX, clientY, rect.left, rect.top].every(Number.isFinite)
+    || ![rect.width, rect.height, videoWidth, videoHeight].every(value => Number.isFinite(value) && value > 0)) return null;
   const scale = Math.min(rect.width / videoWidth, rect.height / videoHeight);
   const width = videoWidth * scale;
   const height = videoHeight * scale;
-  const x = (clientX - rect.left - (rect.width - width) / 2) / width;
-  const y = (clientY - rect.top - (rect.height - height) / 2) / height;
+  const encodedX = (clientX - rect.left - (rect.width - width) / 2) / scale;
+  const encodedY = (clientY - rect.top - (rect.height - height) / 2) / scale;
+  const x = (encodedX - geometry.contentRect.x) / geometry.contentRect.width;
+  const y = (encodedY - geometry.contentRect.y) / geometry.contentRect.height;
   return inUnit(x) && inUnit(y) ? { x, y } : null;
 }
 

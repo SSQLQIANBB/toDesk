@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bindRemoteInputSafety, RemoteInputSender, remoteVideoCoordinates, remoteWheelPixels, type RemoteInputMessage } from '@/services/remoteControlInput';
+import type { RemoteControlGeometry } from '@/services/remoteControlGeometry';
 
 const context = { sessionId: 'session', controlEpoch: 1, inputEpoch: 2, layoutVersion: 3 };
 const windowTicket = { ...context, inputWindowId: 'ticket-1' };
@@ -113,10 +114,11 @@ describe('远控可靠输入协议', () => {
 describe('远控画面坐标', () => {
   it('映射contain后的真实画面而非黑边，并与编码尺寸比例一致', () => {
     const rect = { left: 10, top: 20, width: 1000, height: 1000 };
-    expect(remoteVideoCoordinates(510, 520, rect, 1920, 1080)).toEqual({ x: 0.5, y: 0.5 });
-    expect(remoteVideoCoordinates(510, 100, rect, 1920, 1080)).toBeNull();
-    expect(remoteVideoCoordinates(510, 520, rect, 1280, 720)).toEqual({ x: 0.5, y: 0.5 });
-    expect(remoteVideoCoordinates(510, 520, rect, 0, 0)).toBeNull();
+    const geometry = (width: number, height: number): RemoteControlGeometry => ({ displayId: 1, coordinateSpace: 'quartz-global-logical', displayBounds: { x: 0, y: 0, width: 1920, height: 1080 }, displayPixels: { width: 1920, height: 1080 }, rotationDegrees: 0, encodedSize: { width, height }, contentRect: { x: 0, y: 0, width, height } });
+    expect(remoteVideoCoordinates(510, 520, rect, 1920, 1080, geometry(1920, 1080))).toEqual({ x: 0.5, y: 0.5 });
+    expect(remoteVideoCoordinates(510, 100, rect, 1920, 1080, geometry(1920, 1080))).toBeNull();
+    expect(remoteVideoCoordinates(510, 520, rect, 1280, 720, geometry(1280, 720))).toEqual({ x: 0.5, y: 0.5 });
+    expect(remoteVideoCoordinates(510, 520, rect, 0, 0, geometry(1280, 720))).toBeNull();
   });
   it('转换line/page滚轮为有界CSS像素', () => {
     expect(remoteWheelPixels(3, 1, 1000)).toBe(48);
